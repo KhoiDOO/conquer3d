@@ -71,15 +71,19 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> compute_a
     return std::make_tuple(aabb_min, aabb_max, contact_points, covi);
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_voxel_intersection_brute_force_wrapper(
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>> query_gs_voxel_intersection_brute_force_wrapper(
     const torch::Tensor &vx_aabb_mins,
     const torch::Tensor &vx_aabb_maxs,
     const torch::Tensor &means,
     const torch::Tensor &covis,
+    const torch::Tensor &opacities,
     const torch::Tensor &gs_aabb_mins,
     const torch::Tensor &gs_aabb_maxs,
     const torch::Tensor &contact_points,
     const float iso,
+    const float ar_threshold,
+    const float p_threshold,
+    const bool return_centroids,
     const int64_t max_capacity)
 {
     // 1. Enforce memory contiguity and CUDA residency
@@ -87,6 +91,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_voxel_intersect
     CHECK_INPUT(vx_aabb_maxs);
     CHECK_INPUT(means);
     CHECK_INPUT(covis);
+    CHECK_INPUT(opacities);
     CHECK_INPUT(gs_aabb_mins);
     CHECK_INPUT(gs_aabb_maxs);
     CHECK_INPUT(contact_points);
@@ -96,6 +101,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_voxel_intersect
     TORCH_CHECK(vx_aabb_maxs.scalar_type() == torch::kFloat32, "vx_aabb_maxs must be float32");
     TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
     TORCH_CHECK(covis.scalar_type() == torch::kFloat32, "covis must be float32");
+    TORCH_CHECK(opacities.scalar_type() == torch::kFloat32, "opacities must be float32");
     TORCH_CHECK(gs_aabb_mins.scalar_type() == torch::kFloat32, "gs_aabb_mins must be float32");
     TORCH_CHECK(gs_aabb_maxs.scalar_type() == torch::kFloat32, "gs_aabb_maxs must be float32");
     TORCH_CHECK(contact_points.scalar_type() == torch::kFloat32, "contact_points must be float32");
@@ -107,6 +113,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_voxel_intersect
     TORCH_CHECK(vx_aabb_maxs.size(0) == num_voxels, "vx_aabb_maxs must have the same number of voxels as vx_aabb_mins");
     TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
     TORCH_CHECK(covis.size(0) == num_gaussians, "covis must have the same number of gaussians as means");
+    TORCH_CHECK(opacities.size(0) == num_gaussians, "opacities must have the same number of gaussians as means");
     TORCH_CHECK(vx_aabb_mins.size(1) == 3, "vx_aabb_mins must have shape (M, 3)");
     TORCH_CHECK(vx_aabb_maxs.size(1) == 3, "vx_aabb_maxs must have shape (M, 3)");
     TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
@@ -122,6 +129,19 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_voxel_intersect
     torch::Tensor out_gaus_ids = torch::empty({max_capacity}, options.dtype(torch::kInt64));
     torch::Tensor global_counter = torch::zeros({1}, options.dtype(torch::kInt64));
     
+    torch::Tensor centroids;
+    torch::Tensor densities;
+    float3* centroids_ptr = nullptr; 
+    float* densities_ptr = nullptr;
+    
+    if (return_centroids) {
+        // Only allocate the [max_capacity, 3] float tensor if requested
+        centroids = torch::empty({max_capacity, 3}, options.dtype(torch::kFloat32));
+        centroids_ptr = reinterpret_cast<float3*>(centroids.data_ptr<float>());
+        densities = torch::empty({max_capacity}, options.dtype(torch::kFloat32));
+        densities_ptr = reinterpret_cast<float*>(densities.data_ptr<float>());
+    }
+    
     // 5. Launch the CUDA Kernel
     gs_aabb::query_gs_voxel_intersection_brute_force(
         num_voxels,
@@ -130,13 +150,19 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_voxel_intersect
         reinterpret_cast<const float3 *>(vx_aabb_maxs.data_ptr<float>()),
         reinterpret_cast<const float3 *>(means.data_ptr<float>()),
         reinterpret_cast<const float *>(covis.data_ptr<float>()),
+        reinterpret_cast<const float *>(opacities.data_ptr<float>()),
         reinterpret_cast<const float3 *>(gs_aabb_mins.data_ptr<float>()),
         reinterpret_cast<const float3 *>(gs_aabb_maxs.data_ptr<float>()),
         reinterpret_cast<const float3 *>(contact_points.data_ptr<float>()),
         iso,
+        ar_threshold,
+        p_threshold,
+        return_centroids,
         reinterpret_cast<bool *>(hit_mask.data_ptr<bool>()),
         reinterpret_cast<int64_t *>(out_voxel_ids.data_ptr<int64_t>()),
         reinterpret_cast<int64_t *>(out_gaus_ids.data_ptr<int64_t>()),
+        centroids_ptr,
+        densities_ptr,
         reinterpret_cast<int64_t *>(global_counter.data_ptr<int64_t>()),
         max_capacity);
 
@@ -146,10 +172,24 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_voxel_intersect
         TORCH_WARN("Exceeded max capacity! Found ", num_intersections, " hits but capacity was ", max_capacity);
     }
     int64_t valid_hits = std::min(num_intersections, max_capacity);
-    return std::make_tuple(
-        hit_mask,
-        out_voxel_ids.slice(0, 0, valid_hits), 
-        out_gaus_ids.slice(0, 0, valid_hits));
+    if (return_centroids) {
+        return std::make_tuple(
+            hit_mask,
+            out_voxel_ids.slice(0, 0, valid_hits), 
+            out_gaus_ids.slice(0, 0, valid_hits),
+            centroids.slice(0, 0, valid_hits),
+            densities.slice(0, 0, valid_hits)
+        );
+    } else {
+        // Return std::nullopt for the optional tensor
+        return std::make_tuple(
+            hit_mask,
+            out_voxel_ids.slice(0, 0, valid_hits), 
+            out_gaus_ids.slice(0, 0, valid_hits),
+            std::nullopt,
+            std::nullopt
+        );
+    }
 }
 
 void bind_primitive_gs(py::module_ &m)
@@ -167,9 +207,13 @@ void bind_primitive_gs(py::module_ &m)
           py::arg("vx_aabb_maxs"),
           py::arg("means"),
           py::arg("covis"),
+          py::arg("opacities"),
           py::arg("gs_aabb_mins"),
           py::arg("gs_aabb_maxs"),
           py::arg("contact_points"),
           py::arg("iso"),
+          py::arg("ar_threshold"),
+          py::arg("p_threshold"),
+          py::arg("return_centroids") = false,
           py::arg("max_capacity") = 10000000);
 }
