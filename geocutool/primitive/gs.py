@@ -168,6 +168,7 @@ def query_gs_edge_intersection(
     edge_starts: torch.Tensor,
     edge_ends: torch.Tensor,
     means: torch.Tensor,
+    opacities: torch.Tensor,
     covis: torch.Tensor,
     iso: float = 11.345
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -186,13 +187,14 @@ def query_gs_edge_intersection(
         hit_mask: (E,) boolean mask of edges that hit at least one Gaussian.
         out_gaus_ids: (E,) tensor of the 'best' Gaussian IDs (-1 if no hit).
     """
-    if not all(t.is_cuda for t in [edge_starts, edge_ends, means, covis]):
+    if not all(t.is_cuda for t in [edge_starts, edge_ends, opacities, means, covis]):
         raise ValueError("All input tensors must be CUDA tensors.")
 
     hit_mask, out_gaus_ids = query_gs_edge_intersection_brute_force_wrapper(
         edge_starts.contiguous().to(torch.float32),
         edge_ends.contiguous().to(torch.float32),
         means.contiguous().to(torch.float32),
+        opacities.contiguous().to(torch.float32),
         covis.contiguous().to(torch.float32),
         iso
     )

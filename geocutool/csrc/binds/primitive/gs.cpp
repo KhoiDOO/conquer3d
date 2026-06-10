@@ -1,23 +1,15 @@
+#include <torch/extension.h>
 #include "../../primitive/gs.h"
+#include "../../check.h"
 
 #include <cuda_fp16.h>
 #include <optional>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <torch/extension.h>
 #include <vector>
 #include <algorithm>
 
 namespace py = pybind11;
-
-// Helper macros to check tensor properties
-#define CHECK_CUDA(x) \
-    AT_ASSERTM((x).options().device().is_cuda(), #x " must be a CUDA tensor")
-#define CHECK_CONTIGUOUS(x) \
-    AT_ASSERTM((x).is_contiguous(), #x " must be contiguous")
-#define CHECK_INPUT(x) \
-    CHECK_CUDA(x);     \
-    CHECK_CONTIGUOUS(x)
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> compute_aabb_wrapper(
     const torch::Tensor &means,
@@ -109,18 +101,15 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     // 3. Extract dimensions and validate shapes
     const uint32_t num_gaussians = means.size(0);
     const uint32_t num_voxels = vx_aabb_mins.size(0);
+
     TORCH_CHECK(vx_aabb_mins.size(1) == 3, "vx_aabb_mins must have shape (M, 3)");
-    TORCH_CHECK(vx_aabb_maxs.size(0) == num_voxels, "vx_aabb_maxs must have the same number of voxels as vx_aabb_mins");
+    TORCH_CHECK(vx_aabb_maxs.size(0) == num_voxels && vx_aabb_maxs.size(1) == 3, "vx_aabb_maxs must match vx_aabb_mins shape");
     TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
-    TORCH_CHECK(covis.size(0) == num_gaussians, "covis must have the same number of gaussians as means");
-    TORCH_CHECK(opacities.size(0) == num_gaussians, "opacities must have the same number of gaussians as means");
-    TORCH_CHECK(vx_aabb_mins.size(1) == 3, "vx_aabb_mins must have shape (M, 3)");
-    TORCH_CHECK(vx_aabb_maxs.size(1) == 3, "vx_aabb_maxs must have shape (M, 3)");
-    TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
-    TORCH_CHECK(covis.size(1) == 6, "covis must have shape (N, 6)");
-    TORCH_CHECK(gs_aabb_mins.size(1) == 3, "gs_aabb_mins must have shape (N, 3)");
-    TORCH_CHECK(gs_aabb_maxs.size(1) == 3, "gs_aabb_maxs must have shape (N, 3)");
-    TORCH_CHECK(contact_points.size(1) == 9, "contact_points must have shape (N, 9)");
+    TORCH_CHECK(covis.size(0) == num_gaussians && covis.size(1) == 6, "covis must have shape (N, 6)");
+    TORCH_CHECK(opacities.size(0) == num_gaussians, "opacities must have shape (N)");
+    TORCH_CHECK(gs_aabb_mins.size(0) == num_gaussians && gs_aabb_mins.size(1) == 3, "gs_aabb_mins must match means shape");
+    TORCH_CHECK(gs_aabb_maxs.size(0) == num_gaussians && gs_aabb_maxs.size(1) == 3, "gs_aabb_maxs must match means shape");
+    TORCH_CHECK(contact_points.size(0) == num_gaussians && contact_points.size(1) == 9, "contact_points must have shape (N, 9)");
 
     // 4. Allocate Output Tensors directly on the same GPU as the inputs
     auto options = means.options();
@@ -261,6 +250,7 @@ std::tuple<torch::Tensor, torch::Tensor> query_gs_edge_intersection_brute_force_
     const torch::Tensor &edge_starts,
     const torch::Tensor &edge_ends,
     const torch::Tensor &means,
+    const torch::Tensor &opacities,
     const torch::Tensor &covis,
     const float iso)
 {
@@ -268,12 +258,14 @@ std::tuple<torch::Tensor, torch::Tensor> query_gs_edge_intersection_brute_force_
     CHECK_INPUT(edge_starts);
     CHECK_INPUT(edge_ends);
     CHECK_INPUT(means);
+    CHECK_INPUT(opacities);
     CHECK_INPUT(covis);
 
     // 2. Enforce Data Types
     TORCH_CHECK(edge_starts.scalar_type() == torch::kFloat32, "edge_starts must be float32");
     TORCH_CHECK(edge_ends.scalar_type() == torch::kFloat32, "edge_ends must be float32");
     TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
+    TORCH_CHECK(opacities.scalar_type() == torch::kFloat32, "opacities must be float32");
     TORCH_CHECK(covis.scalar_type() == torch::kFloat32, "covis must be float32");
 
     // 3. Extract dimensions and validate shapes
@@ -284,7 +276,8 @@ std::tuple<torch::Tensor, torch::Tensor> query_gs_edge_intersection_brute_force_
     TORCH_CHECK(edge_ends.size(0) == num_edges && edge_ends.size(1) == 3, "edge_ends must match edge_starts");
     TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
     TORCH_CHECK(covis.size(0) == num_gaussians && covis.size(1) == 6, "covis must have shape (N, 6)");
-    
+    TORCH_CHECK(opacities.size(0) == num_gaussians, "opacities must have shape (N)");
+
     // Allocate Output Tensors (Exact 1-to-1 mapping with edges)
     auto options = means.options();
     torch::Tensor hit_mask = torch::zeros({num_edges}, options.dtype(torch::kBool));
@@ -297,6 +290,7 @@ std::tuple<torch::Tensor, torch::Tensor> query_gs_edge_intersection_brute_force_
         reinterpret_cast<const float3 *>(edge_starts.data_ptr<float>()),
         reinterpret_cast<const float3 *>(edge_ends.data_ptr<float>()),
         reinterpret_cast<const float3 *>(means.data_ptr<float>()),
+        reinterpret_cast<const float *>(opacities.data_ptr<float>()),
         reinterpret_cast<const float *>(covis.data_ptr<float>()),
         iso,
         reinterpret_cast<bool *>(hit_mask.data_ptr<bool>()),
@@ -341,6 +335,7 @@ void bind_primitive_gs(py::module_ &m)
         py::arg("edge_starts"),
         py::arg("edge_ends"),
         py::arg("means"),
+        py::arg("opacities"),
         py::arg("covis"),
         py::arg("iso")
     );

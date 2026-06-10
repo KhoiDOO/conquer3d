@@ -66,6 +66,7 @@ namespace gs_aabb
         const float3 *__restrict__ edge_starts,
         const float3 *__restrict__ edge_ends,
         const float3 *__restrict__ means,
+        const float *__restrict__ opacities,
         const float *__restrict__ covis,
         const float iso,
         bool *__restrict__ hit_mask,
