@@ -28,3 +28,6 @@ include_directories(
 
 add_library(primitive_gs SHARED geocutool/csrc/primitive/gs.cu)
 target_link_libraries(primitive_gs PRIVATE cudart)
+
+add_library(primitive_pgs SHARED geocutool/csrc/primitive/pgs.cu)
+target_link_libraries(primitive_pgs PRIVATE cudart)
