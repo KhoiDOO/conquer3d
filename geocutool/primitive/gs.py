@@ -1,12 +1,12 @@
 import torch
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 # Explicitly import the compiled CMake target
 from .._C import (
-    compute_aabb_wrapper, 
-    query_gs_voxel_pair_intersection_brute_force_wrapper,
-    query_gs_edge_pair_intersection_brute_force_wrapper,
-    query_gs_edge_intersection_brute_force_wrapper
+    compute_aabb,
+    query_gs_voxel_pair_intersection_brute_force,
+    query_gs_edge_pair_intersection_brute_force,
+    query_gs_edge_intersection_brute_force
 )
 
 def compute_gaussian_aabb(
@@ -14,7 +14,7 @@ def compute_gaussian_aabb(
     rotations: torch.Tensor,
     scales: torch.Tensor,
     level: int,
-    iso: float = 11.345,
+    iso: Union[float, torch.Tensor] = 11.345,
     tol: float = 1. / 8.,
     rotnorm: bool = False
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -45,12 +45,21 @@ def compute_gaussian_aabb(
     means_c = means.contiguous().to(torch.float32)
     rotations_c = rotations.contiguous().to(torch.float32)
     scales_c = scales.contiguous().to(torch.float32)
+    
+    if isinstance(iso, torch.Tensor):
+        if not iso.is_cuda: raise ValueError("iso tensor must be on CUDA")
+        isos = iso.contiguous().to(torch.float32)
+        iso = 0.0
+    else:
+        isos = None
+        iso = float(iso)
 
     # Call the explicit C++ binding
-    aabb_min, aabb_max, contact_points, covi = compute_aabb_wrapper(
+    aabb_min, aabb_max, contact_points, covi = compute_aabb(
         means_c,
         rotations_c,
         scales_c,
+        isos,
         iso,
         tol,
         level,
@@ -68,7 +77,7 @@ def query_gs_voxel_pair_intersection(
     gs_aabb_mins: torch.Tensor,
     gs_aabb_maxs: torch.Tensor,
     contact_points: torch.Tensor,
-    iso: float = 11.345,
+    iso: Union[float, torch.Tensor] = 11.345,
     ar_threshold: float = 0.1,
     p_threshold: float = 0.1,
     return_centroids: bool = False,
@@ -103,9 +112,17 @@ def query_gs_voxel_pair_intersection(
     # Safety Boundary: Ensure memory is perfectly aligned before hitting C++
     if not all(t.is_cuda for t in [vx_aabb_mins, vx_aabb_maxs, means, covis, opacities, gs_aabb_mins, gs_aabb_maxs, contact_points]):
         raise ValueError("All input tensors must be CUDA tensors.")
+    
+    if isinstance(iso, torch.Tensor):
+        if not iso.is_cuda: raise ValueError("iso tensor must be on CUDA")
+        isos = iso.contiguous().to(torch.float32)
+        iso = 0.0
+    else:
+        isos = None
+        iso = float(iso)
 
     # Contiguous casting ensures memory layout matches C++ pointer expectations
-    hit_mask, out_voxel_ids, out_gaus_ids, centroids, densities = query_gs_voxel_pair_intersection_brute_force_wrapper(
+    hit_mask, out_voxel_ids, out_gaus_ids, centroids, densities = query_gs_voxel_pair_intersection_brute_force(
         vx_aabb_mins.contiguous().to(torch.float32),
         vx_aabb_maxs.contiguous().to(torch.float32),
         means.contiguous().to(torch.float32),
@@ -114,6 +131,7 @@ def query_gs_voxel_pair_intersection(
         gs_aabb_mins.contiguous().to(torch.float32),
         gs_aabb_maxs.contiguous().to(torch.float32),
         contact_points.contiguous().to(torch.float32),
+        isos,
         iso,
         ar_threshold,
         p_threshold,
@@ -128,7 +146,7 @@ def query_gs_edge_pair_intersection(
     edge_ends: torch.Tensor,
     means: torch.Tensor,
     covis: torch.Tensor,
-    iso: float = 11.345,
+    iso: Union[float, torch.Tensor] = 11.345,
     max_capacity: int = 10000000
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
@@ -151,13 +169,22 @@ def query_gs_edge_pair_intersection(
     # Safety Boundary: Ensure memory is perfectly aligned before hitting C++
     if not all(t.is_cuda for t in [edge_starts, edge_ends, means, covis]):
         raise ValueError("All input tensors must be CUDA tensors.")
+    
+    if isinstance(iso, torch.Tensor):
+        if not iso.is_cuda: raise ValueError("iso tensor must be on CUDA")
+        isos = iso.contiguous().to(torch.float32)
+        iso = 0.0
+    else:
+        isos = None
+        iso = float(iso)
 
     # Contiguous casting ensures memory layout matches C++ pointer expectations
-    hit_mask, out_edge_ids, out_gaus_ids = query_gs_edge_pair_intersection_brute_force_wrapper(
+    hit_mask, out_edge_ids, out_gaus_ids = query_gs_edge_pair_intersection_brute_force(
         edge_starts.contiguous().to(torch.float32),
         edge_ends.contiguous().to(torch.float32),
         means.contiguous().to(torch.float32),
         covis.contiguous().to(torch.float32),
+        isos,
         iso,
         max_capacity
     )
@@ -170,7 +197,7 @@ def query_gs_edge_intersection(
     means: torch.Tensor,
     opacities: torch.Tensor,
     covis: torch.Tensor,
-    iso: float = 11.345
+    iso: Union[float, torch.Tensor] = 11.345
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Queries intersections. For each edge, returns the ID of the Gaussian 
@@ -189,13 +216,22 @@ def query_gs_edge_intersection(
     """
     if not all(t.is_cuda for t in [edge_starts, edge_ends, opacities, means, covis]):
         raise ValueError("All input tensors must be CUDA tensors.")
+    
+    if isinstance(iso, torch.Tensor):
+        if not iso.is_cuda: raise ValueError("iso tensor must be on CUDA")
+        isos = iso.contiguous().to(torch.float32)
+        iso = 0.0
+    else:
+        isos = None
+        iso = float(iso)
 
-    hit_mask, out_gaus_ids = query_gs_edge_intersection_brute_force_wrapper(
+    hit_mask, out_gaus_ids = query_gs_edge_intersection_brute_force(
         edge_starts.contiguous().to(torch.float32),
         edge_ends.contiguous().to(torch.float32),
         means.contiguous().to(torch.float32),
         opacities.contiguous().to(torch.float32),
         covis.contiguous().to(torch.float32),
+        isos,
         iso
     )
 

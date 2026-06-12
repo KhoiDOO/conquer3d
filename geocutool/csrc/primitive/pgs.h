@@ -1,7 +1,7 @@
 #ifndef PGS_H
 #define PGS_H
 
-#include "base.h"
+#include "../base.h"
 #include <cuda_runtime.h>
 
 namespace pgs_aabb
@@ -16,6 +16,7 @@ namespace pgs_aabb
         const float *__restrict__ covis,
         const float3 *__restrict__ gs_aabb_mins,
         const float3 *__restrict__ gs_aabb_maxs,
+        const float *__restrict__ isos,
         const float iso,
         const bool return_centroids,
         const bool return_centroid_densities,
@@ -36,6 +37,7 @@ namespace pgs_aabb
         const float3 *__restrict__ normals,
         const float *__restrict__ opacities,
         const float *__restrict__ covis,
+        const float *__restrict__ isos,
         const float iso,
         bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_gaus_ids);

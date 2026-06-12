@@ -1,5 +1,5 @@
 import torch
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 from .._C import (
     query_pgs_voxel_pair_intersection_brute_force,
@@ -14,7 +14,7 @@ def query_pgs_voxel_pair_intersection(
     covis: torch.Tensor,
     gs_aabb_mins: torch.Tensor,
     gs_aabb_maxs: torch.Tensor,
-    iso: float = 11.345,
+    iso: Union[float, torch.Tensor] = 11.345,
     return_centroids: bool = False,
     return_centroid_densities: bool = False,
     max_capacity: int = 10000000
@@ -47,6 +47,14 @@ def query_pgs_voxel_pair_intersection(
         vx_aabb_mins, vx_aabb_maxs, means, normals, covis, gs_aabb_mins, gs_aabb_maxs
     ]):
         raise ValueError("All input tensors must be CUDA tensors.")
+    
+    if isinstance(iso, torch.Tensor):
+        if not iso.is_cuda: raise ValueError("iso tensor must be on CUDA")
+        isos = iso.contiguous().to(torch.float32)
+        iso = 0.0
+    else:
+        isos = None
+        iso = float(iso)
 
     # Contiguous casting ensures memory layout matches C++ pointer expectations
     hit_mask, out_voxel_ids, out_gaus_ids, centroids, densities = query_pgs_voxel_pair_intersection_brute_force(
@@ -57,6 +65,7 @@ def query_pgs_voxel_pair_intersection(
         covis.contiguous().to(torch.float32),
         gs_aabb_mins.contiguous().to(torch.float32),
         gs_aabb_maxs.contiguous().to(torch.float32),
+        isos,
         iso,
         return_centroids,
         return_centroid_densities,
@@ -72,7 +81,7 @@ def query_pgs_edge_intersection(
     normals: torch.Tensor,
     opacities: torch.Tensor,
     covis: torch.Tensor,
-    iso: float = 11.345
+    iso: Union[float, torch.Tensor] = 11.345
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Queries intersections. For each edge, returns the ID of the Gaussian 
@@ -93,6 +102,14 @@ def query_pgs_edge_intersection(
     """
     if not all(t.is_cuda for t in [edge_starts, edge_ends, means, normals, opacities, covis]):
         raise ValueError("All input tensors must be CUDA tensors.")
+    
+    if isinstance(iso, torch.Tensor):
+        if not iso.is_cuda: raise ValueError("iso tensor must be on CUDA")
+        isos = iso.contiguous().to(torch.float32)
+        iso = 0.0
+    else:
+        isos = None
+        iso = float(iso)
 
     hit_mask, out_gaus_ids = query_pgs_edge_intersection_brute_force(
         edge_starts.contiguous().to(torch.float32),
@@ -101,6 +118,7 @@ def query_pgs_edge_intersection(
         normals.contiguous().to(torch.float32),
         opacities.contiguous().to(torch.float32),
         covis.contiguous().to(torch.float32),
+        isos,
         iso
     )
 

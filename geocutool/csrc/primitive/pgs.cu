@@ -168,6 +168,7 @@ namespace pgs_aabb
         return false; 
     }
 
+    template <bool multiple_isos>
     __global__ void query_pgs_voxel_pair_intersection_brute_force_kernel(
         const uint32_t num_voxels,
         const uint32_t num_gaussians,
@@ -178,6 +179,7 @@ namespace pgs_aabb
         const float *__restrict__ covis,
         const float3 *__restrict__ gs_aabb_mins,
         const float3 *__restrict__ gs_aabb_maxs,
+        const float *__restrict__ isos,
         const float iso,
         const bool return_centroids,
         const bool return_centroid_densities,
@@ -210,11 +212,14 @@ namespace pgs_aabb
 
             if (broad_hit)
             {
+
+                float __iso = multiple_isos ? isos[g_idx] : iso;
+
                 float3 centroid;
                 
                 // 2. NARROW PHASE & CENTROID CALCULATION (12-Edge Check + Iso)
                 bool narrow_hit = compute_pgs_voxel_centroid(
-                    mean, normal, covi, iso, vx_ab_min, vx_ab_max, return_centroids, centroid);
+                    mean, normal, covi, __iso, vx_ab_min, vx_ab_max, return_centroids, centroid);
 
                 if (narrow_hit)
                 {
@@ -255,6 +260,7 @@ namespace pgs_aabb
         const float *__restrict__ covis,
         const float3 *__restrict__ gs_aabb_mins,
         const float3 *__restrict__ gs_aabb_maxs,
+        const float *__restrict__ isos,
         const float iso,
         const bool return_centroids,
         const bool return_centroid_densities,
@@ -269,28 +275,55 @@ namespace pgs_aabb
         uint32_t threads = 256;
         uint32_t blocks = (num_voxels + threads - 1) / threads;
 
-        query_pgs_voxel_pair_intersection_brute_force_kernel<<<blocks, threads>>>(
-            num_voxels, 
-            num_gaussians, 
-            vx_aabb_mins, 
-            vx_aabb_maxs,
-            means, 
-            normals, 
-            covis, 
-            gs_aabb_mins, 
-            gs_aabb_maxs,
-            iso, 
-            return_centroids, 
-            return_centroid_densities,
-            hit_mask, 
-            out_voxel_ids, 
-            out_gaus_ids, 
-            centroids, 
-            densities,
-            global_counter, 
-            max_capacity);
+        if (isos != nullptr)
+        {
+            query_pgs_voxel_pair_intersection_brute_force_kernel<true><<<blocks, threads>>>(
+                num_voxels, 
+                num_gaussians, 
+                vx_aabb_mins, 
+                vx_aabb_maxs,
+                means, 
+                normals, 
+                covis, 
+                gs_aabb_mins, 
+                gs_aabb_maxs,
+                isos,
+                iso, 
+                return_centroids, 
+                return_centroid_densities,
+                hit_mask, 
+                out_voxel_ids, 
+                out_gaus_ids, 
+                centroids, 
+                densities,
+                global_counter, 
+                max_capacity);
+        } else {
+            query_pgs_voxel_pair_intersection_brute_force_kernel<false><<<blocks, threads>>>(
+                num_voxels, 
+                num_gaussians, 
+                vx_aabb_mins, 
+                vx_aabb_maxs,
+                means, 
+                normals, 
+                covis, 
+                gs_aabb_mins, 
+                gs_aabb_maxs,
+                isos,
+                iso, 
+                return_centroids, 
+                return_centroid_densities,
+                hit_mask, 
+                out_voxel_ids, 
+                out_gaus_ids, 
+                centroids, 
+                densities,
+                global_counter, 
+                max_capacity);
+        }
     }
 
+    template <bool multiple_isos>
     __global__ void query_pgs_edge_intersection_brute_force_kernel(
         const uint32_t num_edges,
         const uint32_t num_gaussians,
@@ -300,6 +333,7 @@ namespace pgs_aabb
         const float3 *__restrict__ normals,
         const float *__restrict__ opacities,
         const float *__restrict__ covis,
+        const float *__restrict__ isos,
         const float iso,
         bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_gaus_ids)
@@ -321,6 +355,7 @@ namespace pgs_aabb
             float3 mean = means[g_idx];
             float3 normal = normals[g_idx];
             const float *covi = covis + (g_idx * 6);
+            float __iso = multiple_isos ? isos[g_idx] : iso;
 
             float t_hit;
 
@@ -328,7 +363,7 @@ namespace pgs_aabb
                 mean,
                 normal,
                 covi,
-                iso,
+                __iso,
                 edge_start,
                 edge_end,
                 t_hit);
@@ -367,6 +402,7 @@ namespace pgs_aabb
         const float3 *__restrict__ normals,
         const float *__restrict__ opacities,
         const float *__restrict__ covis,
+        const float *__restrict__ isos,
         const float iso,
         bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_gaus_ids
@@ -375,7 +411,8 @@ namespace pgs_aabb
         uint32_t threads = 256;
         uint32_t blocks = (num_edges + threads - 1) / threads;
 
-        query_pgs_edge_intersection_brute_force_kernel<<<blocks, threads>>>(
+        if (isos != nullptr) {
+            query_pgs_edge_intersection_brute_force_kernel<true><<<blocks, threads>>>(
             num_edges,
             num_gaussians,
             edge_starts,
@@ -384,8 +421,24 @@ namespace pgs_aabb
             normals,
             opacities,
             covis,
+            isos,
             iso,
             hit_mask,
             out_gaus_ids);
+        } else {
+            query_pgs_edge_intersection_brute_force_kernel<false><<<blocks, threads>>>(
+            num_edges,
+            num_gaussians,
+            edge_starts,
+            edge_ends,
+            means,
+            normals,
+            opacities,
+            covis,
+            isos,
+            iso,
+            hit_mask,
+            out_gaus_ids);
+        }
     }
 }

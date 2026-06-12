@@ -8,7 +8,6 @@
 #include <cstdio>
 #include <cfloat>
 
-
 namespace gs_aabb
 {
     __device__ __forceinline__ void compute_single_aabb(
@@ -94,11 +93,13 @@ namespace gs_aabb
         out_max = mean + Pmax;
     }
 
+    template <bool multiple_isos>
     __global__ void compute_aabb_kernel(
         const uint32_t num_gaussians,
         const float3 *__restrict__ means,
         const float4 *__restrict__ rotations,
         const float3 *__restrict__ scales,
+        const float *__restrict__ isos,
         const float iso,
         const float tol,
         const uint32_t level,
@@ -108,23 +109,25 @@ namespace gs_aabb
         float3 *__restrict__ contact_points,
         float *__restrict__ covi)
     {
-        uint32_t tidx = blockIdx.x * blockDim.x + threadIdx.x;
+        uint32_t g_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-        if (tidx >= num_gaussians)
+        if (g_idx >= num_gaussians)
             return;
 
+        float __iso = multiple_isos ? isos[g_idx] : iso;
+
         compute_single_aabb(
-            means[tidx],
-            rotations[tidx],
-            scales[tidx],
-            iso,
+            means[g_idx],
+            rotations[g_idx],
+            scales[g_idx],
+            __iso,
             tol,
             level,
             rotnorm,
-            aabb_min[tidx],
-            aabb_max[tidx],
-            contact_points + (tidx * 3),
-            covi + (tidx * 6));
+            aabb_min[g_idx],
+            aabb_max[g_idx],
+            contact_points + (g_idx * 3),
+            covi + (g_idx * 6));
     }
 
     void compute_aabb(
@@ -132,6 +135,7 @@ namespace gs_aabb
         const float3 *__restrict__ means,
         const float4 *__restrict__ rotations,
         const float3 *__restrict__ scales,
+        const float *__restrict__ isos,
         const float iso,
         const float tol,
         const uint32_t level,
@@ -144,19 +148,40 @@ namespace gs_aabb
         uint32_t threads = 256;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
-        compute_aabb_kernel<<<blocks, threads>>>(
-            num_gaussians,
-            means,
-            rotations,
-            scales,
-            iso,
-            tol,
-            level,
-            rotnorm,
-            aabb_min,
-            aabb_max,
-            contact_points,
-            covi);
+        if (isos != nullptr)
+        {
+            compute_aabb_kernel<true><<<blocks, threads>>>(
+                num_gaussians,
+                means,
+                rotations,
+                scales,
+                isos,
+                iso,
+                tol,
+                level,
+                rotnorm,
+                aabb_min,
+                aabb_max,
+                contact_points,
+                covi);
+        }
+        else
+        {
+            compute_aabb_kernel<false><<<blocks, threads>>>(
+                num_gaussians,
+                means,
+                rotations,
+                scales,
+                isos,
+                iso,
+                tol,
+                level,
+                rotnorm,
+                aabb_min,
+                aabb_max,
+                contact_points,
+                covi);
+        }
     }
 
     __device__ __forceinline__ bool test_gs_aabb_inside_voxel(
@@ -191,29 +216,29 @@ namespace gs_aabb
             float dummy_t0, dummy_t1;
 
             if (gs::test_gs_segment(
-                covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
-                make_float3(p.x, p.y + (i / 2 ? vsize : 0.0), p.z + (i % 2 ? vsize : 0.0)),
-                make_float3(p.x + vsize, p.y + (i / 2 ? vsize : 0.0), p.z + (i % 2 ? vsize : 0.0)),
-                false, dummy_t0, dummy_t1
-            )) {
+                    covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
+                    make_float3(p.x, p.y + (i / 2 ? vsize : 0.0), p.z + (i % 2 ? vsize : 0.0)),
+                    make_float3(p.x + vsize, p.y + (i / 2 ? vsize : 0.0), p.z + (i % 2 ? vsize : 0.0)),
+                    false, dummy_t0, dummy_t1))
+            {
                 return true;
             }
 
             if (gs::test_gs_segment(
-                covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
-                make_float3(p.x + (i / 2 ? vsize : 0.0), p.y, p.z + (i % 2 ? vsize : 0.0)),
-                make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + vsize, p.z + (i % 2 ? vsize : 0.0)),
-                false, dummy_t0, dummy_t1
-            )) {
+                    covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
+                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y, p.z + (i % 2 ? vsize : 0.0)),
+                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + vsize, p.z + (i % 2 ? vsize : 0.0)),
+                    false, dummy_t0, dummy_t1))
+            {
                 return true;
             }
 
             if (gs::test_gs_segment(
-                covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
-                make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + (i % 2 ? vsize : 0.0), p.z),
-                make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + (i % 2 ? vsize : 0.0), p.z + vsize),
-                false, dummy_t0, dummy_t1
-            )) {
+                    covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
+                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + (i % 2 ? vsize : 0.0), p.z),
+                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + (i % 2 ? vsize : 0.0), p.z + vsize),
+                    false, dummy_t0, dummy_t1))
+            {
                 return true;
             }
         }
@@ -344,6 +369,7 @@ namespace gs_aabb
         out_penetration = (voxel_size > 1e-6f) ? (min_dim / voxel_size) : 0.0f;
     }
 
+    template <bool multiple_isos>
     __global__ void query_gs_voxel_pair_intersection_brute_force_kernel(
         const uint32_t num_voxels,
         const uint32_t num_gaussians,
@@ -355,6 +381,7 @@ namespace gs_aabb
         const float3 *__restrict__ gs_aabb_mins,
         const float3 *__restrict__ gs_aabb_maxs,
         const float3 *__restrict__ contact_points,
+        const float *__restrict__ isos,
         const float iso,
         const float ar_threshold,
         const float p_threshold,
@@ -386,6 +413,7 @@ namespace gs_aabb
             float3 cp0 = contact_points[g_idx * 3 + 0];
             float3 cp1 = contact_points[g_idx * 3 + 1];
             float3 cp2 = contact_points[g_idx * 3 + 2];
+            float __iso = multiple_isos ? isos[g_idx] : iso;
 
             bool hit = test_gs_intersect_voxel(
                 g_idx,
@@ -398,7 +426,7 @@ namespace gs_aabb
                 cp2,
                 vx_ab_min,
                 vx_ab_max,
-                iso);
+                __iso);
 
             if (hit)
             {
@@ -456,6 +484,7 @@ namespace gs_aabb
         const float3 *__restrict__ gs_aabb_mins,
         const float3 *__restrict__ gs_aabb_maxs,
         const float3 *__restrict__ contact_points,
+        const float *__restrict__ isos,
         const float iso,
         const float ar_threshold,
         const float p_threshold,
@@ -471,30 +500,61 @@ namespace gs_aabb
         uint32_t threads = 256;
         uint32_t blocks = (num_voxels + threads - 1) / threads;
 
-        query_gs_voxel_pair_intersection_brute_force_kernel<<<blocks, threads>>>(
-            num_voxels,
-            num_gaussians,
-            vx_aabb_mins,
-            vx_aabb_maxs,
-            means,
-            covis,
-            opacities,
-            gs_aabb_mins,
-            gs_aabb_maxs,
-            contact_points,
-            iso,
-            ar_threshold,
-            p_threshold,
-            return_centroids,
-            hit_mask,
-            out_voxel_ids,
-            out_gaus_ids,
-            centroids,
-            densities,
-            global_counter,
-            max_capacity);
+        if (isos != nullptr)
+        {
+            query_gs_voxel_pair_intersection_brute_force_kernel<true><<<blocks, threads>>>(
+                num_voxels,
+                num_gaussians,
+                vx_aabb_mins,
+                vx_aabb_maxs,
+                means,
+                covis,
+                opacities,
+                gs_aabb_mins,
+                gs_aabb_maxs,
+                contact_points,
+                isos,
+                iso,
+                ar_threshold,
+                p_threshold,
+                return_centroids,
+                hit_mask,
+                out_voxel_ids,
+                out_gaus_ids,
+                centroids,
+                densities,
+                global_counter,
+                max_capacity);
+        }
+        else
+        {
+            query_gs_voxel_pair_intersection_brute_force_kernel<false><<<blocks, threads>>>(
+                num_voxels,
+                num_gaussians,
+                vx_aabb_mins,
+                vx_aabb_maxs,
+                means,
+                covis,
+                opacities,
+                gs_aabb_mins,
+                gs_aabb_maxs,
+                contact_points,
+                isos,
+                iso,
+                ar_threshold,
+                p_threshold,
+                return_centroids,
+                hit_mask,
+                out_voxel_ids,
+                out_gaus_ids,
+                centroids,
+                densities,
+                global_counter,
+                max_capacity);
+        }
     }
 
+    template <bool multiple_isos>
     __global__ void query_gs_edge_pair_intersection_brute_force_kernel(
         const uint32_t num_edges,
         const uint32_t num_gaussians,
@@ -502,6 +562,7 @@ namespace gs_aabb
         const float3 *__restrict__ edge_ends,
         const float3 *__restrict__ means,
         const float *__restrict__ covis,
+        const float *__restrict__ isos,
         const float iso,
         bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_edge_ids,
@@ -535,14 +596,15 @@ namespace gs_aabb
 
             float dummy_t_entry;
             float dummy_t_exit;
+            float __iso = multiple_isos ? isos[g_idx] : iso;
 
             bool hit = gs::test_gs_segment(
                 covi[0], covi[1], covi[2], covi[3], covi[4], covi[5],
-                iso,
+                __iso,
                 local_start,
                 local_end,
                 false,
-                dummy_t_entry, 
+                dummy_t_entry,
                 dummy_t_exit);
 
             if (hit)
@@ -568,6 +630,7 @@ namespace gs_aabb
         const float3 *__restrict__ edge_ends,
         const float3 *__restrict__ means,
         const float *__restrict__ covis,
+        const float *__restrict__ isos,
         const float iso,
         bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_edge_ids,
@@ -578,21 +641,43 @@ namespace gs_aabb
         uint32_t threads = 256;
         uint32_t blocks = (num_edges + threads - 1) / threads;
 
-        query_gs_edge_pair_intersection_brute_force_kernel<<<blocks, threads>>>(
-            num_edges,
-            num_gaussians,
-            edge_starts,
-            edge_ends,
-            means,
-            covis,
-            iso,
-            hit_mask,
-            out_edge_ids,
-            out_gaus_ids,
-            global_counter,
-            max_capacity);
+        if (isos != nullptr)
+        {
+            query_gs_edge_pair_intersection_brute_force_kernel<true><<<blocks, threads>>>(
+                num_edges,
+                num_gaussians,
+                edge_starts,
+                edge_ends,
+                means,
+                covis,
+                isos,
+                iso,
+                hit_mask,
+                out_edge_ids,
+                out_gaus_ids,
+                global_counter,
+                max_capacity);
+        }
+        else
+        {
+            query_gs_edge_pair_intersection_brute_force_kernel<false><<<blocks, threads>>>(
+                num_edges,
+                num_gaussians,
+                edge_starts,
+                edge_ends,
+                means,
+                covis,
+                isos,
+                iso,
+                hit_mask,
+                out_edge_ids,
+                out_gaus_ids,
+                global_counter,
+                max_capacity);
+        }
     }
 
+    template <bool multiple_isos>
     __global__ void query_gs_edge_intersection_brute_force_kernel(
         const uint32_t num_edges,
         const uint32_t num_gaussians,
@@ -601,6 +686,7 @@ namespace gs_aabb
         const float3 *__restrict__ means,
         const float *__restrict__ opacities,
         const float *__restrict__ covis,
+        const float *__restrict__ isos,
         const float iso,
         bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_gaus_ids)
@@ -632,13 +718,13 @@ namespace gs_aabb
                 edge_end.y - mean.y,
                 edge_end.z - mean.z);
 
-
             float t_entry;
             float t_exit;
+            float __iso = multiple_isos ? isos[g_idx] : iso;
 
             bool hit = gs::test_gs_segment(
                 covi[0], covi[1], covi[2], covi[3], covi[4], covi[5],
-                iso,
+                __iso,
                 local_start,
                 local_end,
                 true,
@@ -653,8 +739,7 @@ namespace gs_aabb
                 float3 p_mid = make_float3(
                     local_start.x + t_mid * (local_end.x - local_start.x),
                     local_start.y + t_mid * (local_end.y - local_start.y),
-                    local_start.z + t_mid * (local_end.z - local_start.z)
-                );
+                    local_start.z + t_mid * (local_end.z - local_start.z));
 
                 float density;
                 gs::compute_density_local(p_mid, covi, opacities[g_idx], density);
@@ -679,24 +764,43 @@ namespace gs_aabb
         const float3 *__restrict__ means,
         const float *__restrict__ opacities,
         const float *__restrict__ covis,
+        const float *__restrict__ isos,
         const float iso,
         bool *__restrict__ hit_mask,
-        int64_t *__restrict__ out_gaus_ids
-    )
+        int64_t *__restrict__ out_gaus_ids)
     {
         uint32_t threads = 256;
         uint32_t blocks = (num_edges + threads - 1) / threads;
 
-        query_gs_edge_intersection_brute_force_kernel<<<blocks, threads>>>(
-            num_edges,
-            num_gaussians,
-            edge_starts,
-            edge_ends,
-            means,
-            opacities,
-            covis,
-            iso,
-            hit_mask,
-            out_gaus_ids);
+        if (isos != nullptr)
+        {
+            query_gs_edge_intersection_brute_force_kernel<true><<<blocks, threads>>>(
+                num_edges,
+                num_gaussians,
+                edge_starts,
+                edge_ends,
+                means,
+                opacities,
+                covis,
+                isos,
+                iso,
+                hit_mask,
+                out_gaus_ids);
+        }
+        else
+        {
+            query_gs_edge_intersection_brute_force_kernel<false><<<blocks, threads>>>(
+                num_edges,
+                num_gaussians,
+                edge_starts,
+                edge_ends,
+                means,
+                opacities,
+                covis,
+                isos,
+                iso,
+                hit_mask,
+                out_gaus_ids);
+        }
     }
 }

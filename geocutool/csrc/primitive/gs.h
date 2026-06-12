@@ -1,8 +1,7 @@
 #ifndef GS_H
 #define GS_H
 
-#include "base.h"
-#include "../check.h"
+#include "../base.h"
 
 #include <cuda_runtime.h>
 #include <cstdint>
@@ -14,6 +13,7 @@ namespace gs_aabb
         const float3 *__restrict__ means,
         const float4 *__restrict__ rotations,
         const float3 *__restrict__ scales,
+        const float *__restrict__ isos,
         const float iso,
         const float tol,
         const uint32_t level,
@@ -34,6 +34,7 @@ namespace gs_aabb
         const float3 *__restrict__ gs_aabb_mins,
         const float3 *__restrict__ gs_aabb_maxs,
         const float3 *__restrict__ contact_points,
+        const float *__restrict__ isos,
         const float iso,
         const float ar_threshold,
         const float p_threshold,
@@ -53,6 +54,7 @@ namespace gs_aabb
         const float3 *__restrict__ edge_ends,
         const float3 *__restrict__ means,
         const float *__restrict__ covis,
+        const float *__restrict__ isos,
         const float iso,
         bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_edge_ids,
@@ -68,6 +70,7 @@ namespace gs_aabb
         const float3 *__restrict__ means,
         const float *__restrict__ opacities,
         const float *__restrict__ covis,
+        const float *__restrict__ isos,
         const float iso,
         bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_gaus_ids);
