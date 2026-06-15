@@ -224,6 +224,12 @@ std::tuple<torch::Tensor, torch::Tensor> solve_pgs_cluster_tangency_radius_wrapp
     TORCH_CHECK(normals.size(0) == num_gaussians && normals.size(1) == 3, "normals must have shape (N, 3)");
     TORCH_CHECK(covis.size(0) == num_gaussians && covis.size(1) == 6, "covis must have shape (N, 6)");
 
+    uint32_t search_k = k + 1;
+
+    TORCH_CHECK(search_k > 1, "k must be greater than 0");
+    TORCH_CHECK(search_k <= 32, "Requested k exceeds the hardware register limit (MAX_K = 32).");
+    TORCH_CHECK(search_k <= num_gaussians, "Requested k is larger than the number of points in the tree.");
+
     auto options = means.options();
     torch::Tensor isos = torch::empty({num_gaussians}, options.dtype(torch::kFloat32));
     torch::Tensor invalid_mask = torch::empty({num_gaussians}, options.dtype(torch::kBool));
@@ -233,7 +239,7 @@ std::tuple<torch::Tensor, torch::Tensor> solve_pgs_cluster_tangency_radius_wrapp
         reinterpret_cast<const float3 *>(means.data_ptr<float>()),
         reinterpret_cast<const float3 *>(normals.data_ptr<float>()),
         reinterpret_cast<const float *>(covis.data_ptr<float>()),
-        k,
+        search_k,
         reinterpret_cast<float *>(isos.data_ptr<float>()),
         reinterpret_cast<bool *>(invalid_mask.data_ptr<bool>()));
 
