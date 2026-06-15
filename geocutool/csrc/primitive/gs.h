@@ -2,6 +2,10 @@
 #define GS_H
 
 #include "../maths/maths.h"
+#include "../constants.h"
+#include "../data_structure/kdtree.h"
+#include "gs_math.cuh"
+#include "aabb.h"
 
 #include <cuda_runtime.h>
 #include <cstdint>
@@ -16,6 +20,13 @@ namespace gs
         const float tol,
         const uint32_t level,
         float *__restrict__ covis);
+
+    __host__ void solve_gs_neighbor_mahalanobis_radius(
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ means,
+        const float *__restrict__ covis,
+        const int k,
+        float *__restrict__ isos);
 }
 
 namespace gs_aabb
