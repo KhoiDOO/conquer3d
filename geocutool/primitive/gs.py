@@ -4,6 +4,7 @@ from typing import Tuple, Optional, Union
 # Explicitly import the compiled CMake target
 from .._C import (
     compute_gs_covi_func,
+    solve_gs_neighbor_mahalanobis_radius_func,
     compute_gs_aabb_func,
     compute_gs_aabb_w_covi_func,
     query_gs_voxel_pair_intersection_brute_force,
@@ -52,6 +53,37 @@ def compute_gs_covi(
     )
 
     return covi
+
+def solve_gs_neighbor_mahalanobis_radius(
+    means: torch.Tensor,
+    covis: torch.Tensor,
+    k: int
+) -> torch.Tensor:
+    """
+    Computes the Mahalanobis radius for each Gaussian based on its k-nearest neighbors.
+
+    Args:
+        means (torch.Tensor): (N, 3) tensor of Gaussian center positions.
+        covis (torch.Tensor): (N, 6) tensor of covariance inverses (flattened upper-triangular).
+        k (int): Number of nearest neighbors to consider.
+
+    Returns:
+        isos: torch.Tensor: (N,) tensor of Mahalanobis radii for each Gaussian.
+    """
+    
+    if not all(t.is_cuda for t in [means, covis]):
+        raise ValueError("All input tensors must be CUDA tensors.")
+        
+    means_c = means.contiguous().to(torch.float32)
+    covis_c = covis.contiguous().to(torch.float32)
+
+    isos = solve_gs_neighbor_mahalanobis_radius_func(
+        means_c,
+        covis_c,
+        k
+    )
+
+    return isos
 
 def compute_gs_aabb(
     means: torch.Tensor,
