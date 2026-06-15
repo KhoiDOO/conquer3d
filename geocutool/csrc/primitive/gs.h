@@ -1,14 +1,39 @@
 #ifndef GS_H
 #define GS_H
 
-#include "../base.h"
+#include "../maths/maths.h"
 
 #include <cuda_runtime.h>
 #include <cstdint>
 
+namespace gs
+{
+    __host__ void compute_gs_covi(
+        const uint32_t num_gaussians,
+        const float4 *__restrict__ rotations,
+        const float3 *__restrict__ scales,
+        const bool rotnorm,
+        const float tol,
+        const uint32_t level,
+        float *__restrict__ covis);
+}
+
 namespace gs_aabb
 {
-    __host__ void compute_aabb(
+    __host__ void compute_gs_aabb(
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ scales,
+        const float *__restrict__ covis,
+        const float *__restrict__ isos,
+        const float iso,
+        const float tol,
+        const uint32_t level,
+        float3 *__restrict__ aabb_min,
+        float3 *__restrict__ aabb_max,
+        float3 *__restrict__ contact_points);
+
+    __host__ void compute_gs_aabb_w_covi(
         const uint32_t num_gaussians,
         const float3 *__restrict__ means,
         const float4 *__restrict__ rotations,

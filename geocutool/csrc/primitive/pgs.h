@@ -1,8 +1,25 @@
 #ifndef PGS_H
 #define PGS_H
 
-#include "../base.h"
+#include "../maths/maths.h"
+#include "../constants.h"
+#include "../data_structure/kdtree.h"
+#include "gs_math.cuh"
+#include "aabb.h"
 #include <cuda_runtime.h>
+
+namespace pgs
+{
+    __host__ void solve_pgs_cluster_tangency_radius(
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ normals,
+        const float *__restrict__ covis,
+        const int k,
+        float *__restrict__ isos,
+        bool *__restrict__ invalid_mask
+    );
+}
 
 namespace pgs_aabb
 {

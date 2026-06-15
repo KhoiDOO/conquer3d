@@ -1,5 +1,5 @@
 #pragma once
-#include "../base.h"
+#include "../maths/maths.h"
 #include <cuda_runtime.h>
 #include <math_constants.h>
 
@@ -120,7 +120,7 @@ namespace gs
         // = R S^{-T} S^{-1} R^T
         // = R S^{-2} R^T
         // = \Sigma^{-1}
-        float3x3 out_cov_inv = transpose(M) * M;
+        float3x3 out_cov_inv = maths::transpose(M) * M;
 
         covi[0] = out_cov_inv.m[0][0];
         covi[1] = out_cov_inv.m[0][1];
