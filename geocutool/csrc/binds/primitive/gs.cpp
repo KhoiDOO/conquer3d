@@ -11,7 +11,94 @@
 
 namespace py = pybind11;
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> compute_aabb_wrapper(
+torch::Tensor compute_gs_covi_wrapper(
+    const torch::Tensor &means,
+    const torch::Tensor &rotations,
+    const torch::Tensor &scales,
+    const bool rotnorm,
+    const float tol,
+    const uint32_t level)
+{
+    CHECK_INPUT(means);
+    CHECK_INPUT(rotations);
+    CHECK_INPUT(scales);
+
+    TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
+    TORCH_CHECK(rotations.scalar_type() == torch::kFloat32, "rotations must be float32");
+    TORCH_CHECK(scales.scalar_type() == torch::kFloat32, "scales must be float32");
+
+    const uint32_t num_gaussians = means.size(0);
+    TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
+    TORCH_CHECK(rotations.size(1) == 4, "rotations must have shape (N, 4)");
+    TORCH_CHECK(scales.size(1) == 3, "scales must have shape (N, 3)");
+
+    auto options = means.options();
+    torch::Tensor covi = torch::empty({num_gaussians, 6}, options);
+
+    gs::compute_gs_covi(
+        num_gaussians,
+        reinterpret_cast<const float4 *>(rotations.data_ptr<float>()),
+        reinterpret_cast<const float3 *>(scales.data_ptr<float>()),
+        rotnorm,
+        tol,
+        level,
+        reinterpret_cast<float *>(covi.data_ptr<float>()));
+    
+    return covi;
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> compute_gs_aabb_wrapper(
+    const torch::Tensor &means,
+    const torch::Tensor &scales,
+    const torch::Tensor &covis,
+    const std::optional<torch::Tensor> &isos,
+    const float iso,
+    const float tol,
+    const uint32_t level)
+{
+    CHECK_INPUT(means);
+    CHECK_INPUT(scales);
+    CHECK_INPUT(covis);
+
+    TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
+    TORCH_CHECK(scales.scalar_type() == torch::kFloat32, "scales must be float32");
+    TORCH_CHECK(covis.scalar_type() == torch::kFloat32, "covis must be float32");
+
+    const uint32_t num_gaussians = means.size(0);
+    TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
+    TORCH_CHECK(scales.size(1) == 3, "scales must have shape (N, 3)");
+
+    float *isos_ptr = nullptr;
+    if (isos.has_value())
+    {
+        CHECK_INPUT(isos.value());
+        TORCH_CHECK(isos.value().scalar_type() == torch::kFloat32, "isos must be float32");
+        TORCH_CHECK(isos.value().size(0) == num_gaussians, "isos must have shape (N,)");
+        isos_ptr = isos.value().data_ptr<float>();
+    }
+
+    auto options = means.options();
+    torch::Tensor aabb_min = torch::empty({num_gaussians, 3}, options);
+    torch::Tensor aabb_max = torch::empty({num_gaussians, 3}, options);
+    torch::Tensor contact_points = torch::empty({num_gaussians, 9}, options);
+
+    gs_aabb::compute_gs_aabb(
+        num_gaussians,
+        reinterpret_cast<const float3 *>(means.data_ptr<float>()),
+        reinterpret_cast<const float3 *>(scales.data_ptr<float>()),
+        reinterpret_cast<const float *>(covis.data_ptr<float>()),
+        isos_ptr,
+        iso,
+        tol,
+        level,
+        reinterpret_cast<float3 *>(aabb_min.data_ptr<float>()),
+        reinterpret_cast<float3 *>(aabb_max.data_ptr<float>()),
+        reinterpret_cast<float3 *>(contact_points.data_ptr<float>()));
+    
+    return std::make_tuple(aabb_min, aabb_max, contact_points);
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> compute_gs_aabb_w_covi_wrapper(
     const torch::Tensor &means,
     const torch::Tensor &rotations,
     const torch::Tensor &scales,
@@ -21,17 +108,14 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> compute_a
     const uint32_t level,
     const bool rotnorm)
 {
-    // 1. Enforce memory contiguity and CUDA residency
     CHECK_INPUT(means);
     CHECK_INPUT(rotations);
     CHECK_INPUT(scales);
 
-    // 2. Enforce Data Types (float3 maps to 3x float32)
     TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
     TORCH_CHECK(rotations.scalar_type() == torch::kFloat32, "rotations must be float32");
     TORCH_CHECK(scales.scalar_type() == torch::kFloat32, "scales must be float32");
 
-    // 3. Extract dimensions and validate shapes
     const uint32_t num_gaussians = means.size(0);
     TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
     TORCH_CHECK(rotations.size(1) == 4, "rotations must have shape (N, 4)");
@@ -46,16 +130,13 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> compute_a
         isos_ptr = isos.value().data_ptr<float>();
     }
 
-    // 4. Allocate Output Tensors directly on the same GPU as the inputs
     auto options = means.options();
     torch::Tensor aabb_min = torch::empty({num_gaussians, 3}, options);
     torch::Tensor aabb_max = torch::empty({num_gaussians, 3}, options);
     torch::Tensor contact_points = torch::empty({num_gaussians, 9}, options);
     torch::Tensor covi = torch::empty({num_gaussians, 6}, options);
 
-    // 5. Launch the CUDA Kernel
-    // We safely cast the flat float arrays into float3/float4 structs.
-    gs_aabb::compute_aabb(
+    gs_aabb::compute_gs_aabb_w_covi(
         num_gaussians,
         reinterpret_cast<const float3 *>(means.data_ptr<float>()),
         reinterpret_cast<const float4 *>(rotations.data_ptr<float>()),
@@ -70,7 +151,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> compute_a
         reinterpret_cast<float3 *>(contact_points.data_ptr<float>()),
         reinterpret_cast<float *>(covi.data_ptr<float>()));
 
-    // 6. Return as a Python Tuple
     return std::make_tuple(aabb_min, aabb_max, contact_points, covi);
 }
 
@@ -90,7 +170,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     const bool return_centroids,
     const int64_t max_capacity)
 {
-    // 1. Enforce memory contiguity and CUDA residency
     CHECK_INPUT(vx_aabb_mins);
     CHECK_INPUT(vx_aabb_maxs);
     CHECK_INPUT(means);
@@ -100,7 +179,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     CHECK_INPUT(gs_aabb_maxs);
     CHECK_INPUT(contact_points);
 
-    // 2. Enforce Data Types (float3 maps to 3x float32)
     TORCH_CHECK(vx_aabb_mins.scalar_type() == torch::kFloat32, "vx_aabb_mins must be float32");
     TORCH_CHECK(vx_aabb_maxs.scalar_type() == torch::kFloat32, "vx_aabb_maxs must be float32");
     TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
@@ -110,7 +188,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     TORCH_CHECK(gs_aabb_maxs.scalar_type() == torch::kFloat32, "gs_aabb_maxs must be float32");
     TORCH_CHECK(contact_points.scalar_type() == torch::kFloat32, "contact_points must be float32");
 
-    // 3. Extract dimensions and validate shapes
     const uint32_t num_gaussians = means.size(0);
     const uint32_t num_voxels = vx_aabb_mins.size(0);
 
@@ -132,7 +209,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
         isos_ptr = isos.value().data_ptr<float>();
     }
 
-    // 4. Allocate Output Tensors directly on the same GPU as the inputs
     auto options = means.options();
     torch::Tensor hit_mask = torch::zeros({num_voxels}, options.dtype(torch::kBool));
     torch::Tensor out_voxel_ids = torch::empty({max_capacity}, options.dtype(torch::kInt64));
@@ -146,14 +222,12 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
 
     if (return_centroids)
     {
-        // Only allocate the [max_capacity, 3] float tensor if requested
         centroids = torch::empty({max_capacity, 3}, options.dtype(torch::kFloat32));
         centroids_ptr = reinterpret_cast<float3 *>(centroids.data_ptr<float>());
         densities = torch::empty({max_capacity}, options.dtype(torch::kFloat32));
         densities_ptr = reinterpret_cast<float *>(densities.data_ptr<float>());
     }
 
-    // 5. Launch the CUDA Kernel
     gs_aabb::query_gs_voxel_pair_intersection_brute_force(
         num_voxels,
         num_gaussians,
@@ -178,7 +252,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
         reinterpret_cast<int64_t *>(global_counter.data_ptr<int64_t>()),
         max_capacity);
 
-    // 6. Return as a Python Tuple (also return the count of valid intersections)
     int64_t num_intersections = global_counter.item<int64_t>();
     if (num_intersections > max_capacity)
     {
@@ -196,7 +269,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     }
     else
     {
-        // Return std::nullopt for the optional tensor
         return std::make_tuple(
             hit_mask,
             out_voxel_ids.slice(0, 0, valid_hits),
@@ -215,19 +287,16 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_edge_pair_inter
     const float iso,
     const int64_t max_capacity)
 {
-    // 1. Enforce memory contiguity and CUDA residency
     CHECK_INPUT(edge_starts);
     CHECK_INPUT(edge_ends);
     CHECK_INPUT(means);
     CHECK_INPUT(covis);
 
-    // 2. Enforce Data Types
     TORCH_CHECK(edge_starts.scalar_type() == torch::kFloat32, "edge_starts must be float32");
     TORCH_CHECK(edge_ends.scalar_type() == torch::kFloat32, "edge_ends must be float32");
     TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
     TORCH_CHECK(covis.scalar_type() == torch::kFloat32, "covis must be float32");
 
-    // 3. Extract dimensions and validate shapes
     const uint32_t num_edges = edge_starts.size(0);
     const uint32_t num_gaussians = means.size(0);
 
@@ -245,14 +314,12 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_edge_pair_inter
         isos_ptr = isos.value().data_ptr<float>();
     }
 
-    // 4. Allocate Output Tensors
     auto options = means.options();
     torch::Tensor hit_mask = torch::zeros({num_edges}, options.dtype(torch::kBool));
     torch::Tensor out_edge_ids = torch::empty({max_capacity}, options.dtype(torch::kInt64));
     torch::Tensor out_gaus_ids = torch::empty({max_capacity}, options.dtype(torch::kInt64));
     torch::Tensor global_counter = torch::zeros({1}, options.dtype(torch::kInt64));
 
-    // 5. Launch the CUDA Kernel
     gs_aabb::query_gs_edge_pair_intersection_brute_force(
         num_edges,
         num_gaussians,
@@ -268,7 +335,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_gs_edge_pair_inter
         reinterpret_cast<int64_t *>(global_counter.data_ptr<int64_t>()),
         max_capacity);
 
-    // 6. Return sliced arrays
     int64_t num_intersections = global_counter.item<int64_t>();
     if (num_intersections > max_capacity)
     {
@@ -291,21 +357,18 @@ std::tuple<torch::Tensor, torch::Tensor> query_gs_edge_intersection_brute_force_
     const std::optional<torch::Tensor> &isos,
     const float iso)
 {
-    // 1. Enforce memory contiguity and CUDA residency
     CHECK_INPUT(edge_starts);
     CHECK_INPUT(edge_ends);
     CHECK_INPUT(means);
     CHECK_INPUT(opacities);
     CHECK_INPUT(covis);
 
-    // 2. Enforce Data Types
     TORCH_CHECK(edge_starts.scalar_type() == torch::kFloat32, "edge_starts must be float32");
     TORCH_CHECK(edge_ends.scalar_type() == torch::kFloat32, "edge_ends must be float32");
     TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
     TORCH_CHECK(opacities.scalar_type() == torch::kFloat32, "opacities must be float32");
     TORCH_CHECK(covis.scalar_type() == torch::kFloat32, "covis must be float32");
 
-    // 3. Extract dimensions and validate shapes
     const uint32_t num_edges = edge_starts.size(0);
     const uint32_t num_gaussians = means.size(0);
 
@@ -324,12 +387,10 @@ std::tuple<torch::Tensor, torch::Tensor> query_gs_edge_intersection_brute_force_
         isos_ptr = isos.value().data_ptr<float>();
     }
 
-    // Allocate Output Tensors (Exact 1-to-1 mapping with edges)
     auto options = means.options();
     torch::Tensor hit_mask = torch::zeros({num_edges}, options.dtype(torch::kBool));
-    torch::Tensor out_gaus_ids = torch::full({num_edges}, -1, options.dtype(torch::kInt64)); // Initialize with -1
+    torch::Tensor out_gaus_ids = torch::full({num_edges}, -1, options.dtype(torch::kInt64));
 
-    // Launch the CUDA Kernel
     gs_aabb::query_gs_edge_intersection_brute_force(
         num_edges,
         num_gaussians,
@@ -348,7 +409,22 @@ std::tuple<torch::Tensor, torch::Tensor> query_gs_edge_intersection_brute_force_
 
 void bind_primitive_gs(py::module_ &m)
 {
-    m.def("compute_aabb", &compute_aabb_wrapper, "Compute AABB for 3D Gaussians",
+    m.def("compute_gs_covi_func", &compute_gs_covi_wrapper, "Compute covariance matrices for 3D Gaussians",
+          py::arg("means"),
+          py::arg("rotations"),
+          py::arg("scales"),
+          py::arg("rotnorm"),
+          py::arg("tol"),
+          py::arg("level"));
+    m.def("compute_gs_aabb_func", &compute_gs_aabb_wrapper, "Compute AABB for 3D Gaussians",
+          py::arg("means"),
+          py::arg("scales"),
+          py::arg("covis"),
+          py::arg("isos"),
+          py::arg("iso"),
+          py::arg("tol"),
+          py::arg("level"));
+    m.def("compute_gs_aabb_w_covi_func", &compute_gs_aabb_w_covi_wrapper, "Compute AABB for 3D Gaussians",
           py::arg("means"),
           py::arg("rotations"),
           py::arg("scales"),
@@ -385,7 +461,7 @@ void bind_primitive_gs(py::module_ &m)
           py::arg("edge_ends"),
           py::arg("means"),
           py::arg("opacities"),
-          py::arg("isos"),
           py::arg("covis"),
+          py::arg("isos"),
           py::arg("iso"));
 }

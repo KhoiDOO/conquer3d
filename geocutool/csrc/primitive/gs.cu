@@ -8,9 +8,224 @@
 #include <cstdio>
 #include <cfloat>
 
+namespace gs
+{
+    __global__ void compute_gs_covi_kernel(
+        const uint32_t num_gaussians,
+        const float4 *__restrict__ rotations,
+        const float3 *__restrict__ scales,
+        const bool rotnorm,
+        const float tol,
+        const uint32_t level,
+        float *__restrict__ covis)
+    {
+        uint32_t g_idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (g_idx >= num_gaussians)
+            return;
+        
+        float two_level = (float)(1U << level);
+        float voxelSize = 2.0f / two_level;
+        float min_scale = tol * voxelSize;
+        float3 modified_scale = scales[g_idx];
+
+        modified_scale.x = fmaxf(modified_scale.x, min_scale);
+        modified_scale.y = fmaxf(modified_scale.y, min_scale);
+        modified_scale.z = fmaxf(modified_scale.z, min_scale);
+
+        float3x3 S_inv; // $S^{-1}$
+        gs::compute_inverse_scale(modified_scale, S_inv);
+
+        float3x3 R_T; // $R^T$
+        gs::compute_rotation(rotations[g_idx], R_T, rotnorm, true);
+
+        gs::compute_cov_inverse(S_inv, R_T, covis + (g_idx * 6)); // $(S^{-1} R^T)^T (S^{-1} R^T)$
+    }
+
+    void compute_gs_covi(
+        const uint32_t num_gaussians,
+        const float4 *__restrict__ rotations,
+        const float3 *__restrict__ scales,
+        const bool rotnorm,
+        const float tol,
+        const uint32_t level,
+        float *__restrict__ covis)
+    {
+        uint32_t threads = 256;
+        uint32_t blocks = (num_gaussians + threads - 1) / threads;
+
+        compute_gs_covi_kernel<<<blocks, threads>>>(
+            num_gaussians,
+            rotations,
+            scales,
+            rotnorm,
+            tol,
+            level,
+            covis);
+    }
+}
+
 namespace gs_aabb
 {
-    __device__ __forceinline__ void compute_single_aabb(
+    __device__ __forceinline__ void compute_gs_single_aabb(
+        const float3 &mean,
+        const float3 &scale,
+        const float *__restrict__ covi,
+        const float &iso,
+        const float &tol,
+        const uint32_t level,
+        float3 &out_min,
+        float3 &out_max,
+        float3 *contact_points)
+    {
+        float two_level = (float)(1U << level);
+        float voxelSize = 2.0f / two_level;
+        float min_scale = tol * voxelSize;
+        float3 modified_scale = scale;
+
+        modified_scale.x = fmaxf(scale.x, min_scale);
+        modified_scale.y = fmaxf(scale.y, min_scale);
+        modified_scale.z = fmaxf(scale.z, min_scale);
+
+        double detS = ((double)modified_scale.x) * ((double)modified_scale.y) * ((double)modified_scale.z);
+
+        double c0 = covi[0];
+        double c1 = covi[1];
+        double c2 = covi[2];
+        double c3 = covi[3];
+        double c4 = covi[4];
+        double c5 = covi[5];
+
+        double h0 = c3 * c5 - c4 * c4;
+        double h1 = c2 * c4 - c1 * c5;
+        double h2 = c1 * c4 - c2 * c3;
+        double h3 = c0 * c5 - c2 * c2;
+        double h4 = c1 * c2 - c0 * c4;
+        double h5 = c0 * c3 - c1 * c1;
+
+        double w[3];
+        w[0] = detS * sqrt(iso / h0);
+        w[1] = detS * sqrt(iso / h3);
+        w[2] = detS * sqrt(iso / h5);
+
+        double3 Q[3];
+        Q[0] = make_double3(h0, h1, h2);
+        Q[1] = make_double3(h1, h3, h4);
+        Q[2] = make_double3(h2, h4, h5);
+
+        float3 P[6];
+        #pragma unroll
+        for (int i = 0; i < 3; i++)
+        {
+            P[2 * i] = make_float3((float)(w[i] * Q[i].x), (float)(w[i] * Q[i].y), (float)(w[i] * Q[i].z));
+            P[2 * i + 1] = -1.0f * P[2 * i];
+        }
+
+        contact_points[0] = P[0];
+        contact_points[1] = P[2];
+        contact_points[2] = P[4];
+
+        float3 Pmin = make_float3(FLT_MAX, FLT_MAX, FLT_MAX);
+        float3 Pmax = make_float3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
+        #pragma unroll
+        for (int i = 0; i < 6; i++)
+        {
+            Pmin.x = fminf(Pmin.x, P[i].x);
+            Pmin.y = fminf(Pmin.y, P[i].y);
+            Pmin.z = fminf(Pmin.z, P[i].z);
+            Pmax.x = fmaxf(Pmax.x, P[i].x);
+            Pmax.y = fmaxf(Pmax.y, P[i].y);
+            Pmax.z = fmaxf(Pmax.z, P[i].z);
+        }
+
+        out_min = mean + Pmin;
+        out_max = mean + Pmax;
+    }
+
+    template <bool multiple_isos>
+    __global__ void compute_gs_aabb_kernel(
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ scales,
+        const float *__restrict__ covis,
+        const float *__restrict__ isos,
+        const float iso,
+        const float tol,
+        const uint32_t level,
+        float3 *__restrict__ aabb_min,
+        float3 *__restrict__ aabb_max,
+        float3 *__restrict__ contact_points)
+    {
+        uint32_t g_idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (g_idx >= num_gaussians)
+            return;
+
+        float __iso = multiple_isos ? isos[g_idx] : iso;
+
+        compute_gs_single_aabb(
+            means[g_idx],
+            scales[g_idx],
+            covis + (g_idx * 6),
+            __iso,
+            tol,
+            level,
+            aabb_min[g_idx],
+            aabb_max[g_idx],
+            contact_points + (g_idx * 3));
+    }
+
+    void compute_gs_aabb(
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ scales,
+        const float *__restrict__ covis,
+        const float *__restrict__ isos,
+        const float iso,
+        const float tol,
+        const uint32_t level,
+        float3 *__restrict__ aabb_min,
+        float3 *__restrict__ aabb_max,
+        float3 *__restrict__ contact_points
+    ) {
+
+        uint32_t threads = 256;
+        uint32_t blocks = (num_gaussians + threads - 1) / threads;
+
+        if (isos != nullptr)
+        {
+            compute_gs_aabb_kernel<true><<<blocks, threads>>>(
+                num_gaussians,
+                means,
+                scales,
+                covis,
+                isos,
+                iso,
+                tol,
+                level,
+                aabb_min,
+                aabb_max,
+                contact_points);
+        }
+        else
+        {
+            compute_gs_aabb_kernel<false><<<blocks, threads>>>(
+                num_gaussians,
+                means,
+                scales,
+                covis,
+                isos,
+                iso,
+                tol,
+                level,
+                aabb_min,
+                aabb_max,
+                contact_points);
+        }
+    }
+    
+    __device__ __forceinline__ void compute_gs_single_aabb_w_covi(
         const float3 &mean,
         const float4 &rot,
         const float3 &scale,
@@ -94,7 +309,7 @@ namespace gs_aabb
     }
 
     template <bool multiple_isos>
-    __global__ void compute_aabb_kernel(
+    __global__ void compute_gs_aabb_w_covi_kernel(
         const uint32_t num_gaussians,
         const float3 *__restrict__ means,
         const float4 *__restrict__ rotations,
@@ -107,7 +322,7 @@ namespace gs_aabb
         float3 *__restrict__ aabb_min,
         float3 *__restrict__ aabb_max,
         float3 *__restrict__ contact_points,
-        float *__restrict__ covi)
+        float *__restrict__ covis)
     {
         uint32_t g_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -116,7 +331,7 @@ namespace gs_aabb
 
         float __iso = multiple_isos ? isos[g_idx] : iso;
 
-        compute_single_aabb(
+        compute_gs_single_aabb_w_covi(
             means[g_idx],
             rotations[g_idx],
             scales[g_idx],
@@ -127,10 +342,10 @@ namespace gs_aabb
             aabb_min[g_idx],
             aabb_max[g_idx],
             contact_points + (g_idx * 3),
-            covi + (g_idx * 6));
+            covis + (g_idx * 6));
     }
 
-    void compute_aabb(
+    void compute_gs_aabb_w_covi(
         const uint32_t num_gaussians,
         const float3 *__restrict__ means,
         const float4 *__restrict__ rotations,
@@ -143,14 +358,14 @@ namespace gs_aabb
         float3 *__restrict__ aabb_min,
         float3 *__restrict__ aabb_max,
         float3 *__restrict__ contact_points,
-        float *__restrict__ covi)
+        float *__restrict__ covis)
     {
         uint32_t threads = 256;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
         if (isos != nullptr)
         {
-            compute_aabb_kernel<true><<<blocks, threads>>>(
+            compute_gs_aabb_w_covi_kernel<true><<<blocks, threads>>>(
                 num_gaussians,
                 means,
                 rotations,
@@ -163,11 +378,11 @@ namespace gs_aabb
                 aabb_min,
                 aabb_max,
                 contact_points,
-                covi);
+                covis);
         }
         else
         {
-            compute_aabb_kernel<false><<<blocks, threads>>>(
+            compute_gs_aabb_w_covi_kernel<false><<<blocks, threads>>>(
                 num_gaussians,
                 means,
                 rotations,
@@ -180,7 +395,7 @@ namespace gs_aabb
                 aabb_min,
                 aabb_max,
                 contact_points,
-                covi);
+                covis);
         }
     }
 
