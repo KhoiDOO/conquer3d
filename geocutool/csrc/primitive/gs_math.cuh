@@ -12,7 +12,7 @@ namespace gs
         const float *covi,
         float &out_distance)
     {
-        float3 d = make_float3(point.x - mean.x, point.y - mean.y, point.z - mean.z);
+        float3 d = point - mean;
 
         out_distance = 
             d.x * (d.x * covi[0] + d.y * covi[1] + d.z * covi[2]) + 
@@ -141,10 +141,7 @@ namespace gs
     )
     {
         // d = P1 - P0
-        float3 d = make_float3(
-            segment_end.x - segment_start.x,
-            segment_end.y - segment_start.y,
-            segment_end.z - segment_start.z);
+        float3 d = segment_end - segment_start;
 
         // Sigma^-1 * d
         float3 v_d = make_float3(
@@ -159,13 +156,13 @@ namespace gs
             c2 * segment_start.x + c4 * segment_start.y + c5 * segment_start.z);
 
         // A = d^T * (Sigma^-1 * d)
-        float a = d.x * v_d.x + d.y * v_d.y + d.z * v_d.z;
+        float a = maths::dot(d, v_d);
 
         // B = 2 * P0^T * (Sigma^-1 * d)
-        float b = 2.0f * (segment_start.x * v_d.x + segment_start.y * v_d.y + segment_start.z * v_d.z);
+        float b = 2.0f * maths::dot(segment_start, v_d);
 
         // C = P0^T * (Sigma^-1 * P0) - iso
-        float c = (segment_start.x * v_p0.x + segment_start.y * v_p0.y + segment_start.z * v_p0.z) - iso;
+        float c = maths::dot(segment_start, v_p0) - iso;
 
         // B^2 - 4AC
         float dcrm = fmaxf(b * b - 4.0f * a * c, 0.0f);
