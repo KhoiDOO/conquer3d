@@ -9,8 +9,6 @@
 
 #include <cfloat>
 
-#define MAX_K 32
-
 namespace kdtree 
 {
     __device__ inline int get_left_balanced_offset(int N) {
@@ -27,7 +25,7 @@ namespace kdtree
 
     __device__ inline void get_chunk_bounds(int tag, int N, int L, int& out_start, int& out_size) {
         int path = tag + 1;
-        int unsettled_start = (1ULL << L) - 1;
+        int unsettled_start = (1U << L) - 1;
         int current_size = N;
         
         for (int d = 0; d < L; d++) {
@@ -37,7 +35,7 @@ namespace kdtree
             if (bit == 0) {
                 current_size = left_offset;
             } else {
-                int settled_in_left = (1ULL << (L - 1 - d)) - 1;
+                int settled_in_left = (1U << (L - 1 - d)) - 1;
                 int unsettled_in_left = left_offset - settled_in_left;
                 unsettled_start += unsettled_in_left;
                 current_size = current_size - 1 - left_offset;
@@ -128,24 +126,6 @@ namespace kdtree
         thrust::sort(thrust::device, zip_begin, zip_end, ZipCompare(deepestLevel % 3));
     }
 
-    __device__ __forceinline__ void push_pq(
-        float dist, 
-        int64_t id, 
-        float* best_dists, 
-        int64_t* best_inds, 
-        const int k)
-    {
-        if (dist >= best_dists[k - 1]) return;
-        int i = k - 2;
-        while (i >= 0 && best_dists[i] > dist) {
-            best_dists[i + 1] = best_dists[i];
-            best_inds[i + 1]  = best_inds[i];
-            i--;
-        }
-        best_dists[i + 1] = dist;
-        best_inds[i + 1]  = id;
-    }
-
     __global__ void query_kdtree_kernel(
         const uint32_t num_queries,
         const uint32_t num_points,
@@ -170,41 +150,15 @@ namespace kdtree
             best_inds[i] = -1;
         }
 
-        int stack[64];
-        int stack_ptr = 0;
-
-        stack[stack_ptr++] = 0;
-
-        while (stack_ptr > 0) {
-            int curr = stack[--stack_ptr];
-            if (curr >= num_points) continue;
-            
-            float3 p = tree_points[curr];
-            
-            int axis = (31 - __clz(curr + 1)) % 3;
-            
-            float dx = qp.x - p.x;
-            float dy = qp.y - p.y;
-            float dz = qp.z - p.z;
-            float dist_sq = dx*dx + dy*dy + dz*dz;
-
-            push_pq(dist_sq, tree_inds[curr], best_dists, best_inds, k);
-
-            float axis_dist = (axis == 0) ? dx : ((axis == 1) ? dy : dz);
-
-            int left_child = 2 * curr + 1;
-            int right_child = 2 * curr + 2;
-
-            int near_child = (axis_dist <= 0) ? left_child : right_child;
-            int far_child  = (axis_dist <= 0) ? right_child : left_child;
-
-            if (far_child < num_points && (axis_dist * axis_dist <= best_dists[k - 1])) {
-                stack[stack_ptr++] = far_child;
-            }
-            if (near_child < num_points) {
-                stack[stack_ptr++] = near_child;
-            }
-        }
+        query_kdtree_loop(
+            qp,
+            num_points,
+            tree_points,
+            tree_inds,
+            k,
+            best_dists,
+            best_inds
+        );
 
         for (int i = 0; i < k; i++) {
             out_dists[q_idx * k + i] = best_dists[i];
