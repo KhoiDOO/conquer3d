@@ -25,7 +25,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     const bool return_centroid_densities,
     const int64_t max_capacity)
 {
-    // 1. Enforce memory contiguity and CUDA residency
     CHECK_INPUT(vx_aabb_mins);
     CHECK_INPUT(vx_aabb_maxs);
     CHECK_INPUT(means);
@@ -34,7 +33,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     CHECK_INPUT(gs_aabb_mins);
     CHECK_INPUT(gs_aabb_maxs);
 
-    // 2. Enforce Data Types (float3 maps to 3x float32)
     TORCH_CHECK(vx_aabb_mins.scalar_type() == torch::kFloat32, "vx_aabb_mins must be float32");
     TORCH_CHECK(vx_aabb_maxs.scalar_type() == torch::kFloat32, "vx_aabb_maxs must be float32");
     TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
@@ -43,7 +41,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     TORCH_CHECK(gs_aabb_mins.scalar_type() == torch::kFloat32, "gs_aabb_mins must be float32");
     TORCH_CHECK(gs_aabb_maxs.scalar_type() == torch::kFloat32, "gs_aabb_maxs must be float32");
 
-    // 3. Extract dimensions and validate shapes
     const uint32_t num_gaussians = means.size(0);
     const uint32_t num_voxels = vx_aabb_mins.size(0);
 
@@ -64,7 +61,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
         isos_ptr = isos.value().data_ptr<float>();
     }
 
-    // 4. Allocate Output Tensors directly on the same GPU as the inputs
     auto options = means.options();
     torch::Tensor hit_mask = torch::zeros({num_voxels}, options.dtype(torch::kBool));
     torch::Tensor out_voxel_ids = torch::empty({max_capacity}, options.dtype(torch::kInt64));
@@ -78,7 +74,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
 
     if (return_centroids)
     {
-        // Only allocate the [max_capacity, 3] float tensor if requested
         centroids = torch::empty({max_capacity, 3}, options.dtype(torch::kFloat32));
         centroids_ptr = reinterpret_cast<float3 *>(centroids.data_ptr<float>());
         if (return_centroid_densities)
@@ -88,7 +83,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
         }
     }
 
-    // 5. Launch the CUDA Kernel
     pgs_aabb::query_pgs_voxel_pair_intersection_brute_force(
         num_voxels,
         num_gaussians,
@@ -111,7 +105,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
         reinterpret_cast<int64_t *>(global_counter.data_ptr<int64_t>()),
         max_capacity);
 
-    // 6. Return as a Python Tuple (also return the count of valid intersections)
     int64_t num_intersections = global_counter.item<int64_t>();
     if (num_intersections > max_capacity)
     {
@@ -138,7 +131,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     }
     else
     {
-        // Return std::nullopt for the optional tensor
         return std::make_tuple(
             hit_mask,
             out_voxel_ids.slice(0, 0, valid_hits),
@@ -158,7 +150,6 @@ std::tuple<torch::Tensor, torch::Tensor> query_pgs_edge_intersection_brute_force
     const std::optional<torch::Tensor> &isos,
     const float iso)
 {
-    // 1. Enforce memory contiguity and CUDA residency
     CHECK_INPUT(edge_starts);
     CHECK_INPUT(edge_ends);
     CHECK_INPUT(means);
@@ -166,7 +157,6 @@ std::tuple<torch::Tensor, torch::Tensor> query_pgs_edge_intersection_brute_force
     CHECK_INPUT(opacities);
     CHECK_INPUT(covis);
 
-    // 2. Enforce Data Types
     TORCH_CHECK(edge_starts.scalar_type() == torch::kFloat32, "edge_starts must be float32");
     TORCH_CHECK(edge_ends.scalar_type() == torch::kFloat32, "edge_ends must be float32");
     TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
@@ -174,7 +164,6 @@ std::tuple<torch::Tensor, torch::Tensor> query_pgs_edge_intersection_brute_force
     TORCH_CHECK(opacities.scalar_type() == torch::kFloat32, "opacities must be float32");
     TORCH_CHECK(covis.scalar_type() == torch::kFloat32, "covis must be float32");
 
-    // 3. Extract dimensions and validate shapes
     const uint32_t num_edges = edge_starts.size(0);
     const uint32_t num_gaussians = means.size(0);
 
@@ -194,12 +183,10 @@ std::tuple<torch::Tensor, torch::Tensor> query_pgs_edge_intersection_brute_force
         isos_ptr = isos.value().data_ptr<float>();
     }
 
-    // Allocate Output Tensors (Exact 1-to-1 mapping with edges)
     auto options = means.options();
     torch::Tensor hit_mask = torch::zeros({num_edges}, options.dtype(torch::kBool));
     torch::Tensor out_gaus_ids = torch::full({num_edges}, -1, options.dtype(torch::kInt64)); // Initialize with -1
 
-    // Launch the CUDA Kernel
     pgs_aabb::query_pgs_edge_intersection_brute_force(
         num_edges,
         num_gaussians,
@@ -215,6 +202,42 @@ std::tuple<torch::Tensor, torch::Tensor> query_pgs_edge_intersection_brute_force
         reinterpret_cast<int64_t *>(out_gaus_ids.data_ptr<int64_t>()));
 
     return std::make_tuple(hit_mask, out_gaus_ids);
+}
+
+std::tuple<torch::Tensor, torch::Tensor> solve_pgs_cluster_tangency_radius_wrapper(
+    const torch::Tensor &means,
+    const torch::Tensor &normals,
+    const torch::Tensor &covis,
+    const uint32_t k
+)
+{
+    CHECK_INPUT(means);
+    CHECK_INPUT(normals);
+    CHECK_INPUT(covis);
+
+    TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
+    TORCH_CHECK(normals.scalar_type() == torch::kFloat32, "normals must be float32");
+    TORCH_CHECK(covis.scalar_type() == torch::kFloat32, "covis must be float32");
+
+    const uint32_t num_gaussians = means.size(0);
+    TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
+    TORCH_CHECK(normals.size(0) == num_gaussians && normals.size(1) == 3, "normals must have shape (N, 3)");
+    TORCH_CHECK(covis.size(0) == num_gaussians && covis.size(1) == 6, "covis must have shape (N, 6)");
+
+    auto options = means.options();
+    torch::Tensor isos = torch::empty({num_gaussians}, options.dtype(torch::kFloat32));
+    torch::Tensor invalid_mask = torch::empty({num_gaussians}, options.dtype(torch::kBool));
+
+    pgs::solve_pgs_cluster_tangency_radius(
+        num_gaussians,
+        reinterpret_cast<const float3 *>(means.data_ptr<float>()),
+        reinterpret_cast<const float3 *>(normals.data_ptr<float>()),
+        reinterpret_cast<const float *>(covis.data_ptr<float>()),
+        k,
+        reinterpret_cast<float *>(isos.data_ptr<float>()),
+        reinterpret_cast<bool *>(invalid_mask.data_ptr<bool>()));
+
+    return std::make_tuple(isos, invalid_mask);
 }
 
 void bind_primitive_pgs(py::module_ &m)
@@ -242,4 +265,10 @@ void bind_primitive_pgs(py::module_ &m)
           py::arg("covis"),
           py::arg("isos"),
           py::arg("iso"));
+
+    m.def("solve_pgs_cluster_tangency_radius_func", &solve_pgs_cluster_tangency_radius_wrapper,
+          py::arg("means"),
+          py::arg("normals"),
+          py::arg("covis"),
+          py::arg("k") = 16);
 }

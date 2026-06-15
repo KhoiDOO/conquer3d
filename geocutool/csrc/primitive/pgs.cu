@@ -1,6 +1,8 @@
-#include "gs_math.cuh"
-#include "aabb.h"
+#include "pgs.h"
 
+#include <thrust/device_vector.h>
+#include <thrust/copy.h>
+#include <thrust/sequence.h>
 #include <math_constants.h>
 #include <device_launch_parameters.h>
 #include <cuda_runtime.h>
@@ -51,6 +53,149 @@ namespace pgs
         }
 
         return false;
+    }
+
+    __device__ __forceinline__ bool solve_pgs_pair_tangency_radius(
+        const float3 &mean,
+        const float3 &normal,
+        const float *covi,
+        const float3 &neighbor_mean,
+        const float3 &neighbor_normal,
+        float &out_iso
+    )
+    {
+        float3 n_i = maths::normalize(normal);
+        float3 n_j = maths::normalize(neighbor_normal);
+
+        float3 d = maths::cross(n_i, n_j);
+
+        float d_norm = maths::norm(d);
+
+        if (d_norm < 1e-6f) return false;
+
+        float3x3 m = make_float3x3(
+            n_i.x, n_i.y, n_i.z,
+            n_j.x, n_j.y, n_j.z,
+            d.x, d.y, d.z);
+
+        float n_mu_i = maths::dot(n_i, mean);
+        float n_mu_j = maths::dot(n_j, neighbor_mean);
+
+        float3x3 m_inv;
+        bool invertible = maths::invert(m, m_inv);
+
+        if (!invertible) return false;
+        float3 p = m_inv * make_float3(n_mu_i, n_mu_j, 0.0f);
+
+        float3 q = p - mean;
+
+        float a = q.x * (covi[0] * q.x + covi[1] * q.y + covi[2] * q.z) +
+        q.y * (covi[1] * q.x + covi[3] * q.y + covi[4] * q.z) +
+        q.z * (covi[2] * q.x + covi[4] * q.y + covi[5] * q.z);
+        
+        float b = d.x * (covi[0] * q.x + covi[1] * q.y + covi[2] * q.z) +
+        d.y * (covi[1] * q.x + covi[3] * q.y + covi[4] * q.z) +
+        d.z * (covi[2] * q.x + covi[4] * q.y + covi[5] * q.z);
+
+        float b2 = b * b;
+
+        float c = d.x * (covi[0] * d.x + covi[1] * d.y + covi[2] * d.z) +
+        d.y * (covi[1] * d.x + covi[3] * d.y + covi[4] * d.z) +
+        d.z * (covi[2] * d.x + covi[4] * d.y + covi[5] * d.z);
+        
+        float iso_sq = fmaxf(a - b2 / c, 0.0f);
+        out_iso = iso_sq;
+
+        return true;
+    }
+
+    __global__ void solve_pgs_cluster_tangency_radius_kernel(
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ normals,
+        const float *__restrict__ covis,
+        const float3 *__restrict__ tree_points,
+        const int64_t *__restrict__ tree_inds,
+        const int k,
+        float *__restrict__ isos,
+        bool *__restrict__ invalid_mask)
+    {
+        uint32_t g_idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (g_idx >= num_gaussians) return;
+
+        float3 mean = means[g_idx];
+        float3 normal = normals[g_idx];
+        const float *covi = covis + (g_idx * 6);
+
+        float best_dists[MAX_K];
+        int64_t best_inds[MAX_K];
+
+        #pragma unroll
+        for (int i = 0; i < MAX_K; i++) {
+            best_dists[i] = FLT_MAX;
+            best_inds[i] = -1;
+        }
+
+        kdtree::query_kdtree_loop(mean, num_gaussians, tree_points, tree_inds, k, best_dists, best_inds);
+
+        float min_iso = FLT_MAX;
+        bool any_success = false;
+
+        for (int i = 0; i < k; i++) {
+            int64_t neighbor_idx = best_inds[i];
+
+            if (neighbor_idx == -1) continue;
+
+            if (neighbor_idx == g_idx) continue;
+
+            float3 neighbor_mean = means[neighbor_idx];
+            float3 neighbor_normal = normals[neighbor_idx];
+
+            float iso;
+            bool success = solve_pgs_pair_tangency_radius(mean, normal, covi, neighbor_mean, neighbor_normal, iso);
+            if (success) {
+                min_iso = fminf(min_iso, iso);
+                any_success = true;
+            }
+        }
+
+        isos[g_idx] = min_iso;
+        invalid_mask[g_idx] = !any_success;
+    }
+
+    void solve_pgs_cluster_tangency_radius(
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ normals,
+        const float *__restrict__ covis,
+        const int k,
+        float *__restrict__ isos,
+        bool *__restrict__ invalid_mask
+    )
+    {
+        thrust::device_vector<float3> cloned_means(means, means + num_gaussians);
+        thrust::device_vector<int64_t> oinds(num_gaussians);
+        thrust::sequence(oinds.begin(), oinds.end());
+
+        kdtree::build(
+            num_gaussians,
+            thrust::raw_pointer_cast(cloned_means.data()),
+            thrust::raw_pointer_cast(oinds.data())
+        );
+
+        uint32_t threads = 256;
+        uint32_t blocks = (num_gaussians + threads - 1) / threads;
+
+        solve_pgs_cluster_tangency_radius_kernel<<<blocks, threads>>>(
+            num_gaussians,
+            means,
+            normals,
+            covis,
+            thrust::raw_pointer_cast(cloned_means.data()),
+            thrust::raw_pointer_cast(oinds.data()),
+            k,
+            isos,
+            invalid_mask);
     }
 }
 
