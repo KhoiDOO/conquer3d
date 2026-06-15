@@ -407,6 +407,40 @@ std::tuple<torch::Tensor, torch::Tensor> query_gs_edge_intersection_brute_force_
     return std::make_tuple(hit_mask, out_gaus_ids);
 }
 
+torch::Tensor solve_gs_neighbor_mahalanobis_radius_wrapper(
+    const torch::Tensor &means,
+    const torch::Tensor &covis,
+    const int k)
+{
+    CHECK_INPUT(means);
+    CHECK_INPUT(covis);
+
+    TORCH_CHECK(means.scalar_type() == torch::kFloat32, "means must be float32");
+    TORCH_CHECK(covis.scalar_type() == torch::kFloat32, "covis must be float32");
+
+    const uint32_t num_gaussians = means.size(0);
+    TORCH_CHECK(means.size(1) == 3, "means must have shape (N, 3)");
+    TORCH_CHECK(covis.size(0) == num_gaussians && covis.size(1) == 6, "covis must have shape (N, 6)");
+
+    uint32_t search_k = k + 1;
+
+    TORCH_CHECK(search_k > 1, "k must be greater than 0");
+    TORCH_CHECK(search_k <= 32, "Requested k exceeds the hardware register limit (MAX_K = 32).");
+    TORCH_CHECK(search_k <= num_gaussians, "Requested k is larger than the number of points in the tree.");
+
+    auto options = means.options();
+    torch::Tensor isos = torch::empty({num_gaussians}, options.dtype(torch::kFloat32));
+
+    gs::solve_gs_neighbor_mahalanobis_radius(
+        num_gaussians,
+        reinterpret_cast<const float3 *>(means.data_ptr<float>()),
+        reinterpret_cast<const float *>(covis.data_ptr<float>()),
+        search_k,
+        reinterpret_cast<float *>(isos.data_ptr<float>()));
+
+    return isos;
+}
+
 void bind_primitive_gs(py::module_ &m)
 {
     m.def("compute_gs_covi_func", &compute_gs_covi_wrapper, "Compute covariance matrices for 3D Gaussians",
@@ -416,6 +450,10 @@ void bind_primitive_gs(py::module_ &m)
           py::arg("rotnorm"),
           py::arg("tol"),
           py::arg("level"));
+    m.def("solve_gs_neighbor_mahalanobis_radius_func", &solve_gs_neighbor_mahalanobis_radius_wrapper, "Solve Gaussian Neighbor Mahalanobis Radius",
+          py::arg("means"),
+          py::arg("covis"),
+          py::arg("k"));
     m.def("compute_gs_aabb_func", &compute_gs_aabb_wrapper, "Compute AABB for 3D Gaussians",
           py::arg("means"),
           py::arg("scales"),
