@@ -20,27 +20,17 @@ namespace pgs
         const float3 &segment_end,
         float &t_hit)
     {
-        float3 dir = make_float3(
-            segment_end.x - segment_start.x,
-            segment_end.y - segment_start.y,
-            segment_end.z - segment_start.z);
+        float3 dir = segment_end - segment_start;
 
-        float denom = dir.x * normal.x + dir.y * normal.y + dir.z * normal.z;
-
+        float denom = maths::dot(dir, normal);
         if (fabsf(denom) < 1e-6f) return false; 
 
-        float num = (mean.x - segment_start.x) * normal.x +
-                    (mean.y - segment_start.y) * normal.y +
-                    (mean.z - segment_start.z) * normal.z;
-
+        float num = maths::dot(mean - segment_start, normal);
         float t = num / denom;
 
         if (t >= 0.0f && t <= 1.0f) 
         {
-            float3 p_hit = make_float3(
-                segment_start.x + t * dir.x,
-                segment_start.y + t * dir.y,
-                segment_start.z + t * dir.z);
+            float3 p_hit = segment_start + t * dir;
 
             float dist_sq;
             gs::compute_mahalanobis_distance(p_hit, mean, covi, dist_sq);
@@ -211,7 +201,7 @@ namespace pgs_aabb
         const float3 &vx_ab_max)
     {
         // 1. Standard AABB Overlap Check
-        if (!gs_aabb::test_gs_aabb_overlap_voxel(gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max))
+        if (!aabb::test_aabb_overlap(gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max))
             return false;
 
         bool has_pos = false;
@@ -226,9 +216,7 @@ namespace pgs_aabb
                 (i & 4) ? vx_ab_max.z : vx_ab_min.z
             );
             
-            float dist = (corner.x - mean.x) * normal.x + 
-                         (corner.y - mean.y) * normal.y + 
-                         (corner.z - mean.z) * normal.z;
+            float dist = maths::dot(corner - mean, normal);
 
             if (dist > 0.0f) has_pos = true;
             if (dist <= 0.0f) has_neg = true; 
@@ -301,11 +289,7 @@ namespace pgs_aabb
         if (total_hits > 0) {
             // Average the accumulated surface points
             if (return_centroids) {
-                out_centroid = make_float3(
-                    sum_points.x / total_hits,
-                    sum_points.y / total_hits,
-                    sum_points.z / total_hits
-                );
+                out_centroid = sum_points * (1.0f / total_hits);
             }
             return true; 
         }
