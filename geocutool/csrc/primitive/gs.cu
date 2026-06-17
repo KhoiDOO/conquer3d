@@ -605,10 +605,10 @@ namespace gs_aabb
         const float iso)
     {
 
-        if (test_gs_aabb_inside_voxel(gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max))
+        if (aabb::test_aabb_inside(gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max))
             return true;
 
-        if (!test_gs_aabb_overlap_voxel(gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max))
+        if (!aabb::test_aabb_overlap(gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max))
             return false;
 
         if (test_gs_intersect_voxel_face(mean, cp0, cp1, cp2, vx_ab_min, vx_ab_max))
@@ -632,15 +632,9 @@ namespace gs_aabb
         float &out_penetration)
     {
         // 1. Calculate Overlap Box boundaries
-        float3 overlap_min = make_float3(
-            fmaxf(gs_ab_min.x, vx_ab_min.x),
-            fmaxf(gs_ab_min.y, vx_ab_min.y),
-            fmaxf(gs_ab_min.z, vx_ab_min.z));
-
-        float3 overlap_max = make_float3(
-            fminf(gs_ab_max.x, vx_ab_max.x),
-            fminf(gs_ab_max.y, vx_ab_max.y),
-            fminf(gs_ab_max.z, vx_ab_max.z));
+        float3 overlap_min;
+        float3 overlap_max;
+        aabb::compute_aabb_overlap(gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max, overlap_min, overlap_max);
 
         if (return_centroids)
         {
@@ -649,10 +643,8 @@ namespace gs_aabb
         }
 
         // 3. Get the physical dimensions of the overlap box
-        float3 dims = make_float3(
-            fmaxf(0.0f, overlap_max.x - overlap_min.x),
-            fmaxf(0.0f, overlap_max.y - overlap_min.y),
-            fmaxf(0.0f, overlap_max.z - overlap_min.z));
+        float3 dims;
+        aabb::compute_aabb_dim_size(overlap_min, overlap_max, dims);
 
         // 4. Find the smallest and largest dimensions
         float min_dim = fminf(dims.x, fminf(dims.y, dims.z));
@@ -881,15 +873,8 @@ namespace gs_aabb
             float3 mean = means[g_idx];
             const float *covi = covis + (g_idx * 6);
 
-            float3 local_start = make_float3(
-                edge_start.x - mean.x,
-                edge_start.y - mean.y,
-                edge_start.z - mean.z);
-
-            float3 local_end = make_float3(
-                edge_end.x - mean.x,
-                edge_end.y - mean.y,
-                edge_end.z - mean.z);
+            float3 local_start = edge_start - mean;
+            float3 local_end = edge_end - mean;
 
             float dummy_t_entry;
             float dummy_t_exit;
@@ -1005,15 +990,8 @@ namespace gs_aabb
             float3 mean = means[g_idx];
             const float *covi = covis + (g_idx * 6);
 
-            float3 local_start = make_float3(
-                edge_start.x - mean.x,
-                edge_start.y - mean.y,
-                edge_start.z - mean.z);
-
-            float3 local_end = make_float3(
-                edge_end.x - mean.x,
-                edge_end.y - mean.y,
-                edge_end.z - mean.z);
+            float3 local_start = edge_start - mean;
+            float3 local_end = edge_end - mean;
 
             float t_entry;
             float t_exit;
@@ -1033,10 +1011,7 @@ namespace gs_aabb
                 any_hit = true;
                 float t_mid = (fmaxf(t_entry, 0.0f) + fminf(t_exit, 1.0f)) * 0.5f;
 
-                float3 p_mid = make_float3(
-                    local_start.x + t_mid * (local_end.x - local_start.x),
-                    local_start.y + t_mid * (local_end.y - local_start.y),
-                    local_start.z + t_mid * (local_end.z - local_start.z));
+                float3 p_mid = local_start + t_mid * (local_end - local_start);
 
                 float density;
                 gs::compute_density_local(p_mid, covi, opacities[g_idx], density);
