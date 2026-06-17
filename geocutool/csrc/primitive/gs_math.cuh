@@ -197,29 +197,3 @@ namespace gs
         return false;
     }
 }
-
-namespace gs_aabb
-{
-    __device__ __forceinline__ bool test_gs_aabb_overlap_voxel(
-        const float3 &gs_ab_min,
-        const float3 &gs_ab_max,
-        const float3 &vx_ab_min,
-        const float3 &vx_ab_max)
-    {
-
-        if (gs_ab_max.x < vx_ab_min.x)
-            return false;
-        if (gs_ab_max.y < vx_ab_min.y)
-            return false;
-        if (gs_ab_max.z < vx_ab_min.z)
-            return false;
-        if (gs_ab_min.x > (vx_ab_max.x))
-            return false;
-        if (gs_ab_min.y > (vx_ab_max.y))
-            return false;
-        if (gs_ab_min.z > (vx_ab_max.z))
-            return false;
-
-        return true;
-    }
-}
