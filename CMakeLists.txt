@@ -26,17 +26,8 @@ include_directories(
     ${CUDA_TOOLKIT_ROOT_DIR}/include
 )
 
-add_library(primitive_gs SHARED geocutool/csrc/primitive/gs.cu)
-target_link_libraries(primitive_gs PRIVATE cudart)
+file(GLOB_RECURSE CUDA_SOURCES CONFIGURE_DEPENDS "geocutool/csrc/*.cu")
+file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS "geocutool/csrc/*.cpp")
 
-add_library(primitive_pgs SHARED geocutool/csrc/primitive/pgs.cu)
-target_link_libraries(primitive_pgs PRIVATE cudart)
-
-add_library(kdtree SHARED geocutool/csrc/data_structure/kdtree.cu)
-target_link_libraries(kdtree PRIVATE cudart)
-
-add_library(bvh SHARED geocutool/csrc/data_structure/bvh.cu)
-target_link_libraries(bvh PRIVATE cudart)
-
-add_library(gs_bvh SHARED geocutool/csrc/data_structure/gs_bvh.cu)
-target_link_libraries(gs_bvh PRIVATE cudart)
+add_library(geocutool_core SHARED ${CUDA_SOURCES} ${CPP_SOURCES})
+target_link_libraries(geocutool_core PRIVATE cudart)
