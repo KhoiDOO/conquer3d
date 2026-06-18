@@ -173,7 +173,7 @@ namespace pgs
             thrust::raw_pointer_cast(oinds.data())
         );
 
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
         solve_pgs_cluster_tangency_radius_kernel<<<blocks, threads>>>(
@@ -401,7 +401,7 @@ namespace pgs_aabb
         int64_t *__restrict__ global_counter,
         const int64_t max_capacity)
     {
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_voxels + threads - 1) / threads;
 
         if (isos != nullptr)
@@ -537,7 +537,7 @@ namespace pgs_aabb
         int64_t *__restrict__ out_gaus_ids
     )
     {
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_edges + threads - 1) / threads;
 
         if (isos != nullptr) {
