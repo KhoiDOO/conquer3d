@@ -22,3 +22,31 @@ pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https
 
 pip install plotly open3d jupyter trimesh
 ```
+
+# Reference
+
+## Research Paper
+```bibtex
+@inproceedings{2383795.2383801,
+author = {Karras, Tero},
+title = {Maximizing parallelism in the construction of BVHs, octrees, and k-d trees},
+year = {2012},
+isbn = {9783905674415},
+publisher = {Eurographics Association},
+address = {Goslar, DEU},
+booktitle = {Proceedings of the Fourth ACM SIGGRAPH / Eurographics Conference on High-Performance Graphics},
+pages = {33–37},
+numpages = {5},
+location = {Paris, France},
+series = {EGGH-HPG'12}
+}
+```
+
+## Blog Post
+- [Thinking Parallel, Part I: Collision Detection on the GPU](https://developer.nvidia.com/blog/thinking-parallel-part-i-collision-detection-gpu/)
+- [Thinking Parallel, Part II: Tree Traversal on the GPU](https://developer.nvidia.com/blog/thinking-parallel-part-ii-tree-traversal-gpu/)
+- [Thinking Parallel, Part III: Tree Construction on the GPU](https://developer.nvidia.com/blog/thinking-parallel-part-iii-tree-construction-gpu/)
+
+## Repository
+- [cuBQL](https://github.com/NVIDIA/cuBQL)
+- [cudaKDTree](https://github.com/ingowald/cudaKDTree)
