@@ -37,3 +37,6 @@ target_link_libraries(kdtree PRIVATE cudart)
 
 add_library(bvh SHARED geocutool/csrc/data_structure/bvh.cu)
 target_link_libraries(bvh PRIVATE cudart)
+
+add_library(gs_bvh SHARED geocutool/csrc/data_structure/gs_bvh.cu)
+target_link_libraries(gs_bvh PRIVATE cudart)
