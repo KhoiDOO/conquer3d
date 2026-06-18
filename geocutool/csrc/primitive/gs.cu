@@ -52,7 +52,7 @@ namespace gs
         const uint32_t level,
         float *__restrict__ covis)
     {
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
         compute_gs_covi_kernel<<<blocks, threads>>>(
@@ -133,7 +133,7 @@ namespace gs
             thrust::raw_pointer_cast(oinds.data())
         );
 
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
         solve_gs_neighbor_mahalanobis_radius_kernel<<<blocks, threads>>>(
@@ -272,7 +272,7 @@ namespace gs_aabb
         float3 *__restrict__ contact_points
     ) {
 
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
         if (isos != nullptr)
@@ -442,7 +442,7 @@ namespace gs_aabb
         float3 *__restrict__ contact_points,
         float *__restrict__ covis)
     {
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
         if (isos != nullptr)
@@ -786,7 +786,7 @@ namespace gs_aabb
         int64_t *__restrict__ global_counter,
         const int64_t max_capacity)
     {
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_voxels + threads - 1) / threads;
 
         if (isos != nullptr)
@@ -920,7 +920,7 @@ namespace gs_aabb
         int64_t *__restrict__ global_counter,
         const int64_t max_capacity)
     {
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_edges + threads - 1) / threads;
 
         if (isos != nullptr)
@@ -1041,7 +1041,7 @@ namespace gs_aabb
         bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_gaus_ids)
     {
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_edges + threads - 1) / threads;
 
         if (isos != nullptr)
