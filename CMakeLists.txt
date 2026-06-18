@@ -34,3 +34,6 @@ target_link_libraries(primitive_pgs PRIVATE cudart)
 
 add_library(kdtree SHARED geocutool/csrc/data_structure/kdtree.cu)
 target_link_libraries(kdtree PRIVATE cudart)
+
+add_library(bvh SHARED geocutool/csrc/data_structure/bvh.cu)
+target_link_libraries(bvh PRIVATE cudart)
