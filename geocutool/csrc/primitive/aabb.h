@@ -37,6 +37,36 @@ namespace aabb
             fminf(query_aabb_max.z, target_aabb_max.z));
     }
 
+    __device__ __forceinline__ void compute_aabb_union(
+        const float3 &query_aabb_min,
+        const float3 &query_aabb_max,
+        const float3 &target_aabb_min,
+        const float3 &target_aabb_max,
+        float3 &out_union_min,
+        float3 &out_union_max)
+    {
+        out_union_min = make_float3(
+            fminf(query_aabb_min.x, target_aabb_min.x),
+            fminf(query_aabb_min.y, target_aabb_min.y),
+            fminf(query_aabb_min.z, target_aabb_min.z));
+
+        out_union_max = make_float3(
+            fmaxf(query_aabb_max.x, target_aabb_max.x),
+            fmaxf(query_aabb_max.y, target_aabb_max.y),
+            fmaxf(query_aabb_max.z, target_aabb_max.z));
+    }
+
+    __device__ __forceinline__ void compute_aabb_extent(
+        const float3 &aabb_min,
+        const float3 &aabb_max,
+        float3 &out_extent)
+    {
+        out_extent = make_float3(
+            fmaxf(1e-6f, aabb_max.x - aabb_min.x),
+            fmaxf(1e-6f, aabb_max.y - aabb_min.y),
+            fmaxf(1e-6f, aabb_max.z - aabb_min.z));
+    }
+
     __device__ __forceinline__ void compute_aabb_dim_size(
         const float3 &aabb_min,
         const float3 &aabb_max,
