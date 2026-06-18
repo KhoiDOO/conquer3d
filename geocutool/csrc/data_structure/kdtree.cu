@@ -110,7 +110,7 @@ namespace kdtree
         auto zip_begin = thrust::make_zip_iterator(thrust::make_tuple(tags.begin(), d_points, d_oinds));
         auto zip_end = zip_begin + num_points;
 
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_points + threads - 1) / threads;
 
         for (int l = 0; l < deepestLevel; l++) {
@@ -177,7 +177,7 @@ namespace kdtree
         int64_t *__restrict__ out_inds)
     {
         if (k > MAX_K) return;
-        uint32_t threads = 256;
+        uint32_t threads = NTHREADS;
         uint32_t blocks = (num_queries + threads - 1) / threads;
 
         query_kdtree_kernel<<<blocks, threads>>>(
