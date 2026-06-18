@@ -50,3 +50,5 @@ series = {EGGH-HPG'12}
 ## Repository
 - [cuBQL](https://github.com/NVIDIA/cuBQL)
 - [cudaKDTree](https://github.com/ingowald/cudaKDTree)
+- [Kaolin] (https://github.com/NVIDIAGameWorks/kaolin)
+- [Pytorch3D] (https://github.com/facebookresearch/pytorch3d)
