@@ -1,6 +1,8 @@
-from .._C import KDTree
-from .._C import BVH
+from .._C import (
+    KDTree,
+    BVH,
+    GSBVH,
+    PGSBVH
+)
 
-from .._C import GSBVH
-
-__all__ = ['KDTree', 'BVH', 'GSBVH']
+__all__ = ['KDTree', 'BVH', 'GSBVH', 'PGSBVH']
