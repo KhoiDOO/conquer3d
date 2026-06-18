@@ -26,6 +26,26 @@ BVH::BVH(
         throw std::runtime_error("Cannot build BVH with 0 objects.");
     }
 
+    if (this->num_objects == 1)
+    {
+        this->num_nodes = 1;
+
+        auto options_int32 = in_aabb_mins.options().dtype(torch::kInt32);
+
+        // The Root is the only Leaf.
+        this->aabb_mins = in_aabb_mins.clone();
+        this->aabb_maxs = in_aabb_maxs.clone();
+        
+        // No children (-1 means null pointer)
+        this->bvh_children = torch::full({1, 2}, -1, options_int32);
+        
+        // The object ID is just index 0
+        this->object_ids = torch::zeros({1}, options_int32);
+        
+        // Bypass the entire Karras CUDA build!
+        return; 
+    }
+
     // A Binary Tree with N leaves always has 2N - 1 total nodes!
     this->num_nodes = 2 * this->num_objects - 1;
     auto options = in_aabb_mins.options();
