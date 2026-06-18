@@ -335,7 +335,6 @@ namespace pgs_aabb
             float3 gs_ab_min = gs_aabb_mins[g_idx];
             float3 gs_ab_max = gs_aabb_maxs[g_idx];
 
-            // 1. BROAD PHASE (8-Corner + AABB Check)
             bool broad_hit = test_pgs_intersect_voxel(
                 mean, normal, gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max);
 
@@ -346,7 +345,6 @@ namespace pgs_aabb
 
                 float3 centroid;
                 
-                // 2. NARROW PHASE & CENTROID CALCULATION (12-Edge Check + Iso)
                 bool narrow_hit = compute_pgs_voxel_centroid(
                     mean, normal, covi, __iso, vx_ab_min, vx_ab_max, return_centroids, centroid);
 
@@ -447,6 +445,196 @@ namespace pgs_aabb
                 out_gaus_ids, 
                 centroids, 
                 densities,
+                global_counter, 
+                max_capacity);
+        }
+    }
+
+    template <bool multiple_isos>
+    __global__ void query_pgs_voxel_pair_intersection_bvh_kernel(
+        const uint32_t num_voxels,
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ vx_aabb_mins,
+        const float3 *__restrict__ vx_aabb_maxs,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ normals,
+        const float *__restrict__ covis,
+        const float3 *__restrict__ gs_aabb_mins,
+        const float3 *__restrict__ gs_aabb_maxs,
+        const float *__restrict__ isos,
+        const float iso,
+        const bool return_centroids,
+        const bool return_centroid_densities,
+        bool *__restrict__ hit_mask,
+        int64_t *__restrict__ out_voxel_ids,
+        int64_t *__restrict__ out_gaus_ids,
+        float3 *__restrict__ centroids,
+        float *__restrict__ densities,
+        int64_t *__restrict__ global_counter,
+        const int64_t max_capacity)
+    {
+        uint32_t v_idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (v_idx >= num_voxels) return;
+
+        float3 vx_ab_min = vx_aabb_mins[v_idx];
+        float3 vx_ab_max = vx_aabb_maxs[v_idx];
+        bool any_hit = false;
+
+        // --- BVH LOCAL STACK ---
+        int stack[BVH_STACK_SIZE];
+        int stack_ptr = 0;
+        stack[0] = 0; 
+
+        while (stack_ptr >= 0)
+        {
+            int node_idx = stack[stack_ptr--];
+
+            if (aabb::test_aabb_overlap(vx_ab_min, vx_ab_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]))
+            {
+                if (node_idx >= num_gaussians - 1)
+                {
+                    int leaf_idx = node_idx - (num_gaussians - 1);
+                    uint32_t g_idx = object_ids[leaf_idx];
+
+                    float3 mean = means[g_idx];
+                    float3 normal = normals[g_idx];
+                    const float *covi = covis + (g_idx * 6);
+                    float3 gs_ab_min = gs_aabb_mins[g_idx];
+                    float3 gs_ab_max = gs_aabb_maxs[g_idx];
+
+                    bool broad_hit = test_pgs_intersect_voxel(
+                        mean, normal, gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max);
+
+                    if (broad_hit)
+                    {
+                        float __iso = multiple_isos ? isos[g_idx] : iso;
+                        float3 centroid;
+                        
+                        bool narrow_hit = compute_pgs_voxel_centroid(
+                            mean, normal, covi, __iso, vx_ab_min, vx_ab_max, return_centroids, centroid);
+
+                        if (narrow_hit)
+                        {
+                            any_hit = true;
+                            uint64_t write_idx = (uint64_t)atomicAdd((unsigned long long int *)global_counter, 1ULL);
+
+                            if (write_idx < max_capacity)
+                            {
+                                out_voxel_ids[write_idx] = v_idx;
+                                out_gaus_ids[write_idx] = g_idx;
+
+                                if (return_centroids)
+                                {
+                                    centroids[write_idx] = centroid;
+
+                                    if (return_centroid_densities)
+                                    {
+                                        float density;
+                                        gs::compute_density(centroid, mean, covi, 1.0f, density);
+                                        densities[write_idx] = density;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    if (stack_ptr + 2 < BVH_STACK_SIZE)
+                    {
+                        int2 children = bvh_children[node_idx];
+                        stack[++stack_ptr] = children.x;
+                        stack[++stack_ptr] = children.y;
+                    }
+                }
+            }
+        }
+        hit_mask[v_idx] = any_hit;
+    }
+
+    void query_pgs_voxel_pair_intersection_bvh(
+        const uint32_t num_voxels,
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ vx_aabb_mins,
+        const float3 *__restrict__ vx_aabb_maxs,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ normals,
+        const float *__restrict__ covis,
+        const float3 *__restrict__ gs_aabb_mins,
+        const float3 *__restrict__ gs_aabb_maxs,
+        const float *__restrict__ isos,
+        const float iso,
+        const bool return_centroids,
+        const bool return_centroid_densities,
+        bool *__restrict__ hit_mask,
+        int64_t *__restrict__ out_voxel_ids,
+        int64_t *__restrict__ out_gaus_ids,
+        float3 *__restrict__ centroids,
+        float *__restrict__ densities,
+        int64_t *__restrict__ global_counter,
+        const int64_t max_capacity)
+    {
+        uint32_t threads = NTHREADS;
+        uint32_t blocks = (num_voxels + threads - 1) / threads;
+
+        if (isos != nullptr) {
+            query_pgs_voxel_pair_intersection_bvh_kernel<true><<<blocks, threads>>>(
+                num_voxels, 
+                num_gaussians, 
+                vx_aabb_mins, 
+                vx_aabb_maxs, 
+                bvh_aabb_mins, 
+                bvh_aabb_maxs, 
+                bvh_children, 
+                object_ids, 
+                means, 
+                normals, 
+                covis, 
+                gs_aabb_mins, 
+                gs_aabb_maxs, 
+                isos, 
+                iso, 
+                return_centroids, 
+                return_centroid_densities, 
+                hit_mask, 
+                out_voxel_ids, 
+                out_gaus_ids, 
+                centroids, 
+                densities, 
+                global_counter, 
+                max_capacity);
+        } else {
+            query_pgs_voxel_pair_intersection_bvh_kernel<false><<<blocks, threads>>>(
+                num_voxels, 
+                num_gaussians, 
+                vx_aabb_mins, 
+                vx_aabb_maxs, 
+                bvh_aabb_mins, 
+                bvh_aabb_maxs, 
+                bvh_children, 
+                object_ids, 
+                means, 
+                normals, 
+                covis, 
+                gs_aabb_mins, 
+                gs_aabb_maxs, 
+                isos, 
+                iso, 
+                return_centroids, 
+                return_centroid_densities, 
+                hit_mask, 
+                out_voxel_ids, 
+                out_gaus_ids, 
+                centroids, 
+                densities, 
                 global_counter, 
                 max_capacity);
         }
@@ -568,6 +756,160 @@ namespace pgs_aabb
             iso,
             hit_mask,
             out_gaus_ids);
+        }
+    }
+
+    template <bool multiple_isos>
+    __global__ void query_pgs_edge_intersection_bvh_kernel(
+        const uint32_t num_edges,
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ edge_starts,
+        const float3 *__restrict__ edge_ends,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ normals,
+        const float *__restrict__ opacities,
+        const float *__restrict__ covis,
+        const float *__restrict__ isos,
+        const float iso,
+        bool *__restrict__ hit_mask,
+        int64_t *__restrict__ out_gaus_ids)
+    {
+        uint32_t e_idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (e_idx >= num_edges) return;
+
+        float3 edge_start = edge_starts[e_idx];
+        float3 edge_end = edge_ends[e_idx];
+
+        // Ray AABB for BVH traversal
+        float3 e_ab_min = make_float3(fminf(edge_start.x, edge_end.x), fminf(edge_start.y, edge_end.y), fminf(edge_start.z, edge_end.z));
+        float3 e_ab_max = make_float3(fmaxf(edge_start.x, edge_end.x), fmaxf(edge_start.y, edge_end.y), fmaxf(edge_start.z, edge_end.z));
+
+        bool any_hit = false;
+        float max_density = -1.0f;
+        int best_gs = -1;
+
+        int stack[BVH_STACK_SIZE];
+        int stack_ptr = 0;
+        stack[0] = 0; 
+
+        while (stack_ptr >= 0)
+        {
+            int node_idx = stack[stack_ptr--];
+
+            if (aabb::test_aabb_overlap(e_ab_min, e_ab_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]))
+            {
+                if (node_idx >= num_gaussians - 1)
+                {
+                    int leaf_idx = node_idx - (num_gaussians - 1);
+                    uint32_t g_idx = object_ids[leaf_idx];
+
+                    float3 mean = means[g_idx];
+                    float3 normal = normals[g_idx];
+                    const float *covi = covis + (g_idx * 6);
+                    float __iso = multiple_isos ? isos[g_idx] : iso;
+
+                    float t_hit;
+
+                    bool hit = pgs::test_pgs_segment(
+                        mean, normal, covi, __iso, edge_start, edge_end, t_hit);
+
+                    if (hit)
+                    {
+                        any_hit = true;
+
+                        float3 p_hit = make_float3(
+                            edge_start.x + t_hit * (edge_end.x - edge_start.x),
+                            edge_start.y + t_hit * (edge_end.y - edge_start.y),
+                            edge_start.z + t_hit * (edge_end.z - edge_start.z)
+                        );
+
+                        float density;
+                        gs::compute_density(p_hit, mean, covi, opacities[g_idx], density);
+
+                        if (density > max_density)
+                        {
+                            max_density = density;
+                            best_gs = g_idx;
+                        }
+                    }
+                }
+                else
+                {
+                    if (stack_ptr + 2 < BVH_STACK_SIZE)
+                    {
+                        int2 children = bvh_children[node_idx];
+                        stack[++stack_ptr] = children.x;
+                        stack[++stack_ptr] = children.y;
+                    }
+                }
+            }
+        }
+
+        out_gaus_ids[e_idx] = best_gs;
+        hit_mask[e_idx] = any_hit;
+    }
+
+    void query_pgs_edge_intersection_bvh(
+        const uint32_t num_edges,
+        const uint32_t num_gaussians,
+        const float3 *__restrict__ edge_starts,
+        const float3 *__restrict__ edge_ends,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        const float3 *__restrict__ means,
+        const float3 *__restrict__ normals,
+        const float *__restrict__ opacities,
+        const float *__restrict__ covis,
+        const float *__restrict__ isos,
+        const float iso,
+        bool *__restrict__ hit_mask,
+        int64_t *__restrict__ out_gaus_ids)
+    {
+        uint32_t threads = NTHREADS;
+        uint32_t blocks = (num_edges + threads - 1) / threads;
+
+        if (isos != nullptr) {
+            query_pgs_edge_intersection_bvh_kernel<true><<<blocks, threads>>>(
+                num_edges, 
+                num_gaussians, 
+                edge_starts, 
+                edge_ends, 
+                bvh_aabb_mins, 
+                bvh_aabb_maxs, 
+                bvh_children, 
+                object_ids, 
+                means, 
+                normals, 
+                opacities, 
+                covis, 
+                isos, 
+                iso, 
+                hit_mask, 
+                out_gaus_ids);
+        } else {
+            query_pgs_edge_intersection_bvh_kernel<false><<<blocks, threads>>>(
+                num_edges, 
+                num_gaussians, 
+                edge_starts, 
+                edge_ends, 
+                bvh_aabb_mins, 
+                bvh_aabb_maxs, 
+                bvh_children, 
+                object_ids, 
+                means, 
+                normals, 
+                opacities, 
+                covis, 
+                isos, 
+                iso, 
+                hit_mask, 
+                out_gaus_ids);
         }
     }
 }
