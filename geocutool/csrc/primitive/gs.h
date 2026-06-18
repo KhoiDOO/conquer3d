@@ -83,7 +83,7 @@ namespace gs_aabb
         int64_t *__restrict__ global_counter,
         const int64_t max_capacity);
 
-    __host__ void query_gs_voxel_pair_bvh(
+    __host__ void query_gs_voxel_pair_intersection_bvh(
         const uint32_t num_voxels,
         const uint32_t num_gaussians,
         const float3 *__restrict__ vx_aabb_mins,
@@ -126,7 +126,7 @@ namespace gs_aabb
         int64_t *__restrict__ global_counter,
         const int64_t max_capacity);
 
-    __host__ void query_gs_edge_intersection_pair_bvh(
+    __host__ void query_gs_edge_pair_intersection_bvh(
         const uint32_t num_edges,
         const uint32_t num_gaussians,
         const float3 *__restrict__ edge_starts,
