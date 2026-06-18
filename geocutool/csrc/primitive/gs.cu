@@ -836,7 +836,7 @@ namespace gs_aabb
     }
 
     template <bool multiple_isos>
-    __global__ void query_gs_voxel_pair_bvh_kernel(
+    __global__ void query_gs_voxel_pair_intersection_bvh_kernel(
         const uint32_t num_voxels,
         const uint32_t num_gaussians,
         const float3 *__restrict__ vx_aabb_mins,
@@ -963,7 +963,7 @@ namespace gs_aabb
         hit_mask[v_idx] = any_hit;
     }
 
-    void query_gs_voxel_pair_bvh(
+    void query_gs_voxel_pair_intersection_bvh(
         const uint32_t num_voxels,
         const uint32_t num_gaussians,
         const float3 *__restrict__ vx_aabb_mins,
@@ -996,7 +996,7 @@ namespace gs_aabb
 
         if (isos != nullptr)
         {
-            query_gs_voxel_pair_bvh_kernel<true><<<blocks, threads>>>(
+            query_gs_voxel_pair_intersection_bvh_kernel<true><<<blocks, threads>>>(
                 num_voxels,
                 num_gaussians,
                 vx_aabb_mins,
@@ -1026,7 +1026,7 @@ namespace gs_aabb
         }
         else
         {
-            query_gs_voxel_pair_bvh_kernel<false><<<blocks, threads>>>(
+            query_gs_voxel_pair_intersection_bvh_kernel<false><<<blocks, threads>>>(
                 num_voxels,
                 num_gaussians,
                 vx_aabb_mins,
@@ -1173,7 +1173,7 @@ namespace gs_aabb
         }
 
         template <bool multiple_isos>
-        __global__ void query_gs_edge_intersection_pair_bvh_kernel(
+        __global__ void query_gs_edge_pair_intersection_bvh_kernel(
             const uint32_t num_edges,
             const uint32_t num_gaussians,
             const float3 *__restrict__ edge_starts,
@@ -1260,7 +1260,7 @@ namespace gs_aabb
             hit_mask[e_idx] = any_hit;
         }
 
-        void query_gs_edge_intersection_pair_bvh(
+        void query_gs_edge_pair_intersection_bvh(
             const uint32_t num_edges,
             const uint32_t num_gaussians,
             const float3 *__restrict__ edge_starts,
@@ -1284,7 +1284,7 @@ namespace gs_aabb
 
             if (isos != nullptr)
             {
-                query_gs_edge_intersection_pair_bvh_kernel<true><<<blocks, threads>>>(
+                query_gs_edge_pair_intersection_bvh_kernel<true><<<blocks, threads>>>(
                     num_edges, 
                     num_gaussians, 
                     edge_starts, 
@@ -1304,7 +1304,7 @@ namespace gs_aabb
             }
             else
             {
-                query_gs_edge_intersection_pair_bvh_kernel<false><<<blocks, threads>>>(
+                query_gs_edge_pair_intersection_bvh_kernel<false><<<blocks, threads>>>(
                     num_edges, 
                     num_gaussians, 
                     edge_starts, 
