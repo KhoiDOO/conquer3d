@@ -83,7 +83,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     torch::Tensor hit_counter = torch::zeros({1}, options_int64);
     torch::Tensor hit_mask = torch::zeros({num_voxels}, options_int64.dtype(torch::kBool));
 
-    gs_aabb::query_gs_voxel_pair_bvh(
+    gs_aabb::query_gs_voxel_pair_intersection_bvh(
         num_voxels,
         num_gaussians,
         reinterpret_cast<const float3 *>(vx_aabb_mins.data_ptr<float>()),
@@ -188,7 +188,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> GSBVH::query_edge_pair(
     torch::Tensor out_gaus_ids = torch::empty({max_capacity}, options.dtype(torch::kInt64));
     torch::Tensor global_counter = torch::zeros({1}, options.dtype(torch::kInt64));
 
-    gs_aabb::query_gs_edge_intersection_pair_bvh(
+    gs_aabb::query_gs_edge_pair_intersection_bvh(
         num_edges,
         num_gaussians,
         reinterpret_cast<const float3 *>(edge_starts.data_ptr<float>()),
@@ -293,12 +293,10 @@ std::tuple<torch::Tensor, torch::Tensor> GSBVH::query_edge(
 void bind_ds_gs_bvh(py::module &m)
 {
     py::class_<GSBVH, BVH>(m, "GSBVH")
-
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
              py::arg("in_aabb_mins"),
              py::arg("in_aabb_maxs"),
              "Construct and build the Karras LBVH for Gaussians.")
-
         .def("query_voxel_pair", &GSBVH::query_voxel_pair,
              py::arg("vx_aabb_mins"),
              py::arg("vx_aabb_maxs"),
@@ -309,7 +307,7 @@ void bind_ds_gs_bvh(py::module &m)
              py::arg("gs_aabb_maxs"),
              py::arg("contact_points"),
              py::arg("isos") = std::nullopt,
-             py::arg("iso") = 0.0f,
+             py::arg("iso") = ISO,
              py::arg("ar_threshold") = 0.0f,
              py::arg("p_threshold") = 0.0f,
              py::arg("return_centroids") = false,
