@@ -80,7 +80,7 @@ void bind_ds_kdtree(py::module_ &m)
              py::arg("points"),
              "Initializes and builds the KDTree on the GPU.")
         .def("query", &KDTree::query,
-             py::arg("query_points"), 
+             py::arg("query_points"),
              py::arg("k") = 1,
              py::arg("exclude_self") = false,
              "Queries the KDTree for the K nearest neighbors.");
