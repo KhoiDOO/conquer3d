@@ -2,35 +2,24 @@
 requires = [
     "setuptools>=68.0", 
     "wheel",
-    "pybind11-stubgen"
+    "pybind11-stubgen",
+    "torch>=2.0.0"
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "geocutool"
-version = "0.1.6"
+name = "conquer3d"
+version = "0.2.1"
 description = "Geometric Cuda Tool Box"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
     {name = "Do Hoang Khoi", email = "khoido8899@gmail.com"}
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 keywords = ["geometry"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering :: Physics",
-    "Topic :: Multimedia :: Graphics :: 3D",
-]
 dependencies = [
-    # "torch>=2.0.0", # Uncomment this if your library requires PyTorch to run!
+    "torch>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -45,30 +34,30 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/KhoiDOO/geocutool"
-Repository = "https://github.com/KhoiDOO/geocutool.git"
-Documentation = "https://github.com/KhoiDOO/geocutool#readme"
-Issues = "https://github.com/KhoiDOO/geocutool/issues"
+Homepage = "https://github.com/KhoiDOO/conquer3d"
+Repository = "https://github.com/KhoiDOO/conquer3d.git"
+Documentation = "https://github.com/KhoiDOO/conquer3d#readme"
+Issues = "https://github.com/KhoiDOO/conquer3d/issues"
 
 [tool.setuptools.packages.find]
-include = ["geocutool*"]
+include = ["conquer3d*"]
 exclude = ["examples*", "tests*"]
 
 [tool.setuptools.package-data]
 # Ensure the compiled C++/CUDA binaries and typing stubs are bundled into the wheel!
-"geocutool" = ["py.typed", "*.so", "*.pyd", "*.pyi", "*.dll"]
+"conquer3d" = ["py.typed", "*.so", "*.pyd", "*.pyi", "*.dll"]
 
 [tool.black]
 line-length = 100
-target-version = ["py310"]
+target-version = ["py39"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py39"
 select = ["E", "F", "W"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
