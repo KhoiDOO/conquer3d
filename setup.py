@@ -23,9 +23,9 @@ def read_version():
     raise ValueError("Version not found in pyproject.toml")
 
 def get_extensions():
-    """Build C++ and CUDA extensions for the geocutool package."""
+    """Build C++ and CUDA extensions for the conquer3d package."""
     
-    csrc_dir = os.path.join("geocutool", "csrc")
+    csrc_dir = os.path.join("conquer3d", "csrc")
     main_file = [os.path.join(csrc_dir, "pybind.cpp")]
     source_cuda = glob.glob(os.path.join(csrc_dir, "**", "*.cu"), recursive=True)
     source_cpp = [
@@ -76,7 +76,7 @@ def get_extensions():
         print("Building CPU-only extension (CUDA not available)")
 
     sources = [s for s in sources]
-    include_dirs = [os.path.join("geocutool", "csrc")]
+    include_dirs = [os.path.join("conquer3d", "csrc")]
     
     # Ensure torch libraries are in the RPATH
     torch_lib_path = os.path.join(os.path.dirname(torch.__file__), "lib")
@@ -88,7 +88,7 @@ def get_extensions():
 
     ext_modules = [
         extension(
-            "geocutool._C",
+            "conquer3d._C",
             sources,
             include_dirs=include_dirs,
             library_dirs=library_dirs,
@@ -113,47 +113,25 @@ class CustomBuildExt(BaseBuildExt):
         try:
             subprocess.check_call([
                 "pybind11-stubgen", 
-                "geocutool._C", 
+                "conquer3d._C", 
                 "-o", 
                 "."
             ])
-            print("Successfully generated geocutool/_C.pyi!")
+            print("Successfully generated conquer3d/_C.pyi!")
         except Exception as e:
             print(f"Warning: Failed to generate .pyi stubs automatically: {e}")
             print("Make sure pybind11-stubgen is installed.")
         print("---------------------------------\n")
 
 setup(
-    name="geocutool",
-    version=read_version(),
-    author="",
-    author_email="",
-    keywords="marching cubes differentiable",
-    description="Differentiable Marching Cubes Package",
-    classifiers=[
-        "Operating System :: POSIX :: Linux",
-        "Operating System :: Microsoft :: Windows",
-        "Intended Audience :: Developers",
-        "Intended Audience :: Education",
-        "Intended Audience :: Science/Research",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-        "Topic :: Utilities",
-    ],
-    license="MIT",
     packages=find_packages(exclude=["examples", "tests"]),
-    python_requires=">=3.8",
-    install_requires=["torch"],
     ext_modules=get_extensions(),
     cmdclass={
         "build_ext": CustomBuildExt,
     },
     include_package_data=True,
     package_data={
-        "geocutool": ["*.pyi", "*.so", "*.pyd"],
+        "conquer3d": ["*.pyi", "*.so", "*.pyd"],
     },
     zip_safe=False
 )
