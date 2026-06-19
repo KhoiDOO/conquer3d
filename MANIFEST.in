@@ -1,0 +1,1 @@
+recursive-include conquer3d/csrc *.h *.hpp *.cuh *.cpp *.cu
