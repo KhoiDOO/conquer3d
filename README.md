@@ -2,16 +2,21 @@
 
 # Setup
 
+## Build from source
 ```bash
+git clone https://github.com/KhoiDOO/geocutool.git
+pip install pybind11-stubgen 
+
+# then
+cd geocutool
 pip install -e . --no-build-isolation
 
 # or 
-
+pip install pybind11-stubgen
 pip install git+https://github.com/KhoiDOO/geocutool.git --no-build-isolation
 ```
 
-## Tested Env
-
+## To run notebooks in examples
 ```bash
 conda create -c conda-forge -n geocutool python=3.10 gxx_linux-64=13 gcc_linux-64=13 -y
 conda activate geocutool
@@ -19,6 +24,9 @@ conda activate geocutool
 conda install nvidia::cuda-toolkit==12.8.2 -y
 
 pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+
+pip install pybind11-stubgen
+pip install git+https://github.com/KhoiDOO/geocutool.git --no-build-isolation
 
 pip install plotly open3d jupyter trimesh
 ```
