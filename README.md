@@ -1,4 +1,4 @@
-# geocutool
+# Conquer3D
 
 # Setup
 
@@ -29,6 +29,14 @@ pip install pybind11-stubgen
 pip install git+https://github.com/KhoiDOO/geocutool.git --no-build-isolation
 
 pip install plotly open3d jupyter trimesh
+```
+
+# Development
+```bash
+pip install build twine
+rm -rf dist
+python -m build --sdist
+twine upload dist/* --verbose
 ```
 
 # Reference
