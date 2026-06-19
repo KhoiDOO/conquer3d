@@ -1,3 +1,6 @@
+#ifndef GS_MATH_CUH
+#define GS_MATH_CUH
+
 #pragma once
 #include "../maths/maths.h"
 #include <cuda_runtime.h>
@@ -197,3 +200,5 @@ namespace gs
         return false;
     }
 }
+
+#endif // GS_MATH_CUH
