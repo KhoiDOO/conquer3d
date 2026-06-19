@@ -5,6 +5,7 @@
 #include <pybind11/pybind11.h>
 #include <optional>
 #include <vector>
+#include <variant>
 
 namespace py = pybind11;
 
@@ -17,8 +18,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     const torch::Tensor &gs_aabb_mins,
     const torch::Tensor &gs_aabb_maxs,
     const torch::Tensor &contact_points,
-    const std::optional<torch::Tensor> &isos,
-    const float iso,
+    const std::variant<float, torch::Tensor> &isos,
     const float ar_threshold,
     const float p_threshold,
     const bool return_centroids,
@@ -65,13 +65,21 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     auto options_int64 = vx_aabb_mins.options().dtype(torch::kInt64);
     auto options_float32 = vx_aabb_mins.options().dtype(torch::kFloat32);
 
+    float iso = 0.0f;
     float *isos_ptr = nullptr;
-    if (isos.has_value())
+    torch::Tensor isos_tensor;
+
+    if (std::holds_alternative<torch::Tensor>(isos))
     {
-        CHECK_INPUT(isos.value());
-        TORCH_CHECK(isos.value().scalar_type() == torch::kFloat32, "isos must be float32");
-        TORCH_CHECK(isos.value().size(0) == num_gaussians, "isos must have shape (N,)");
-        isos_ptr = isos.value().data_ptr<float>();
+        isos_tensor = std::get<torch::Tensor>(isos);
+        CHECK_INPUT(isos_tensor);
+        TORCH_CHECK(isos_tensor.scalar_type() == torch::kFloat32, "isos tensor must be float32");
+        TORCH_CHECK(isos_tensor.size(0) == num_gaussians, "isos tensor must have shape (N,)");
+        isos_ptr = isos_tensor.data_ptr<float>();
+    }
+    else
+    {
+        iso = std::get<float>(isos);
     }
 
     // 2. Allocate outputs
@@ -142,8 +150,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> GSBVH::query_edge_pair(
     const torch::Tensor &edge_ends,
     const torch::Tensor &means,
     const torch::Tensor &covis,
-    const std::optional<torch::Tensor> &isos,
-    const float iso,
+    const std::variant<float, torch::Tensor> &isos,
     const int64_t max_capacity)
 {
     CHECK_INPUT(edge_starts);
@@ -173,13 +180,21 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> GSBVH::query_edge_pair(
 
     TORCH_CHECK(num_gaussians == this->num_objects, "Number of Gaussians must match the number of objects in the BVH");
 
+    float iso = 0.0f;
     float *isos_ptr = nullptr;
-    if (isos.has_value())
+    torch::Tensor isos_tensor;
+
+    if (std::holds_alternative<torch::Tensor>(isos))
     {
-        CHECK_INPUT(isos.value());
-        TORCH_CHECK(isos.value().scalar_type() == torch::kFloat32, "isos must be float32");
-        TORCH_CHECK(isos.value().size(0) == num_gaussians, "isos must have shape (N,)");
-        isos_ptr = isos.value().data_ptr<float>();
+        isos_tensor = std::get<torch::Tensor>(isos);
+        CHECK_INPUT(isos_tensor);
+        TORCH_CHECK(isos_tensor.scalar_type() == torch::kFloat32, "isos tensor must be float32");
+        TORCH_CHECK(isos_tensor.size(0) == num_gaussians, "isos tensor must have shape (N,)");
+        isos_ptr = isos_tensor.data_ptr<float>();
+    }
+    else
+    {
+        iso = std::get<float>(isos);
     }
 
     auto options = means.options();
@@ -226,8 +241,7 @@ std::tuple<torch::Tensor, torch::Tensor> GSBVH::query_edge(
     const torch::Tensor &means,
     const torch::Tensor &opacities,
     const torch::Tensor &covis,
-    const std::optional<torch::Tensor> &isos,
-    const float iso)
+    const std::variant<float, torch::Tensor> &isos)
 {
     CHECK_INPUT(edge_starts);
     CHECK_INPUT(edge_ends);
@@ -257,13 +271,21 @@ std::tuple<torch::Tensor, torch::Tensor> GSBVH::query_edge(
 
     TORCH_CHECK(num_gaussians == this->num_objects, "Number of Gaussians must match the number of objects in the BVH");
 
+    float iso = 0.0f;
     float *isos_ptr = nullptr;
-    if (isos.has_value())
+    torch::Tensor isos_tensor;
+
+    if (std::holds_alternative<torch::Tensor>(isos))
     {
-        CHECK_INPUT(isos.value());
-        TORCH_CHECK(isos.value().scalar_type() == torch::kFloat32, "isos must be float32");
-        TORCH_CHECK(isos.value().size(0) == num_gaussians, "isos must have shape (N,)");
-        isos_ptr = isos.value().data_ptr<float>();
+        isos_tensor = std::get<torch::Tensor>(isos);
+        CHECK_INPUT(isos_tensor);
+        TORCH_CHECK(isos_tensor.scalar_type() == torch::kFloat32, "isos tensor must be float32");
+        TORCH_CHECK(isos_tensor.size(0) == num_gaussians, "isos tensor must have shape (N,)");
+        isos_ptr = isos_tensor.data_ptr<float>();
+    }
+    else
+    {
+        iso = std::get<float>(isos);
     }
 
     auto options = means.options();
@@ -306,8 +328,7 @@ void bind_ds_gs_bvh(py::module &m)
              py::arg("gs_aabb_mins"),
              py::arg("gs_aabb_maxs"),
              py::arg("contact_points"),
-             py::arg("isos") = std::nullopt,
-             py::arg("iso") = ISO,
+             py::arg("isos") = ISO,
              py::arg("ar_threshold") = 0.0f,
              py::arg("p_threshold") = 0.0f,
              py::arg("return_centroids") = false,
@@ -318,8 +339,7 @@ void bind_ds_gs_bvh(py::module &m)
              py::arg("edge_ends"),
              py::arg("means"),
              py::arg("covis"),
-             py::arg("isos") = std::nullopt,
-             py::arg("iso") = ISO,
+             py::arg("isos") = ISO,
              py::arg("max_capacity") = BVH_MAX_CAPACITY,
              "Find all Gaussians intersected by each line segment.")
         .def("query_edge", &GSBVH::query_edge,
@@ -328,7 +348,6 @@ void bind_ds_gs_bvh(py::module &m)
              py::arg("means"),
              py::arg("opacities"),
              py::arg("covis"),
-             py::arg("isos") = std::nullopt,
-             py::arg("iso") = ISO,
+             py::arg("isos") = ISO,
              "Find the single highest-density Gaussian intersected by each line segment.");
 }
