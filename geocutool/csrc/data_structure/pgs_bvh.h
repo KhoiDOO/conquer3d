@@ -4,6 +4,8 @@
 #include "bvh.h"
 #include "../primitive/pgs.h"
 
+#include <variant>
+
 class PGSBVH : public BVH
 {
 public:
@@ -20,8 +22,7 @@ public:
         const torch::Tensor &covis,
         const torch::Tensor &gs_aabb_mins,
         const torch::Tensor &gs_aabb_maxs,
-        const std::optional<torch::Tensor> &isos,
-        const float iso,
+        const std::variant<float, torch::Tensor> &isos,
         const bool return_centroids,
         const bool return_centroid_densities,
         const int64_t max_capacity);
@@ -33,8 +34,7 @@ public:
         const torch::Tensor &normals,
         const torch::Tensor &opacities,
         const torch::Tensor &covis,
-        const std::optional<torch::Tensor> &isos,
-        const float iso);
+        const std::variant<float, torch::Tensor> &isos);
 };
 
 #endif // PGS_BVH_H
