@@ -22,12 +22,12 @@ set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CMAKE_CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/geocutool/csrc 
+    ${CMAKE_CURRENT_SOURCE_DIR}/conquer3d/csrc 
     ${CUDA_TOOLKIT_ROOT_DIR}/include
 )
 
-file(GLOB_RECURSE CUDA_SOURCES CONFIGURE_DEPENDS "geocutool/csrc/*.cu")
-file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS "geocutool/csrc/*.cpp")
+file(GLOB_RECURSE CUDA_SOURCES CONFIGURE_DEPENDS "conquer3d/csrc/*.cu")
+file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS "conquer3d/csrc/*.cpp")
 
-add_library(geocutool_core SHARED ${CUDA_SOURCES} ${CPP_SOURCES})
-target_link_libraries(geocutool_core PRIVATE cudart)
+add_library(conquer3d_core SHARED ${CUDA_SOURCES} ${CPP_SOURCES})
+target_link_libraries(conquer3d_core PRIVATE cudart)
