@@ -4,6 +4,8 @@
 #include "bvh.h"
 #include "../primitive/gs.h"
 
+#include <variant>
+
 class GSBVH : public BVH
 {
 public:
@@ -21,8 +23,7 @@ public:
         const torch::Tensor &gs_aabb_mins,
         const torch::Tensor &gs_aabb_maxs,
         const torch::Tensor &contact_points,
-        const std::optional<torch::Tensor> &isos,
-        const float iso,
+        const std::variant<float, torch::Tensor> &isos,
         const float ar_threshold,
         const float p_threshold,
         const bool return_centroids,
@@ -33,8 +34,7 @@ public:
         const torch::Tensor &edge_ends,
         const torch::Tensor &means,
         const torch::Tensor &covis,
-        const std::optional<torch::Tensor> &isos,
-        const float iso,
+        const std::variant<float, torch::Tensor> &isos,
         const int64_t max_capacity);
 
     std::tuple<torch::Tensor, torch::Tensor> query_edge(
@@ -43,8 +43,7 @@ public:
         const torch::Tensor &means,
         const torch::Tensor &opacities,
         const torch::Tensor &covis,
-        const std::optional<torch::Tensor> &isos,
-        const float iso);
+        const std::variant<float, torch::Tensor> &isos);
 };
 
 #endif // GS_BVH_H
