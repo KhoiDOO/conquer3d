@@ -1,5 +1,7 @@
 import glob
 import os
+import subprocess
+import sys
 
 import torch
 from setuptools import find_packages, setup
@@ -97,6 +99,30 @@ def get_extensions():
     ]
     return ext_modules
 
+# Create a base class using your existing no_python_abi_suffix logic
+BaseBuildExt = BuildExtension.with_options(no_python_abi_suffix=True)
+
+class CustomBuildExt(BaseBuildExt):
+    """Custom build extension to generate PyBind11 stubs after compilation."""
+    def run(self):
+        # 1. Run the normal compilation process
+        super().run()
+        
+        # 2. Automatically generate the .pyi stubs
+        print("\n--- Generating PyBind11 Stubs ---")
+        try:
+            subprocess.check_call([
+                "pybind11-stubgen", 
+                "geocutool._C", 
+                "-o", 
+                "."
+            ])
+            print("Successfully generated geocutool/_C.pyi!")
+        except Exception as e:
+            print(f"Warning: Failed to generate .pyi stubs automatically: {e}")
+            print("Make sure pybind11-stubgen is installed.")
+        print("---------------------------------\n")
+
 setup(
     name="geocutool",
     version=read_version(),
@@ -123,7 +149,11 @@ setup(
     install_requires=["torch"],
     ext_modules=get_extensions(),
     cmdclass={
-        "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
+        "build_ext": CustomBuildExt,
+    },
+    include_package_data=True,
+    package_data={
+        "geocutool": ["*.pyi", "*.so", "*.pyd"],
     },
     zip_safe=False
 )
