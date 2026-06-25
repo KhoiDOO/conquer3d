@@ -27,6 +27,8 @@ public:
     std::tuple<torch::Tensor, torch::Tensor> query(
         const torch::Tensor &query_aabb_mins,
         const torch::Tensor &query_aabb_maxs);
+
+    std::tuple<torch::Tensor, torch::Tensor> query_self();
 };
 
 namespace bvh
@@ -48,6 +50,17 @@ namespace bvh
         const uint32_t num_objects,
         const float3 *__restrict__ query_mins,
         const float3 *__restrict__ query_maxs,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        int64_t *__restrict__ out_query_ids,
+        int64_t *__restrict__ out_object_ids,
+        int64_t *__restrict__ hit_counter,
+        const int64_t max_capacity);
+
+    __host__ void query_self(
+        const uint32_t num_objects,
         const float3 *__restrict__ bvh_aabb_mins,
         const float3 *__restrict__ bvh_aabb_maxs,
         const int2 *__restrict__ bvh_children,
