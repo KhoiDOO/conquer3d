@@ -144,22 +144,30 @@ torch::Tensor TriangleMesh::get_edge_to_triangle_counts()
         this->compute_edges_to_triangle_map();
     return this->edge_to_triangle_counts;
 }
-torch::Tensor TriangleMesh::get_edge_to_triangle_indices() {
-    if (!this->edge_to_triangle_indices.defined()) this->compute_edges_to_triangle_map();
+torch::Tensor TriangleMesh::get_edge_to_triangle_indices()
+{
+    if (!this->edge_to_triangle_indices.defined())
+        this->compute_edges_to_triangle_map();
     return this->edge_to_triangle_indices;
 }
 
-bool TriangleMesh::is_edge_manifold(bool allow_boundary_edge) {
-    if (this->num_triangles == 0) return true;
+bool TriangleMesh::is_edge_manifold(bool allow_boundary_edge)
+{
+    if (this->num_triangles == 0)
+        return true;
     torch::Tensor counts = this->get_edge_to_triangle_counts();
-    if (allow_boundary_edge) {
+    if (allow_boundary_edge)
+    {
         return (counts <= 2).all().item<bool>();
-    } else {
+    }
+    else
+    {
         return (counts == 2).all().item<bool>();
     }
 }
 
-void TriangleMesh::remove_triangles_by_mask(const torch::Tensor& keep_mask) {
+void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
+{
     CHECK_INPUT(keep_mask);
     TORCH_CHECK(keep_mask.scalar_type() == torch::kBool, "keep_mask must be a boolean tensor");
     TORCH_CHECK(keep_mask.dim() == 1 && keep_mask.size(0) == this->num_triangles, "keep_mask must have shape (num_triangles,)");
@@ -175,6 +183,79 @@ void TriangleMesh::remove_triangles_by_mask(const torch::Tensor& keep_mask) {
     this->edge_to_triangle_offsets = torch::Tensor();
     this->edge_to_triangle_counts = torch::Tensor();
     this->edge_to_triangle_indices = torch::Tensor();
+
+    this->vertex_to_triangle_offsets = torch::Tensor();
+    this->vertex_to_triangle_counts = torch::Tensor();
+    this->vertex_to_triangle_indices = torch::Tensor();
+}
+
+int32_t TriangleMesh::get_euler_characteristic()
+{
+    int32_t V = this->vertices.size(0);
+    int32_t E = this->get_edges().size(0);
+    int32_t F = this->num_triangles;
+    return V - E + F;
+}
+
+int32_t TriangleMesh::get_genus()
+{
+    // For a single closed connected component, chi = 2 - 2g => g = (2 - chi) / 2
+    int32_t chi = this->get_euler_characteristic();
+    return (2 - chi) / 2;
+}
+
+void TriangleMesh::compute_vertices_to_triangle_map()
+{
+    if (this->vertex_to_triangle_offsets.defined())
+        return;
+
+    uint32_t num_vertices = this->vertices.size(0);
+    triangle_mesh::build_vertices_to_triangle_map(
+        num_vertices,
+        this->num_triangles,
+        this->triangles,
+        this->vertex_to_triangle_counts,
+        this->vertex_to_triangle_offsets,
+        this->vertex_to_triangle_indices);
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> TriangleMesh::get_vertices_to_triangle_map()
+{
+    this->compute_vertices_to_triangle_map();
+    return {this->vertex_to_triangle_offsets, this->vertex_to_triangle_counts, this->vertex_to_triangle_indices};
+}
+
+torch::Tensor TriangleMesh::get_vertex_to_triangle_offsets()
+{
+    this->compute_vertices_to_triangle_map();
+    return this->vertex_to_triangle_offsets;
+}
+
+torch::Tensor TriangleMesh::get_vertex_to_triangle_counts()
+{
+    this->compute_vertices_to_triangle_map();
+    return this->vertex_to_triangle_counts;
+}
+
+torch::Tensor TriangleMesh::get_vertex_to_triangle_indices() {
+    this->compute_vertices_to_triangle_map();
+    return this->vertex_to_triangle_indices;
+}
+
+torch::Tensor TriangleMesh::get_non_manifold_vertices() {
+    this->compute_vertices_to_triangle_map();
+    return triangle_mesh::get_non_manifold_vertices_cuda(
+        this->vertices.size(0),
+        this->triangles,
+        this->vertex_to_triangle_offsets,
+        this->vertex_to_triangle_counts,
+        this->vertex_to_triangle_indices
+    );
+}
+
+bool TriangleMesh::is_vertex_manifold() {
+    torch::Tensor nm_vertices = this->get_non_manifold_vertices();
+    return nm_vertices.size(0) == 0;
 }
 
 void bind_ds_triangle_mesh(py::module_ &m)
@@ -201,6 +282,15 @@ void bind_ds_triangle_mesh(py::module_ &m)
         .def("compute_triangle_normals", &TriangleMesh::compute_triangle_normals)
         .def("compute_edges_to_triangle_map", &TriangleMesh::compute_edges_to_triangle_map)
         .def("get_edges_to_triangle_map", &TriangleMesh::get_edges_to_triangle_map)
+        .def("compute_vertices_to_triangle_map", &TriangleMesh::compute_vertices_to_triangle_map)
+        .def("get_vertices_to_triangle_map", &TriangleMesh::get_vertices_to_triangle_map)
+        .def_property_readonly("vertex_to_triangle_offsets", &TriangleMesh::get_vertex_to_triangle_offsets)
+        .def_property_readonly("vertex_to_triangle_counts", &TriangleMesh::get_vertex_to_triangle_counts)
+        .def_property_readonly("vertex_to_triangle_indices", &TriangleMesh::get_vertex_to_triangle_indices)
         .def("is_edge_manifold", &TriangleMesh::is_edge_manifold, py::arg("allow_boundary_edge") = true)
-        .def("remove_triangles_by_mask", &TriangleMesh::remove_triangles_by_mask, py::arg("keep_mask"));
+        .def("is_vertex_manifold", &TriangleMesh::is_vertex_manifold)
+        .def("get_non_manifold_vertices", &TriangleMesh::get_non_manifold_vertices)
+        .def("remove_triangles_by_mask", &TriangleMesh::remove_triangles_by_mask, py::arg("keep_mask"))
+        .def_property_readonly("euler_characteristic", &TriangleMesh::get_euler_characteristic)
+        .def_property_readonly("genus", &TriangleMesh::get_genus);
 }
