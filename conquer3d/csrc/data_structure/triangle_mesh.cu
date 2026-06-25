@@ -24,7 +24,7 @@ namespace triangle_mesh
             float3 v1 = vertices[tri.y];
             float3 v2 = vertices[tri.z];
             
-            triangle_normals[idx] = compute_normal(v0, v1, v2);
+            triangle_normals[idx] = triangle::compute_normal(v0, v1, v2);
         }
     }
 
@@ -42,7 +42,26 @@ namespace triangle_mesh
             float3 v1 = vertices[tri.y];
             float3 v2 = vertices[tri.z];
             
-            triangle_areas[idx] = compute_area(v0, v1, v2);
+            triangle_areas[idx] = triangle::compute_area(v0, v1, v2);
+        }
+    }
+
+    __global__ void compute_triangle_aabbs_kernel(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float3 *__restrict__ aabb_mins,
+        float3 *__restrict__ aabb_maxs)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles)
+        {
+            int3 tri = triangles[idx];
+            float3 v0 = vertices[tri.x];
+            float3 v1 = vertices[tri.y];
+            float3 v2 = vertices[tri.z];
+            
+            triangle::compute_aabb(v0, v1, v2, aabb_mins[idx], aabb_maxs[idx]);
         }
     }
 
@@ -74,6 +93,22 @@ namespace triangle_mesh
         
         compute_triangle_areas_kernel<<<blocks, threads>>>(
             num_triangles, vertices, triangles, triangle_areas);
+    }
+
+    __host__ void compute_triangle_aabbs(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float3 *__restrict__ aabb_mins,
+        float3 *__restrict__ aabb_maxs)
+    {
+        if (num_triangles == 0) return;
+        
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+        
+        compute_triangle_aabbs_kernel<<<blocks, threads>>>(
+            num_triangles, vertices, triangles, aabb_mins, aabb_maxs);
     }
 
     __global__ void extract_edges_kernel(
@@ -333,7 +368,7 @@ namespace triangle_mesh
         }
     }
 
-    torch::Tensor get_non_manifold_vertices_cuda(
+    torch::Tensor get_non_manifold_vertices(
         const uint32_t num_vertices,
         const torch::Tensor& triangles,
         const torch::Tensor& v2t_offsets,
