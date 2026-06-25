@@ -30,6 +30,10 @@ protected:
     torch::Tensor edge_to_triangle_counts;
     torch::Tensor edge_to_triangle_indices;
 
+    torch::Tensor vertex_to_triangle_offsets;
+    torch::Tensor vertex_to_triangle_counts;
+    torch::Tensor vertex_to_triangle_indices;
+
 public:
     TriangleMesh(
         const torch::Tensor &in_vertices,
@@ -49,7 +53,7 @@ public:
     torch::Tensor get_triangle_areas();
     torch::Tensor get_triangle_normals();
     torch::Tensor get_surface_area();
-    
+
     void compute_edges_to_triangle_map();
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> get_edges_to_triangle_map();
     
@@ -58,9 +62,20 @@ public:
     torch::Tensor get_edge_to_triangle_counts();
     torch::Tensor get_edge_to_triangle_indices();
 
+    void compute_vertices_to_triangle_map();
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> get_vertices_to_triangle_map();
+    torch::Tensor get_vertex_to_triangle_offsets();
+    torch::Tensor get_vertex_to_triangle_counts();
+    torch::Tensor get_vertex_to_triangle_indices();
+
     bool is_edge_manifold(bool allow_boundary_edge = true);
-    
-    void remove_triangles_by_mask(const torch::Tensor& keep_mask);
+    bool is_vertex_manifold();
+    torch::Tensor get_non_manifold_vertices();
+
+    void remove_triangles_by_mask(const torch::Tensor &keep_mask);
+
+    int32_t get_euler_characteristic();
+    int32_t get_genus();
 };
 
 namespace triangle_mesh
@@ -84,6 +99,21 @@ namespace triangle_mesh
         torch::Tensor &out_offsets,
         torch::Tensor &out_counts,
         torch::Tensor &out_sorted_triangle_indices);
+
+    __host__    void build_vertices_to_triangle_map(
+        const uint32_t num_vertices,
+        const uint32_t num_triangles,
+        const torch::Tensor& triangles,
+        torch::Tensor& out_counts,
+        torch::Tensor& out_offsets,
+        torch::Tensor& out_indices);
+
+    torch::Tensor get_non_manifold_vertices_cuda(
+        const uint32_t num_vertices,
+        const torch::Tensor& triangles,
+        const torch::Tensor& v2t_offsets,
+        const torch::Tensor& v2t_counts,
+        const torch::Tensor& v2t_indices);
 }
 
 #endif // TRIANGLE_MESH_H
