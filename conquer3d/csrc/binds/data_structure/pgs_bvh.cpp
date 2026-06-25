@@ -222,7 +222,7 @@ std::tuple<torch::Tensor, torch::Tensor> PGSBVH::query_edge(
     return std::make_tuple(hit_mask, out_gaus_ids);
 }
 
-void bind_ds_pgs_bvh(py::module &m)
+void bind_ds_pgs_bvh(py::module_& m)
 {
     py::class_<PGSBVH, BVH>(m, "PGSBVH")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
