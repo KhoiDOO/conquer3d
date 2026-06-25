@@ -68,7 +68,7 @@ def get_extensions():
         else:
             nvcc_flags = nvcc_flags.split(" ")
         extra_compile_args = {
-            "cxx": ["-O3"],
+            "cxx": ["-O3", "-Wno-attributes"],
             "nvcc": nvcc_flags,
         }
         print(f"Building CUDA extension with CUDA_HOME: {cuda_home}")
