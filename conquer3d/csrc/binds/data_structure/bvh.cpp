@@ -120,6 +120,39 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query(
     );
 }
 
+std::tuple<torch::Tensor, torch::Tensor> BVH::query_self()
+{
+    auto options_int64 = this->aabb_mins.options().dtype(torch::kInt64);
+    
+    if (this->num_objects == 0) {
+        throw std::runtime_error("Cannot query BVH with 0 objects.");
+    }
+    
+    torch::Tensor out_query_ids = torch::empty({BVH_MAX_CAPACITY}, options_int64);
+    torch::Tensor out_object_ids = torch::empty({BVH_MAX_CAPACITY}, options_int64);
+    torch::Tensor hit_counter = torch::zeros({1}, options_int64);
+
+    bvh::query_self(
+        this->num_objects,
+        reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
+        reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
+        reinterpret_cast<const int2 *>(this->bvh_children.data_ptr<int>()),
+        reinterpret_cast<const int *>(this->object_ids.data_ptr<int>()),
+        reinterpret_cast<int64_t *>(out_query_ids.data_ptr<int64_t>()),
+        reinterpret_cast<int64_t *>(out_object_ids.data_ptr<int64_t>()),
+        reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()),
+        static_cast<int64_t>(BVH_MAX_CAPACITY)
+    );
+
+    int64_t num_hits = hit_counter.item<int64_t>();
+    num_hits = std::min(num_hits, static_cast<int64_t>(BVH_MAX_CAPACITY));
+
+    return std::make_tuple(
+        out_query_ids.slice(0, 0, num_hits), 
+        out_object_ids.slice(0, 0, num_hits)
+    );
+}
+
 void bind_ds_bvh(py::module_& m)
 {
     py::class_<BVH>(m, "BVH")
@@ -131,5 +164,8 @@ void bind_ds_bvh(py::module_& m)
         .def("query", &BVH::query,
              py::arg("query_aabb_mins"), 
              py::arg("query_aabb_maxs"),
-             "Query the BVH with bounding boxes or segments. Returns (query_ids, object_ids).");
+             "Query the BVH with bounding boxes or segments. Returns (query_ids, object_ids).")
+             
+        .def("query_self", &BVH::query_self,
+             "Query the BVH against itself. Returns unique overlapping (query_ids, object_ids).");
 }
