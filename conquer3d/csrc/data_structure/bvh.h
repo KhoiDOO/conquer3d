@@ -15,11 +15,11 @@ protected:
     uint32_t num_objects;
     uint32_t num_nodes; // Will always be 2N - 1
 
-    torch::Tensor aabb_mins; // Size: [2N - 1, 3]
-    torch::Tensor aabb_maxs; // Size: [2N - 1, 3]
+    torch::Tensor aabb_mins;    // Size: [2N - 1, 3]
+    torch::Tensor aabb_maxs;    // Size: [2N - 1, 3]
     torch::Tensor bvh_children; // Size: [2N - 1, 2] -> x = left_child, y = right_child
-    torch::Tensor bvh_parents; // Size: [2N - 1] -> index of parent node
-    torch::Tensor object_ids; // Size: [N] -> Maps the sorted leaf index back to the original Gaussian index
+    torch::Tensor bvh_parents;  // Size: [2N - 1] -> index of parent node
+    torch::Tensor object_ids;   // Size: [N] -> Maps the sorted leaf index back to the original Gaussian index
 
 public:
     BVH(const torch::Tensor &in_aabb_mins, const torch::Tensor &in_aabb_maxs);
