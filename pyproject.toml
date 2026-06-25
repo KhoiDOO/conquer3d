@@ -9,10 +9,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conquer3d"
-version = "0.2.3"
+version = "0.2.4"
 description = "Geometric Cuda Tool Box"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "Do Hoang Khoi", email = "khoido8899@gmail.com"}
 ]
