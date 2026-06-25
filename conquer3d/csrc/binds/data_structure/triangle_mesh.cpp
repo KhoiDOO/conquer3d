@@ -65,6 +65,38 @@ void TriangleMesh::compute_triangle_areas()
         reinterpret_cast<float *>(this->triangle_areas.data_ptr<float>()));
 }
 
+MeshBVH TriangleMesh::build_bvh()
+{
+    if (!this->bvh.has_value())
+    {
+        auto options = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+        torch::Tensor aabb_mins = torch::empty({static_cast<int64_t>(this->num_triangles), 3}, options);
+        torch::Tensor aabb_maxs = torch::empty({static_cast<int64_t>(this->num_triangles), 3}, options);
+        
+        triangle_mesh::compute_triangle_aabbs(
+            this->num_triangles,
+            reinterpret_cast<float3 *>(this->vertices.data_ptr<float>()),
+            reinterpret_cast<int3 *>(this->triangles.data_ptr<int>()),
+            reinterpret_cast<float3 *>(aabb_mins.data_ptr<float>()),
+            reinterpret_cast<float3 *>(aabb_maxs.data_ptr<float>()));
+            
+        this->bvh = MeshBVH(aabb_mins, aabb_maxs);
+    }
+    return this->bvh.value();
+}
+
+torch::Tensor TriangleMesh::get_self_intersection()
+{
+    this->build_bvh();
+    return this->bvh.value().get_self_intersection(this->vertices, this->triangles);
+}
+
+bool TriangleMesh::is_self_intersection()
+{
+    this->build_bvh();
+    return this->bvh.value().is_self_intersection(this->vertices, this->triangles);
+}
+
 torch::Tensor TriangleMesh::get_triangle_areas()
 {
     if (!this->triangle_areas.defined())
@@ -179,6 +211,7 @@ void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
     this->triangle_areas = torch::Tensor();
     this->triangle_normals = torch::Tensor();
     this->surface_area = torch::Tensor();
+    this->bvh.reset();
     this->edges = torch::Tensor();
     this->edge_to_triangle_offsets = torch::Tensor();
     this->edge_to_triangle_counts = torch::Tensor();
@@ -244,7 +277,7 @@ torch::Tensor TriangleMesh::get_vertex_to_triangle_indices() {
 
 torch::Tensor TriangleMesh::get_non_manifold_vertices() {
     this->compute_vertices_to_triangle_map();
-    return triangle_mesh::get_non_manifold_vertices_cuda(
+    return triangle_mesh::get_non_manifold_vertices(
         this->vertices.size(0),
         this->triangles,
         this->vertex_to_triangle_offsets,
@@ -256,6 +289,10 @@ torch::Tensor TriangleMesh::get_non_manifold_vertices() {
 bool TriangleMesh::is_vertex_manifold() {
     torch::Tensor nm_vertices = this->get_non_manifold_vertices();
     return nm_vertices.size(0) == 0;
+}
+
+bool TriangleMesh::is_manifold(bool allow_boundary_edge) {
+    return this->is_edge_manifold(allow_boundary_edge) && this->is_vertex_manifold() && !this->is_self_intersection();
 }
 
 void bind_ds_triangle_mesh(py::module_ &m)
@@ -274,6 +311,10 @@ void bind_ds_triangle_mesh(py::module_ &m)
         .def_property_readonly("triangle_areas", &TriangleMesh::get_triangle_areas)
         .def_property_readonly("triangle_normals", &TriangleMesh::get_triangle_normals)
         .def_property_readonly("surface_area", &TriangleMesh::get_surface_area)
+        .def_property_readonly("bvh", &TriangleMesh::build_bvh)
+        .def("build_bvh", &TriangleMesh::build_bvh)
+        .def("get_self_intersection", &TriangleMesh::get_self_intersection)
+        .def("is_self_intersection", &TriangleMesh::is_self_intersection)
         .def_property_readonly("edges", &TriangleMesh::get_edges)
         .def_property_readonly("edge_to_triangle_offsets", &TriangleMesh::get_edge_to_triangle_offsets)
         .def_property_readonly("edge_to_triangle_counts", &TriangleMesh::get_edge_to_triangle_counts)
@@ -289,6 +330,7 @@ void bind_ds_triangle_mesh(py::module_ &m)
         .def_property_readonly("vertex_to_triangle_indices", &TriangleMesh::get_vertex_to_triangle_indices)
         .def("is_edge_manifold", &TriangleMesh::is_edge_manifold, py::arg("allow_boundary_edge") = true)
         .def("is_vertex_manifold", &TriangleMesh::is_vertex_manifold)
+        .def("is_manifold", &TriangleMesh::is_manifold, py::arg("allow_boundary_edge") = true)
         .def("get_non_manifold_vertices", &TriangleMesh::get_non_manifold_vertices)
         .def("remove_triangles_by_mask", &TriangleMesh::remove_triangles_by_mask, py::arg("keep_mask"))
         .def_property_readonly("euler_characteristic", &TriangleMesh::get_euler_characteristic)
