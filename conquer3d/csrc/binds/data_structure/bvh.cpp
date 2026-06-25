@@ -120,7 +120,7 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query(
     );
 }
 
-void bind_ds_bvh(py::module &m)
+void bind_ds_bvh(py::module_& m)
 {
     py::class_<BVH>(m, "BVH")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
