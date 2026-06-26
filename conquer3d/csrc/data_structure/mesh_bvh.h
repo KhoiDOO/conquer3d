@@ -11,6 +11,8 @@ public:
     using BVH::query;
     using BVH::query_self;
 
+    using BVH::query_ray;
+
     // Returns a [N, 2] tensor of intersecting triangle index pairs
     torch::Tensor get_self_intersection(
         const torch::Tensor &vertices,
@@ -19,6 +21,13 @@ public:
     bool is_self_intersection(
         const torch::Tensor &vertices,
         const torch::Tensor &triangles);
+
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> get_ray_intersection(
+        const torch::Tensor &ray_origins,
+        const torch::Tensor &ray_dirs,
+        const torch::Tensor &vertices,
+        const torch::Tensor &triangles,
+        bool return_distance = false);
 };
 
 #endif // MESH_BVH_H
