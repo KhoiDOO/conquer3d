@@ -268,6 +268,7 @@ namespace triangle_mesh
             out_counts.data_ptr<int>()
         );
 
+
         out_offsets = torch::empty({num_vertices}, options_i32);
         thrust::exclusive_scan(
             thrust::device,
