@@ -542,4 +542,97 @@ namespace bvh
             max_capacity
         );
     }
+
+    __global__ void query_point_bvh_kernel(
+        const uint32_t num_queries,
+        const uint32_t num_objects,
+        const float3* __restrict__ query_points,
+        const float3* __restrict__ bvh_aabb_mins,
+        const float3* __restrict__ bvh_aabb_maxs,
+        const int2* __restrict__ bvh_children,
+        const int* __restrict__ object_ids,
+        int64_t* __restrict__ out_query_ids,
+        int64_t* __restrict__ out_object_ids,
+        float* __restrict__ out_distances)
+    {
+        uint32_t q_idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (q_idx >= num_queries) return;
+
+        float3 p = query_points[q_idx];
+
+        int stack[BVH_STACK_SIZE];
+        int stack_ptr = 0;
+        stack[0] = 0; 
+        
+        float best_dist_sq = FLT_MAX;
+        int best_leaf_original_id = -1;
+
+        while (stack_ptr >= 0) 
+        {
+            int node_idx = stack[stack_ptr--]; 
+
+            float dist_sq = aabb::compute_squared_distance(p, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]);
+            
+            if (dist_sq > best_dist_sq) continue; // Prune branch
+
+            if (node_idx >= num_objects - 1) 
+            {
+                if (dist_sq < best_dist_sq) {
+                    best_dist_sq = dist_sq;
+                    best_leaf_original_id = object_ids[node_idx - (num_objects - 1)];
+                }
+            } 
+            else 
+            {
+                if (stack_ptr + 2 < BVH_STACK_SIZE)
+                {
+                    int2 children = bvh_children[node_idx];
+                    
+                    float dist_l = aabb::compute_squared_distance(p, bvh_aabb_mins[children.x], bvh_aabb_maxs[children.x]);
+                    float dist_r = aabb::compute_squared_distance(p, bvh_aabb_mins[children.y], bvh_aabb_maxs[children.y]);
+                    
+                    if (dist_l > dist_r) {
+                        stack[++stack_ptr] = children.x; 
+                        stack[++stack_ptr] = children.y;
+                    } else {
+                        stack[++stack_ptr] = children.y;
+                        stack[++stack_ptr] = children.x;
+                    }
+                }
+            }
+        }
+        
+        out_query_ids[q_idx] = q_idx;
+        out_object_ids[q_idx] = best_leaf_original_id;
+        out_distances[q_idx] = sqrtf(best_dist_sq);
+    }
+
+    void query_point(
+        const uint32_t num_queries,
+        const uint32_t num_objects,
+        const float3* __restrict__ query_points,
+        const float3* __restrict__ bvh_aabb_mins,
+        const float3* __restrict__ bvh_aabb_maxs,
+        const int2* __restrict__ bvh_children,
+        const int* __restrict__ object_ids,
+        int64_t* __restrict__ out_query_ids,
+        int64_t* __restrict__ out_object_ids,
+        float* __restrict__ out_distances)
+    {
+        uint32_t threads = NTHREADS;
+        uint32_t blocks = (num_queries + threads - 1) / threads;
+
+        query_point_bvh_kernel<<<blocks, threads>>>(
+            num_queries,
+            num_objects,
+            query_points,
+            bvh_aabb_mins,
+            bvh_aabb_maxs,
+            bvh_children,
+            object_ids,
+            out_query_ids,
+            out_object_ids,
+            out_distances
+        );
+    }
 }
