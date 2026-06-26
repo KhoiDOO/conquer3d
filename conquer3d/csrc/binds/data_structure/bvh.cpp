@@ -155,48 +155,81 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query_self()
 
 std::tuple<torch::Tensor, torch::Tensor> BVH::query_ray(
     const torch::Tensor &ray_origins,
-    const torch::Tensor &ray_dirs)
+    const torch::Tensor &ray_dirs,
+    int64_t max_capacity)
 {
     CHECK_INPUT(ray_origins);
     CHECK_INPUT(ray_dirs);
-    TORCH_CHECK(ray_origins.scalar_type() == torch::kFloat32, "ray_origins must be float32");
-    TORCH_CHECK(ray_dirs.scalar_type() == torch::kFloat32, "ray_dirs must be float32");
-    TORCH_CHECK(ray_origins.size(1) == 3, "ray_origins must have shape (M, 3)");
-    TORCH_CHECK(ray_dirs.size(1) == 3, "ray_dirs must have shape (M, 3)");
+    TORCH_CHECK(ray_origins.size(0) == ray_dirs.size(0), "ray_origins and ray_dirs must have the same number of rays");
 
-    const uint32_t num_queries = static_cast<uint32_t>(ray_origins.size(0));
-    auto options_int64 = ray_origins.options().dtype(torch::kInt64);
+    int num_queries = ray_origins.size(0);
 
-    if (num_queries == 0) {
-        throw std::runtime_error("Cannot query BVH with 0 queries.");
-    }
-
-    torch::Tensor out_query_ids = torch::empty({BVH_MAX_CAPACITY}, options_int64);
-    torch::Tensor out_object_ids = torch::empty({BVH_MAX_CAPACITY}, options_int64);
-    torch::Tensor hit_counter = torch::zeros({1}, options_int64);
+    auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(ray_origins.device());
+    torch::Tensor out_query_ids = torch::empty({max_capacity}, options_i64);
+    torch::Tensor out_object_ids = torch::empty({max_capacity}, options_i64);
+    torch::Tensor hit_counter = torch::zeros({1}, options_i64);
 
     bvh::query_ray(
         num_queries,
         this->num_objects,
-        reinterpret_cast<const float3 *>(ray_origins.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(ray_dirs.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
-        reinterpret_cast<const int2 *>(this->bvh_children.data_ptr<int>()),
-        reinterpret_cast<const int *>(this->object_ids.data_ptr<int>()),
-        reinterpret_cast<int64_t *>(out_query_ids.data_ptr<int64_t>()),
-        reinterpret_cast<int64_t *>(out_object_ids.data_ptr<int64_t>()),
-        reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()),
-        static_cast<int64_t>(BVH_MAX_CAPACITY)
-    );
+        (const float3 *)ray_origins.data_ptr<float>(),
+        (const float3 *)ray_dirs.data_ptr<float>(),
+        (const float3 *)this->aabb_mins.data_ptr<float>(),
+        (const float3 *)this->aabb_maxs.data_ptr<float>(),
+        (const int2 *)this->bvh_children.data_ptr<int>(),
+        this->object_ids.data_ptr<int>(),
+        out_query_ids.data_ptr<int64_t>(),
+        out_object_ids.data_ptr<int64_t>(),
+        hit_counter.data_ptr<int64_t>(),
+        max_capacity);
 
-    int64_t num_hits = hit_counter.item<int64_t>();
-    num_hits = std::min(num_hits, static_cast<int64_t>(BVH_MAX_CAPACITY));
+    int64_t h_hit_counter = hit_counter.item<int64_t>();
+
+    if (h_hit_counter >= max_capacity)
+    {
+        TORCH_WARN("BVH ray query capacity exceeded. Some hits were dropped.");
+        h_hit_counter = max_capacity;
+    }
+
+    if (h_hit_counter == 0) {
+        return std::make_tuple(
+            torch::empty({0}, options_i64),
+            torch::empty({0}, options_i64)
+        );
+    }
 
     return std::make_tuple(
-        out_query_ids.slice(0, 0, num_hits), 
-        out_object_ids.slice(0, 0, num_hits)
-    );
+        out_query_ids.slice(0, 0, h_hit_counter),
+        out_object_ids.slice(0, 0, h_hit_counter));
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> BVH::query_point(
+    const torch::Tensor &query_points)
+{
+    CHECK_INPUT(query_points);
+
+    int num_queries = query_points.size(0);
+    
+    auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(query_points.device());
+    auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(query_points.device());
+    
+    torch::Tensor out_query_ids = torch::empty({num_queries}, options_i64);
+    torch::Tensor out_object_ids = torch::empty({num_queries}, options_i64);
+    torch::Tensor out_distances = torch::empty({num_queries}, options_f32);
+
+    bvh::query_point(
+        num_queries,
+        this->num_objects,
+        (const float3 *)query_points.data_ptr<float>(),
+        (const float3 *)this->aabb_mins.data_ptr<float>(),
+        (const float3 *)this->aabb_maxs.data_ptr<float>(),
+        (const int2 *)this->bvh_children.data_ptr<int>(),
+        this->object_ids.data_ptr<int>(),
+        out_query_ids.data_ptr<int64_t>(),
+        out_object_ids.data_ptr<int64_t>(),
+        out_distances.data_ptr<float>());
+
+    return std::make_tuple(out_query_ids, out_object_ids, out_distances);
 }
 
 void bind_ds_bvh(py::module_& m)
@@ -216,7 +249,11 @@ void bind_ds_bvh(py::module_& m)
              "Query the BVH against itself. Returns unique overlapping (query_ids, object_ids).")
 
         .def("query_ray", &BVH::query_ray,
-             py::arg("ray_origins"), 
+             py::arg("ray_origins"),
              py::arg("ray_dirs"),
-             "Query the BVH with rays. Returns (query_ids, object_ids).");
+             py::arg("max_capacity") = BVH_MAX_CAPACITY,
+             "Find all ray-AABB intersections. Returns (ray_ids, object_ids)")
+        .def("query_point", &BVH::query_point,
+             py::arg("query_points"),
+             "Find the closest leaf AABB to each query point. Returns (query_ids, object_ids, distances)");
 }
