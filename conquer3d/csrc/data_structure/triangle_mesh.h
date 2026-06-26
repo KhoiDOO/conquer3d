@@ -61,6 +61,13 @@ public:
     torch::Tensor get_self_intersection();
     bool is_self_intersection();
 
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> query_points(
+        const torch::Tensor &query_pts,
+        bool return_sdf = false,
+        bool return_prj_pts = true,
+        int sign_mode = 0,
+        int distance_mode = 0);
+
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> get_ray_intersection(
         const torch::Tensor &ray_origins,
         const torch::Tensor &ray_dirs,
