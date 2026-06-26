@@ -33,7 +33,11 @@ public:
 
     std::tuple<torch::Tensor, torch::Tensor> query_ray(
         const torch::Tensor &ray_origins,
-        const torch::Tensor &ray_dirs);
+        const torch::Tensor &ray_dirs,
+        int64_t max_capacity = BVH_MAX_CAPACITY);
+
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> query_point(
+        const torch::Tensor &query_points);
 };
 
 namespace bvh
@@ -88,6 +92,18 @@ namespace bvh
         int64_t *__restrict__ out_object_ids,
         int64_t *__restrict__ hit_counter,
         const int64_t max_capacity);
+
+    __host__ void query_point(
+        const uint32_t num_queries,
+        const uint32_t num_objects,
+        const float3 *__restrict__ query_points,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        int64_t *__restrict__ out_query_ids,
+        int64_t *__restrict__ out_object_ids,
+        float *__restrict__ out_distances);
 }
 
 #endif // BVH_H
