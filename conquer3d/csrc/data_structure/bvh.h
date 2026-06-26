@@ -4,6 +4,7 @@
 #include "../maths/maths.h"
 #include "../constants.h"
 #include "../primitive/aabb.h"
+#include "../primitive/ray.h"
 
 #include <torch/extension.h>
 #include <cuda_runtime.h>
@@ -29,6 +30,10 @@ public:
         const torch::Tensor &query_aabb_maxs);
 
     std::tuple<torch::Tensor, torch::Tensor> query_self();
+
+    std::tuple<torch::Tensor, torch::Tensor> query_ray(
+        const torch::Tensor &ray_origins,
+        const torch::Tensor &ray_dirs);
 };
 
 namespace bvh
@@ -61,6 +66,20 @@ namespace bvh
 
     __host__ void query_self(
         const uint32_t num_objects,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        int64_t *__restrict__ out_query_ids,
+        int64_t *__restrict__ out_object_ids,
+        int64_t *__restrict__ hit_counter,
+        const int64_t max_capacity);
+
+    __host__ void query_ray(
+        const uint32_t num_queries,
+        const uint32_t num_objects,
+        const float3 *__restrict__ ray_origins,
+        const float3 *__restrict__ ray_dirs,
         const float3 *__restrict__ bvh_aabb_mins,
         const float3 *__restrict__ bvh_aabb_maxs,
         const int2 *__restrict__ bvh_children,
