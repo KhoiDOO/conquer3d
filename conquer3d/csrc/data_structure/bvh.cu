@@ -1,5 +1,6 @@
 #include "bvh.h"
 #include "zcurve.h"
+#include "../primitive/ray.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/device_ptr.h>
@@ -443,6 +444,94 @@ namespace bvh
 
         query_self_bvh_kernel<<<blocks, threads>>>(
             num_objects,
+            bvh_aabb_mins,
+            bvh_aabb_maxs,
+            bvh_children,
+            object_ids,
+            out_query_ids,
+            out_object_ids,
+            hit_counter,
+            max_capacity
+        );
+    }
+
+    __global__ void query_ray_bvh_kernel(
+        const uint32_t num_queries,
+        const uint32_t num_objects,
+        const float3* __restrict__ ray_origins,
+        const float3* __restrict__ ray_dirs,
+        const float3* __restrict__ bvh_aabb_mins,
+        const float3* __restrict__ bvh_aabb_maxs,
+        const int2* __restrict__ bvh_children,
+        const int* __restrict__ object_ids,
+        int64_t* __restrict__ out_query_ids,
+        int64_t* __restrict__ out_object_ids,
+        int64_t* __restrict__ hit_counter,
+        const int64_t max_capacity)
+    {
+        uint32_t q_idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (q_idx >= num_queries) return;
+
+        Ray ray(ray_origins[q_idx], ray_dirs[q_idx]);
+
+        int stack[BVH_STACK_SIZE];
+        int stack_ptr = 0;
+        stack[0] = 0; 
+
+        while (stack_ptr >= 0) 
+        {
+            int node_idx = stack[stack_ptr--]; 
+            float t_hit;
+
+            if (ray.is_intersect_aabb(bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx], t_hit)) 
+            {
+                if (node_idx >= num_objects - 1) 
+                {
+                    int leaf_idx = node_idx - (num_objects - 1);
+                    int original_obj_id = object_ids[leaf_idx];
+
+                    uint64_t write_idx = (uint64_t)atomicAdd((unsigned long long int*)hit_counter, 1ULL);
+
+                    if (write_idx < max_capacity) {
+                        out_query_ids[write_idx] = q_idx;
+                        out_object_ids[write_idx] = original_obj_id;
+                    }
+                } 
+                else 
+                {
+                    if (stack_ptr + 2 < BVH_STACK_SIZE)
+                    {
+                        int2 children = bvh_children[node_idx];
+                        stack[++stack_ptr] = children.x;
+                        stack[++stack_ptr] = children.y;
+                    }
+                }
+            }
+        }
+    }
+
+    void query_ray(
+        const uint32_t num_queries,
+        const uint32_t num_objects,
+        const float3* __restrict__ ray_origins,
+        const float3* __restrict__ ray_dirs,
+        const float3* __restrict__ bvh_aabb_mins,
+        const float3* __restrict__ bvh_aabb_maxs,
+        const int2* __restrict__ bvh_children,
+        const int* __restrict__ object_ids,
+        int64_t* __restrict__ out_query_ids,
+        int64_t* __restrict__ out_object_ids,
+        int64_t* __restrict__ hit_counter,
+        const int64_t max_capacity)
+    {
+        uint32_t threads = NTHREADS;
+        uint32_t blocks = (num_queries + threads - 1) / threads;
+
+        query_ray_bvh_kernel<<<blocks, threads>>>(
+            num_queries,
+            num_objects,
+            ray_origins,
+            ray_dirs,
             bvh_aabb_mins,
             bvh_aabb_maxs,
             bvh_children,
