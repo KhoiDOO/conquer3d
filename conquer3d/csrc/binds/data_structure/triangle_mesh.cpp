@@ -97,6 +97,15 @@ bool TriangleMesh::is_self_intersection()
     return this->bvh.value().is_self_intersection(this->vertices, this->triangles);
 }
 
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleMesh::get_ray_intersection(
+    const torch::Tensor &ray_origins,
+    const torch::Tensor &ray_dirs,
+    bool return_distance)
+{
+    this->build_bvh();
+    return this->bvh.value().get_ray_intersection(ray_origins, ray_dirs, this->vertices, this->triangles, return_distance);
+}
+
 torch::Tensor TriangleMesh::get_triangle_areas()
 {
     if (!this->triangle_areas.defined())
@@ -313,8 +322,22 @@ void bind_ds_triangle_mesh(py::module_ &m)
         .def_property_readonly("surface_area", &TriangleMesh::get_surface_area)
         .def_property_readonly("bvh", &TriangleMesh::build_bvh)
         .def("build_bvh", &TriangleMesh::build_bvh)
-        .def("get_self_intersection", &TriangleMesh::get_self_intersection)
-        .def("is_self_intersection", &TriangleMesh::is_self_intersection)
+        .def("get_self_intersection", &TriangleMesh::get_self_intersection,
+             "Find all self-intersecting triangle pairs")
+        .def("is_self_intersection", &TriangleMesh::is_self_intersection,
+             "Check if there are any self-intersecting triangle pairs")
+        .def("get_ray_intersection", [](TriangleMesh& self, const torch::Tensor& ray_origins, const torch::Tensor& ray_dirs, bool return_distance) -> py::object {
+                 auto result = self.get_ray_intersection(ray_origins, ray_dirs, return_distance);
+                 if (return_distance) {
+                     return py::cast(result);
+                 } else {
+                     return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result), std::get<2>(result)));
+                 }
+             },
+             py::arg("ray_origins"),
+             py::arg("ray_dirs"),
+             py::arg("return_distance") = false,
+             "Find all ray-triangle intersections. Returns (ray_ids, triangle_ids, intersect_points, [distances])")
         .def_property_readonly("edges", &TriangleMesh::get_edges)
         .def_property_readonly("edge_to_triangle_offsets", &TriangleMesh::get_edge_to_triangle_offsets)
         .def_property_readonly("edge_to_triangle_counts", &TriangleMesh::get_edge_to_triangle_counts)
