@@ -12,16 +12,6 @@ from torch.utils.cpp_extension import (
     CUDAExtension,
 )
 
-def read_version():
-    """Read the version number from the VERSION file."""
-    version_file = os.path.join(os.path.dirname(__file__), "pyproject.toml")
-    with open(version_file, "r") as f:
-        for line in f:
-            if line.startswith("version ="):
-                version = line.split("=")[1].strip().strip('"')
-                return version
-    raise ValueError("Version not found in pyproject.toml")
-
 def get_extensions():
     """Build C++ and CUDA extensions for the conquer3d package."""
     
