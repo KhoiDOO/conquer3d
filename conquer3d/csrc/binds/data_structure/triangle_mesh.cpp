@@ -97,6 +97,21 @@ bool TriangleMesh::is_self_intersection()
     return this->bvh.value().is_self_intersection(this->vertices, this->triangles);
 }
 
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleMesh::query_points(
+    const torch::Tensor &query_pts,
+    bool return_sdf,
+    bool return_prj_pts,
+    int sign_mode,
+    int distance_mode)
+{
+    if (distance_mode == 0) {
+        this->build_bvh();
+        return this->bvh.value().query_point(query_pts, this->vertices, this->triangles, return_sdf, return_prj_pts, sign_mode);
+    } else {
+        throw std::runtime_error("distance_mode != 0 not implemented yet");
+    }
+}
+
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleMesh::get_ray_intersection(
     const torch::Tensor &ray_origins,
     const torch::Tensor &ray_dirs,
@@ -338,6 +353,13 @@ void bind_ds_triangle_mesh(py::module_ &m)
              py::arg("ray_dirs"),
              py::arg("return_distance") = false,
              "Find all ray-triangle intersections. Returns (ray_ids, triangle_ids, intersect_points, [distances])")
+        .def("query_points", &TriangleMesh::query_points,
+             py::arg("query_pts"),
+             py::arg("return_sdf") = false,
+             py::arg("return_prj_pts") = true,
+             py::arg("sign_mode") = 0,
+             py::arg("distance_mode") = 0,
+             "Query points against the mesh. Returns (query_ids, triangle_ids, projected_points, distances)")
         .def_property_readonly("edges", &TriangleMesh::get_edges)
         .def_property_readonly("edge_to_triangle_offsets", &TriangleMesh::get_edge_to_triangle_offsets)
         .def_property_readonly("edge_to_triangle_counts", &TriangleMesh::get_edge_to_triangle_counts)
