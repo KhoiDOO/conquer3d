@@ -28,6 +28,14 @@ public:
         const torch::Tensor &vertices,
         const torch::Tensor &triangles,
         bool return_distance = false);
+
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> query_point(
+        const torch::Tensor &query_points,
+        const torch::Tensor &vertices,
+        const torch::Tensor &triangles,
+        bool return_sdf = false,
+        bool return_prj_pts = true,
+        int sign_mode = 0);
 };
 
 #endif // MESH_BVH_H
