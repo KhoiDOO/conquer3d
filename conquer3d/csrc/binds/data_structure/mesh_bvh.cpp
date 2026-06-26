@@ -32,5 +32,13 @@ void bind_ds_mesh_bvh(py::module_& m)
              py::arg("vertices"),
              py::arg("triangles"),
              py::arg("return_distance") = false,
-             "Find all ray-triangle intersections. Returns (ray_ids, triangle_ids, intersect_points, [distances])");
+             "Find all ray-triangle intersections. Returns (ray_ids, triangle_ids, intersect_points, [distances])")
+        .def("query_point", &MeshBVH::query_point,
+             py::arg("query_points"),
+             py::arg("vertices"),
+             py::arg("triangles"),
+             py::arg("return_sdf") = false,
+             py::arg("return_prj_pts") = true,
+             py::arg("sign_mode") = 0,
+             "Find the closest triangle to each query point. Returns (query_ids, triangle_ids, projected_points, distances)");
 }
