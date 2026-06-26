@@ -61,6 +61,11 @@ public:
     torch::Tensor get_self_intersection();
     bool is_self_intersection();
 
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> get_ray_intersection(
+        const torch::Tensor &ray_origins,
+        const torch::Tensor &ray_dirs,
+        bool return_distance = false);
+
     void compute_edges_to_triangle_map();
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> get_edges_to_triangle_map();
     
