@@ -112,6 +112,24 @@ namespace aabb
         out_surface_area = 2.0f * (dim_size.x * dim_size.y + dim_size.x * dim_size.z + dim_size.y * dim_size.z);
     }
 
+    __device__ __forceinline__ float compute_squared_distance(
+        const float3 &p,
+        const float3 &aabb_min,
+        const float3 &aabb_max)
+    {
+        float d2 = 0.0f;
+        if (p.x < aabb_min.x) d2 += (aabb_min.x - p.x) * (aabb_min.x - p.x);
+        else if (p.x > aabb_max.x) d2 += (p.x - aabb_max.x) * (p.x - aabb_max.x);
+        
+        if (p.y < aabb_min.y) d2 += (aabb_min.y - p.y) * (aabb_min.y - p.y);
+        else if (p.y > aabb_max.y) d2 += (p.y - aabb_max.y) * (p.y - aabb_max.y);
+        
+        if (p.z < aabb_min.z) d2 += (aabb_min.z - p.z) * (aabb_min.z - p.z);
+        else if (p.z > aabb_max.z) d2 += (p.z - aabb_max.z) * (p.z - aabb_max.z);
+        
+        return d2;
+    }
+
     __device__ __forceinline__ bool test_aabb_overlap(
         const float3 &query_aabb_min,
         const float3 &query_aabb_max,
