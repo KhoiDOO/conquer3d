@@ -153,6 +153,52 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query_self()
     );
 }
 
+std::tuple<torch::Tensor, torch::Tensor> BVH::query_ray(
+    const torch::Tensor &ray_origins,
+    const torch::Tensor &ray_dirs)
+{
+    CHECK_INPUT(ray_origins);
+    CHECK_INPUT(ray_dirs);
+    TORCH_CHECK(ray_origins.scalar_type() == torch::kFloat32, "ray_origins must be float32");
+    TORCH_CHECK(ray_dirs.scalar_type() == torch::kFloat32, "ray_dirs must be float32");
+    TORCH_CHECK(ray_origins.size(1) == 3, "ray_origins must have shape (M, 3)");
+    TORCH_CHECK(ray_dirs.size(1) == 3, "ray_dirs must have shape (M, 3)");
+
+    const uint32_t num_queries = static_cast<uint32_t>(ray_origins.size(0));
+    auto options_int64 = ray_origins.options().dtype(torch::kInt64);
+
+    if (num_queries == 0) {
+        throw std::runtime_error("Cannot query BVH with 0 queries.");
+    }
+
+    torch::Tensor out_query_ids = torch::empty({BVH_MAX_CAPACITY}, options_int64);
+    torch::Tensor out_object_ids = torch::empty({BVH_MAX_CAPACITY}, options_int64);
+    torch::Tensor hit_counter = torch::zeros({1}, options_int64);
+
+    bvh::query_ray(
+        num_queries,
+        this->num_objects,
+        reinterpret_cast<const float3 *>(ray_origins.data_ptr<float>()),
+        reinterpret_cast<const float3 *>(ray_dirs.data_ptr<float>()),
+        reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
+        reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
+        reinterpret_cast<const int2 *>(this->bvh_children.data_ptr<int>()),
+        reinterpret_cast<const int *>(this->object_ids.data_ptr<int>()),
+        reinterpret_cast<int64_t *>(out_query_ids.data_ptr<int64_t>()),
+        reinterpret_cast<int64_t *>(out_object_ids.data_ptr<int64_t>()),
+        reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()),
+        static_cast<int64_t>(BVH_MAX_CAPACITY)
+    );
+
+    int64_t num_hits = hit_counter.item<int64_t>();
+    num_hits = std::min(num_hits, static_cast<int64_t>(BVH_MAX_CAPACITY));
+
+    return std::make_tuple(
+        out_query_ids.slice(0, 0, num_hits), 
+        out_object_ids.slice(0, 0, num_hits)
+    );
+}
+
 void bind_ds_bvh(py::module_& m)
 {
     py::class_<BVH>(m, "BVH")
@@ -167,5 +213,10 @@ void bind_ds_bvh(py::module_& m)
              "Query the BVH with bounding boxes or segments. Returns (query_ids, object_ids).")
              
         .def("query_self", &BVH::query_self,
-             "Query the BVH against itself. Returns unique overlapping (query_ids, object_ids).");
+             "Query the BVH against itself. Returns unique overlapping (query_ids, object_ids).")
+
+        .def("query_ray", &BVH::query_ray,
+             py::arg("ray_origins"), 
+             py::arg("ray_dirs"),
+             "Query the BVH with rays. Returns (query_ids, object_ids).");
 }
