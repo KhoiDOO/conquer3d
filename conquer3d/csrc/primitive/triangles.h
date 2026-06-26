@@ -43,6 +43,50 @@ struct Triangle {
         }
         return false;
     }
+
+    __host__ __device__ __forceinline__ float3 compute_closest_point(const float3& p) const {
+        float3 ab = v1 - v0;
+        float3 ac = v2 - v0;
+        float3 ap = p - v0;
+
+        float d1 = maths::dot(ab, ap);
+        float d2 = maths::dot(ac, ap);
+        if (d1 <= 0.0f && d2 <= 0.0f) return v0;
+
+        float3 bp = p - v1;
+        float d3 = maths::dot(ab, bp);
+        float d4 = maths::dot(ac, bp);
+        if (d3 >= 0.0f && d4 <= d3) return v1;
+
+        float vc = d1*d4 - d3*d2;
+        if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) {
+            float v = d1 / (d1 - d3);
+            return v0 + v * ab;
+        }
+
+        float3 cp = p - v2;
+        float d5 = maths::dot(ab, cp);
+        float d6 = maths::dot(ac, cp);
+        if (d6 >= 0.0f && d5 <= d6) return v2;
+
+        float vb = d5*d2 - d1*d6;
+        if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) {
+            float w = d2 / (d2 - d6);
+            return v0 + w * ac;
+        }
+
+        float va = d3*d6 - d5*d4;
+        if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) {
+            float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+            return v1 + w * (v2 - v1);
+        }
+
+        float denom = 1.0f / (va + vb + vc);
+        float v = vb * denom;
+        float w = vc * denom;
+        return v0 + ab * v + ac * w;
+    }
+
     __host__ __device__ __forceinline__ float3 compute_normal() const {
         float3 edge1 = v1 - v0;
         float3 edge2 = v2 - v0;
