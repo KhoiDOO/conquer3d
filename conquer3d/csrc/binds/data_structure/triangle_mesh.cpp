@@ -50,9 +50,31 @@ void TriangleMesh::compute_triangle_normals()
     this->triangle_normals = torch::empty({static_cast<int64_t>(this->num_triangles), 3}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
     triangle_mesh::compute_triangle_normals(
         this->num_triangles,
-        reinterpret_cast<float3 *>(this->vertices.data_ptr<float>()),
-        reinterpret_cast<int3 *>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<const float3 *>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
         reinterpret_cast<float3 *>(this->triangle_normals.data_ptr<float>()));
+}
+
+void TriangleMesh::compute_vertex_normals()
+{
+    uint32_t num_vertices = this->vertices.size(0);
+    this->vertex_normals = torch::zeros({static_cast<int64_t>(num_vertices), 3}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
+    
+    triangle_mesh::compute_vertex_normals(
+        num_vertices,
+        this->num_triangles,
+        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<const float3 *>(this->get_triangle_normals().data_ptr<float>()),
+        reinterpret_cast<float3 *>(this->vertex_normals.data_ptr<float>()));
+}
+
+torch::Tensor TriangleMesh::get_vertex_normals()
+{
+    if (!this->vertex_normals.defined())
+    {
+        this->compute_vertex_normals();
+    }
+    return this->vertex_normals;
 }
 
 void TriangleMesh::compute_triangle_areas()
@@ -119,6 +141,69 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleM
 {
     this->build_bvh();
     return this->bvh.value().get_ray_intersection(ray_origins, ray_dirs, this->vertices, this->triangles, return_distance);
+}
+
+std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>> TriangleMesh::sample_points(
+    int num_points, bool uniform, bool return_normals, bool return_colors, bool use_triangle_normal)
+{
+    if (this->num_triangles == 0) {
+        throw std::runtime_error("Cannot sample points from an empty mesh.");
+    }
+
+    torch::Tensor tri_indices;
+    if (!uniform) {
+        tri_indices = torch::randint(0, this->num_triangles, {num_points}, torch::TensorOptions().device(this->vertices.device()).dtype(torch::kInt64));
+    } else {
+        torch::Tensor areas = this->get_triangle_areas();
+        tri_indices = torch::multinomial(areas, num_points, true);
+    }
+
+    torch::Tensor r1_r2 = torch::rand({num_points, 2}, torch::TensorOptions().device(this->vertices.device()).dtype(torch::kFloat32));
+    torch::Tensor out_points = torch::empty({num_points, 3}, torch::TensorOptions().device(this->vertices.device()).dtype(torch::kFloat32));
+
+    torch::Tensor out_normals, out_colors;
+    const float3* d_vertex_normals = nullptr;
+    const float3* d_triangle_normals = nullptr;
+    const float3* d_vertex_colors = nullptr;
+    float3* d_out_normals = nullptr;
+    float3* d_out_colors = nullptr;
+
+    if (return_normals) {
+        out_normals = torch::empty({num_points, 3}, torch::TensorOptions().device(this->vertices.device()).dtype(torch::kFloat32));
+        d_out_normals = reinterpret_cast<float3 *>(out_normals.data_ptr<float>());
+        if (use_triangle_normal) {
+            d_triangle_normals = reinterpret_cast<const float3 *>(this->get_triangle_normals().data_ptr<float>());
+        } else {
+            d_vertex_normals = reinterpret_cast<const float3 *>(this->get_vertex_normals().data_ptr<float>());
+        }
+    }
+
+    if (return_colors) {
+        if (!this->vertex_colors.defined()) {
+            throw std::runtime_error("Cannot sample colors because vertex_colors is not defined.");
+        }
+        out_colors = torch::empty({num_points, 3}, torch::TensorOptions().device(this->vertices.device()).dtype(torch::kFloat32));
+        d_out_colors = reinterpret_cast<float3 *>(out_colors.data_ptr<float>());
+        d_vertex_colors = reinterpret_cast<const float3 *>(this->vertex_colors.data_ptr<float>());
+    }
+
+    triangle_mesh::sample_points_triangle_mesh(
+        num_points,
+        reinterpret_cast<const float3 *>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<const int64_t *>(tri_indices.data_ptr<int64_t>()),
+        reinterpret_cast<const float2 *>(r1_r2.data_ptr<float>()),
+        d_vertex_normals,
+        d_triangle_normals,
+        d_vertex_colors,
+        reinterpret_cast<float3 *>(out_points.data_ptr<float>()),
+        d_out_normals,
+        d_out_colors);
+
+    std::optional<torch::Tensor> opt_normals = return_normals ? std::make_optional(out_normals) : std::nullopt;
+    std::optional<torch::Tensor> opt_colors = return_colors ? std::make_optional(out_colors) : std::nullopt;
+
+    return std::make_tuple(out_points, tri_indices, opt_normals, opt_colors);
 }
 
 torch::Tensor TriangleMesh::get_triangle_areas()
@@ -378,6 +463,8 @@ void bind_ds_triangle_mesh(py::module_ &m)
         .def("is_manifold", &TriangleMesh::is_manifold, py::arg("allow_boundary_edge") = true)
         .def("get_non_manifold_vertices", &TriangleMesh::get_non_manifold_vertices)
         .def("remove_triangles_by_mask", &TriangleMesh::remove_triangles_by_mask, py::arg("keep_mask"))
+        .def("sample_points", &TriangleMesh::sample_points, py::arg("num_points"), py::arg("uniform") = false, py::arg("return_normals") = false, py::arg("return_colors") = false, py::arg("use_triangle_normal") = true, "Sample points on the mesh")
+        .def("compute_vertex_normals", &TriangleMesh::compute_vertex_normals)
         .def_property_readonly("euler_characteristic", &TriangleMesh::get_euler_characteristic)
         .def_property_readonly("genus", &TriangleMesh::get_genus);
 }
