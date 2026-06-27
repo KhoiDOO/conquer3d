@@ -46,11 +46,12 @@ public:
 
     uint32_t get_num_triangles() const { return num_triangles; }
     torch::Tensor get_vertices() const { return vertices; }
-    torch::Tensor get_vertex_normals() const { return vertex_normals; }
+    torch::Tensor get_vertex_normals();
     torch::Tensor get_vertex_colors() const { return vertex_colors; }
     torch::Tensor get_triangles() const { return triangles; }
 
     void compute_triangle_normals();
+    void compute_vertex_normals();
     void compute_triangle_areas();
 
     torch::Tensor get_triangle_areas();
@@ -72,6 +73,13 @@ public:
         const torch::Tensor &ray_origins,
         const torch::Tensor &ray_dirs,
         bool return_distance = false);
+
+    std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>> sample_points(
+        int num_points,
+        bool uniform = false,
+        bool return_normals = false,
+        bool return_colors = false,
+        bool use_triangle_normal = true);
 
     void compute_edges_to_triangle_map();
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> get_edges_to_triangle_map();
@@ -105,6 +113,13 @@ namespace triangle_mesh
         const float3 *__restrict__ vertices,
         const int3 *__restrict__ triangles,
         float3 *__restrict__ triangle_normals);
+
+    __host__ void compute_vertex_normals(
+        const uint32_t num_vertices,
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ triangle_normals,
+        float3 *__restrict__ vertex_normals);
 
     __host__ void compute_triangle_areas(
         const uint32_t num_triangles,
@@ -141,6 +156,19 @@ namespace triangle_mesh
         const torch::Tensor& v2t_offsets,
         const torch::Tensor& v2t_counts,
         const torch::Tensor& v2t_indices);
+
+    __host__ void sample_points_triangle_mesh(
+        const int num_points,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        const int64_t *__restrict__ tri_indices,
+        const float2 *__restrict__ r1_r2,
+        const float3 *__restrict__ vertex_normals,
+        const float3 *__restrict__ triangle_normals,
+        const float3 *__restrict__ vertex_colors,
+        float3 *__restrict__ out_points,
+        float3 *__restrict__ out_normals,
+        float3 *__restrict__ out_colors);
 }
 
 #endif // TRIANGLE_MESH_H
