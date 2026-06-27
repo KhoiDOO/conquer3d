@@ -111,6 +111,67 @@ namespace triangle_mesh
             num_triangles, vertices, triangles, aabb_mins, aabb_maxs);
     }
 
+    __global__ void compute_vertex_normals_kernel(
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ triangle_normals,
+        float3 *__restrict__ vertex_normals)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles)
+        {
+            int3 tri = triangles[idx];
+            float3 n = triangle_normals[idx];
+            
+            atomicAdd(&vertex_normals[tri.x].x, n.x);
+            atomicAdd(&vertex_normals[tri.x].y, n.y);
+            atomicAdd(&vertex_normals[tri.x].z, n.z);
+            
+            atomicAdd(&vertex_normals[tri.y].x, n.x);
+            atomicAdd(&vertex_normals[tri.y].y, n.y);
+            atomicAdd(&vertex_normals[tri.y].z, n.z);
+            
+            atomicAdd(&vertex_normals[tri.z].x, n.x);
+            atomicAdd(&vertex_normals[tri.z].y, n.y);
+            atomicAdd(&vertex_normals[tri.z].z, n.z);
+        }
+    }
+
+    __global__ void normalize_vertex_normals_kernel(
+        const uint32_t num_vertices,
+        float3 *__restrict__ vertex_normals)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_vertices)
+        {
+            float3 n = vertex_normals[idx];
+            float length = sqrtf(n.x * n.x + n.y * n.y + n.z * n.z);
+            if (length > 1e-8f) {
+                vertex_normals[idx] = make_float3(n.x / length, n.y / length, n.z / length);
+            }
+        }
+    }
+
+    __host__ void compute_vertex_normals(
+        const uint32_t num_vertices,
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ triangle_normals,
+        float3 *__restrict__ vertex_normals)
+    {
+        if (num_triangles == 0 || num_vertices == 0) return;
+        
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+        
+        compute_vertex_normals_kernel<<<blocks, threads>>>(
+            num_triangles, triangles, triangle_normals, vertex_normals);
+            
+        int blocks_vert = (num_vertices + threads - 1) / threads;
+        normalize_vertex_normals_kernel<<<blocks_vert, threads>>>(
+            num_vertices, vertex_normals);
+    }
+
     __global__ void extract_edges_kernel(
         const uint32_t num_triangles,
         const int3* triangles,
@@ -394,5 +455,95 @@ namespace triangle_mesh
         );
         
         return torch::nonzero(out_is_non_manifold).squeeze(1);
+    }
+    __global__ void sample_points_triangle_mesh_kernel(
+        const int num_points,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        const int64_t *__restrict__ tri_indices,
+        const float2 *__restrict__ r1_r2,
+        const float3 *__restrict__ vertex_normals,
+        const float3 *__restrict__ triangle_normals,
+        const float3 *__restrict__ vertex_colors,
+        float3 *__restrict__ out_points,
+        float3 *__restrict__ out_normals,
+        float3 *__restrict__ out_colors)
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_points)
+            return;
+
+        int tri_idx = tri_indices[idx];
+        int3 tri = triangles[tri_idx];
+        float2 r = r1_r2[idx];
+
+        Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+        out_points[idx] = T.sample_point(r.x, r.y);
+
+        float sqrt_r1 = sqrtf(r.x);
+        float u = 1.0f - sqrt_r1;
+        float v = r.y * sqrt_r1;
+        float w = 1.0f - u - v;
+
+        if (out_normals) {
+            if (triangle_normals) {
+                out_normals[idx] = triangle_normals[tri_idx];
+            } else if (vertex_normals) {
+                float3 n0 = vertex_normals[tri.x];
+                float3 n1 = vertex_normals[tri.y];
+                float3 n2 = vertex_normals[tri.z];
+                float3 n = make_float3(
+                    n0.x * u + n1.x * v + n2.x * w,
+                    n0.y * u + n1.y * v + n2.y * w,
+                    n0.z * u + n1.z * v + n2.z * w);
+                
+                float length = sqrtf(n.x * n.x + n.y * n.y + n.z * n.z);
+                if (length > 1e-8f) {
+                    out_normals[idx] = make_float3(n.x / length, n.y / length, n.z / length);
+                } else {
+                    out_normals[idx] = make_float3(0.0f, 0.0f, 0.0f);
+                }
+            }
+        }
+
+        if (out_colors && vertex_colors) {
+            float3 c0 = vertex_colors[tri.x];
+            float3 c1 = vertex_colors[tri.y];
+            float3 c2 = vertex_colors[tri.z];
+            out_colors[idx] = make_float3(
+                c0.x * u + c1.x * v + c2.x * w,
+                c0.y * u + c1.y * v + c2.y * w,
+                c0.z * u + c1.z * v + c2.z * w);
+        }
+    }
+
+    __host__ void sample_points_triangle_mesh(
+        const int num_points,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        const int64_t *__restrict__ tri_indices,
+        const float2 *__restrict__ r1_r2,
+        const float3 *__restrict__ vertex_normals,
+        const float3 *__restrict__ triangle_normals,
+        const float3 *__restrict__ vertex_colors,
+        float3 *__restrict__ out_points,
+        float3 *__restrict__ out_normals,
+        float3 *__restrict__ out_colors)
+    {
+        int threads = NTHREADS;
+        int blocks = (num_points + threads - 1) / threads;
+
+        sample_points_triangle_mesh_kernel<<<blocks, threads>>>(
+            num_points,
+            vertices,
+            triangles,
+            tri_indices,
+            r1_r2,
+            vertex_normals,
+            triangle_normals,
+            vertex_colors,
+            out_points,
+            out_normals,
+            out_colors);
     }
 }
