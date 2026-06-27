@@ -99,6 +99,14 @@ struct Triangle {
         return 0.5f * maths::norm(maths::cross(edge1, edge2));
     }
 
+    __host__ __device__ __forceinline__ float3 sample_point(float r1, float r2) const {
+        float sqrt_r1 = sqrtf(r1);
+        float u = 1.0f - sqrt_r1;
+        float v = r2 * sqrt_r1;
+        float w = 1.0f - u - v;
+        return v0 * u + v1 * v + v2 * w;
+    }
+
     __host__ __device__ __forceinline__ void compute_aabb(float3 &aabb_min, float3 &aabb_max) const {
         aabb_min = make_float3(fminf(v0.x, fminf(v1.x, v2.x)), fminf(v0.y, fminf(v1.y, v2.y)), fminf(v0.z, fminf(v1.z, v2.z)));
         aabb_max = make_float3(fmaxf(v0.x, fmaxf(v1.x, v2.x)), fmaxf(v0.y, fmaxf(v1.y, v2.y)), fmaxf(v0.z, fmaxf(v1.z, v2.z)));
@@ -194,6 +202,11 @@ namespace triangle
     __device__ __inline__ bool test_intersection(const Triangle& T1, const Triangle& T2)
     {
         return T1.test_intersection(T2);
+    }
+
+    __device__ __inline__ float3 sample_point(const float3 &v0, const float3 &v1, const float3 &v2, float r1, float r2)
+    {
+        return Triangle(v0, v1, v2).sample_point(r1, r2);
     }
 } // namespace triangle
 
