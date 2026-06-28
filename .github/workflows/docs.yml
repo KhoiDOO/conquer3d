@@ -21,6 +21,7 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: '12.1.1'
+          use-github-cache: 'false'
           
       - name: Install dependencies and compile C++ bindings
         run: pip install .[docs]
