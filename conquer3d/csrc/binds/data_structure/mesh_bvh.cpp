@@ -212,19 +212,46 @@ void MeshBVH::build_winding_data(
 
 void bind_ds_mesh_bvh(py::module_ &m)
 {
-     py::class_<MeshBVH, BVH>(m, "MeshBVH")
+     py::class_<MeshBVH, BVH>(m, "MeshBVH", R"doc(
+A specialized Bounding Volume Hierarchy for Triangle Meshes.
+Inherits from BVH.
+)doc")
          .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
               py::arg("in_aabb_mins"),
               py::arg("in_aabb_maxs"),
-              "Construct MeshBVH from Triangle AABBs.")
+              R"doc(
+Construct MeshBVH from Triangle AABBs.
+
+Args:
+    in_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of triangle AABB minimums.
+    in_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of triangle AABB maximums.
+)doc")
          .def("get_self_intersection", &MeshBVH::get_self_intersection,
               py::arg("vertices"),
               py::arg("triangles"),
-              "Find all self-intersecting triangle pairs")
+              R"doc(
+Find all self-intersecting triangle pairs.
+
+Args:
+    vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
+    triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
+
+Returns:
+    torch.Tensor: Shape (K, 2) int64 tensor of intersecting triangle index pairs.
+)doc")
          .def("is_self_intersection", &MeshBVH::is_self_intersection,
               py::arg("vertices"),
               py::arg("triangles"),
-              "Check if there are any self-intersecting triangle pairs")
+              R"doc(
+Check if there are any self-intersecting triangle pairs.
+
+Args:
+    vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
+    triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
+
+Returns:
+    bool: True if there is at least one self-intersection.
+)doc")
          .def("get_ray_intersection", [](MeshBVH &self, const torch::Tensor &ray_origins, const torch::Tensor &ray_dirs, const torch::Tensor &vertices, const torch::Tensor &triangles, bool return_distance) -> py::object
               {
                  auto result = self.get_ray_intersection(ray_origins, ray_dirs, vertices, triangles, return_distance);
@@ -232,7 +259,41 @@ void bind_ds_mesh_bvh(py::module_ &m)
                      return py::cast(result);
                  } else {
                      return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result), std::get<2>(result)));
-                 } }, py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("vertices"), py::arg("triangles"), py::arg("return_distance") = false, "Find all ray-triangle intersections. Returns (ray_ids, triangle_ids, intersect_points, [distances])")
-         .def("query_point", &MeshBVH::query_point, py::arg("query_points"), py::arg("vertices"), py::arg("triangles"), py::arg("return_sdf") = false, py::arg("return_prj_pts") = true, py::arg("sign_mode") = 0, "Find the closest triangle to each query point. Returns (query_ids, triangle_ids, projected_points, distances)")
-         .def("build_winding_data", &MeshBVH::build_winding_data, py::arg("vertices"), py::arg("triangles"), "Computes the hierarchical area-weighted constants for Fast Winding Number queries.");
+                 } }, py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("vertices"), py::arg("triangles"), py::arg("return_distance") = false, 
+              R"doc(
+Find all ray-triangle intersections.
+
+Args:
+    ray_origins (torch.Tensor): Shape (R, 3) float32 tensor of ray origins.
+    ray_dirs (torch.Tensor): Shape (R, 3) float32 tensor of ray directions.
+    vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
+    triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
+    return_distance (bool): Whether to compute and return ray hit distances. Defaults to false.
+
+Returns:
+    tuple: (ray_ids, triangle_ids, intersect_points, [distances])
+)doc")
+         .def("query_point", &MeshBVH::query_point, py::arg("query_points"), py::arg("vertices"), py::arg("triangles"), py::arg("return_sdf") = false, py::arg("return_prj_pts") = true, py::arg("sign_mode") = 0, 
+              R"doc(
+Find the closest triangle to each query point.
+
+Args:
+    query_points (torch.Tensor): Shape (Q, 3) float32 tensor of query points.
+    vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
+    triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
+    return_sdf (bool): Whether to compute signed distances instead of unsigned. Defaults to false.
+    return_prj_pts (bool): Whether to compute and return projected points. Defaults to true.
+    sign_mode (int): Winding number method (0 for ray casting, 1 for fast winding number). Defaults to 0.
+
+Returns:
+    tuple: (query_ids, triangle_ids, projected_points, distances)
+)doc")
+         .def("build_winding_data", &MeshBVH::build_winding_data, py::arg("vertices"), py::arg("triangles"), 
+              R"doc(
+Computes the hierarchical area-weighted constants for Fast Winding Number queries.
+
+Args:
+    vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
+    triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
+)doc");
 }
