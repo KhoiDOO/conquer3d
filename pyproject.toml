@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conquer3d"
-version = "0.2.7"
+version = "0.2.8"
 description = "Geometric Cuda Tool Box"
 readme = "README.md"
 license = "MIT"
@@ -31,6 +31,11 @@ dev = [
     "black>=23.0",
     "ruff>=0.1.0",
     "mypy>=1.0",
+]
+docs = [
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mkdocs-jupyter"
 ]
 
 [project.urls]
