@@ -24,6 +24,9 @@ jobs:
           use-github-cache: 'false'
           
       - name: Install dependencies and compile C++ bindings
+        env:
+          FORCE_CUDA: "1"
+          NVCC_FLAGS: "-O3"
         run: pip install .[docs]
         
       - name: Deploy to GitHub Pages
