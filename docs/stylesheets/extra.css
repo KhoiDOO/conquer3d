@@ -1,0 +1,74 @@
+/* Force base typography size down */
+.md-typeset {
+  font-size: 0.65rem !important;
+  line-height: 1.4 !important;
+}
+
+/* Force code blocks size down */
+.md-typeset code, .md-typeset pre {
+  font-size: 0.8em !important;
+}
+
+/* Compress mkdocstrings signature headers */
+.doc-signature {
+  font-size: 0.75em !important;
+}
+
+/* Compress and style mkdocstrings documentation blocks to look like indented blocks */
+.doc-function > .doc-contents, .doc-method > .doc-contents, .doc-attribute > .doc-contents {
+  margin-top: 0.5em !important;
+  margin-bottom: 1em !important;
+  margin-left: 2rem !important; /* Medium indentation shifted right */
+  padding: 0.75em 1em !important; /* Inner spacing */
+  background-color: var(--md-code-bg-color); /* Light block background */
+  border-left: 4px solid var(--md-primary-fg-color); /* Colored left border */
+  border-radius: 0 4px 4px 0; /* Smooth right corners */
+}
+
+/* Style for mkdocstrings lists (Parameters / Returns) */
+/* Bold and color the parameter names */
+.doc-contents ul li > strong,
+.doc-contents ul li > strong > code,
+.doc-contents ul li > b,
+.doc-contents ul li > b > code {
+  color: var(--md-primary-fg-color) !important;
+  font-weight: 800 !important;
+}
+
+/* Italicize and color the parameter types */
+.doc-contents ul li > em,
+.doc-contents ul li > code > em,
+.doc-contents ul li > em > code,
+.doc-contents ul li .doc-symbol-annotation,
+.doc-contents ul li .doc-symbol-annotation > code,
+.doc-contents ul li > code > span {
+  color: var(--md-default-fg-color--light) !important;
+  font-style: italic !important;
+}
+
+/* Ensure the Section Titles (like "Args:" or "Returns:") stand out with a distinct highlight color */
+.doc-contents > p > strong,
+.doc-section-title {
+  color: #ff5252 !important; /* Vibrant Red/Pink to strongly highlight Args/Returns */
+  font-size: 1.1em;
+  font-weight: bold;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  display: inline-block;
+  margin-bottom: 0.5em;
+  margin-top: 1em;
+}
+
+/* Hide the hardcoded dash (–) in mkdocstrings lists when types fail to parse */
+.doc-section-item.field-body {
+  color: transparent !important;
+}
+.doc-section-item.field-body > * {
+  color: var(--md-default-fg-color) !important;
+}
+.doc-section-item.field-body > b,
+.doc-section-item.field-body > b > code,
+.doc-section-item.field-body > strong,
+.doc-section-item.field-body > strong > code {
+  color: var(--md-primary-fg-color) !important;
+}
+
