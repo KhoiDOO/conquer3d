@@ -100,13 +100,18 @@ class CustomBuildExt(BaseBuildExt):
         
         # 2. Automatically generate the .pyi stubs
         print("\n--- Generating PyBind11 Stubs ---")
+        import sys, os, subprocess
+        build_lib = os.path.abspath(self.build_lib)
+        env = os.environ.copy()
+        env["PYTHONPATH"] = f"{build_lib}:{env.get('PYTHONPATH', '')}"
+        
         try:
             subprocess.check_call([
-                "pybind11-stubgen", 
+                sys.executable, "-m", "pybind11_stubgen", 
                 "conquer3d._C", 
                 "-o", 
                 "."
-            ])
+            ], env=env)
             print("Successfully generated conquer3d/_C.pyi!")
         except Exception as e:
             print(f"Warning: Failed to generate .pyi stubs automatically: {e}")
