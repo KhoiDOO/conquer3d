@@ -111,7 +111,7 @@ class CustomBuildExt(BaseBuildExt):
                 "conquer3d._C", 
                 "-o", 
                 build_lib,
-                "--ignore-invalid-signature"
+                "--ignore-all-errors"
             ], env=env)
             print(f"Successfully generated conquer3d/_C.pyi in {build_lib}!")
         except Exception as e:
