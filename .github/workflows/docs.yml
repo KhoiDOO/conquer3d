@@ -27,6 +27,7 @@ jobs:
         env:
           FORCE_CUDA: "1"
           NVCC_FLAGS: "-O3"
+          TORCH_CUDA_ARCH_LIST: "8.0"
         run: pip install .[docs]
         
       - name: Deploy to GitHub Pages
