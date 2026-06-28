@@ -234,26 +234,66 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> BVH::query_point(
 
 void bind_ds_bvh(py::module_& m)
 {
-    py::class_<BVH>(m, "BVH")
+    py::class_<BVH>(m, "BVH", R"doc(
+A highly efficient Bounding Volume Hierarchy (LBVH) data structure natively backed by CUDA.
+)doc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
              py::arg("in_aabb_mins"), 
              py::arg("in_aabb_maxs"),
-             "Construct and build the Karras LBVH from Gaussian AABBs.")
+             R"doc(
+Construct and build the Karras LBVH from Gaussian AABBs.
+
+Args:
+    in_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of AABB minimum coordinates.
+    in_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of AABB maximum coordinates.
+)doc")
              
         .def("query", &BVH::query,
              py::arg("query_aabb_mins"), 
              py::arg("query_aabb_maxs"),
-             "Query the BVH with bounding boxes or segments. Returns (query_ids, object_ids).")
+             R"doc(
+Query the BVH with bounding boxes or segments.
+
+Args:
+    query_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of query AABB minimum coordinates.
+    query_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of query AABB maximum coordinates.
+
+Returns:
+    tuple: (query_ids, object_ids)
+)doc")
              
         .def("query_self", &BVH::query_self,
-             "Query the BVH against itself. Returns unique overlapping (query_ids, object_ids).")
+             R"doc(
+Query the BVH against itself.
+
+Returns:
+    tuple: (query_ids, object_ids) representing unique overlapping pairs.
+)doc")
 
         .def("query_ray", &BVH::query_ray,
              py::arg("ray_origins"),
              py::arg("ray_dirs"),
              py::arg("max_capacity") = BVH_MAX_CAPACITY,
-             "Find all ray-AABB intersections. Returns (ray_ids, object_ids)")
+             R"doc(
+Find all ray-AABB intersections.
+
+Args:
+    ray_origins (torch.Tensor): Shape (M, 3) float32 tensor of ray origins.
+    ray_dirs (torch.Tensor): Shape (M, 3) float32 tensor of ray directions.
+    max_capacity (int): Maximum global capacity for recording intersections. Defaults to BVH_MAX_CAPACITY.
+
+Returns:
+    tuple: (ray_ids, object_ids)
+)doc")
         .def("query_point", &BVH::query_point,
              py::arg("query_points"),
-             "Find the closest leaf AABB to each query point. Returns (query_ids, object_ids, distances)");
+             R"doc(
+Find the closest leaf AABB to each query point.
+
+Args:
+    query_points (torch.Tensor): Shape (M, 3) float32 tensor of query points.
+
+Returns:
+    tuple: (query_ids, object_ids, distances)
+)doc");
 }
