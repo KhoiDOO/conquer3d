@@ -20,7 +20,7 @@ jobs:
         uses: Jimver/cuda-toolkit@v0.2.14
         id: cuda-toolkit
         with:
-          cuda: '12.1.1'
+          cuda: '13.0.0'
           use-github-cache: 'false'
           
       - name: Install dependencies and compile C++ bindings
