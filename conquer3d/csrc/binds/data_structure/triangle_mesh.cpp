@@ -406,26 +406,92 @@ bool TriangleMesh::is_manifold(bool allow_boundary_edge) {
 
 void bind_ds_triangle_mesh(py::module_ &m)
 {
-    py::class_<TriangleMesh>(m, "TriangleMesh")
+    py::class_<TriangleMesh>(m, "TriangleMesh", R"doc(
+A highly efficient Triangle Mesh data structure natively backed by CUDA.
+
+Args:
+    in_vertices (torch.Tensor): A tensor of shape (N, 3) containing float32 vertex coordinates.
+    in_triangles (torch.Tensor): A tensor of shape (M, 3) containing int32 triangle indices.
+    in_vertex_normals (torch.Tensor, optional): A tensor of shape (N, 3) containing float32 vertex normals. Defaults to None.
+    in_vertex_colors (torch.Tensor, optional): A tensor of shape (N, 3) containing float32 vertex colors. Defaults to None.
+)doc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &, std::optional<torch::Tensor>, std::optional<torch::Tensor>>(),
              py::arg("in_vertices"),
              py::arg("in_triangles"),
              py::arg("in_vertex_normals") = std::nullopt,
              py::arg("in_vertex_colors") = std::nullopt)
-        .def_property_readonly("num_triangles", &TriangleMesh::get_num_triangles)
-        .def_property_readonly("vertices", &TriangleMesh::get_vertices)
-        .def_property_readonly("vertex_normals", &TriangleMesh::get_vertex_normals)
-        .def_property_readonly("vertex_colors", &TriangleMesh::get_vertex_colors)
-        .def_property_readonly("triangles", &TriangleMesh::get_triangles)
-        .def_property_readonly("triangle_areas", &TriangleMesh::get_triangle_areas)
-        .def_property_readonly("triangle_normals", &TriangleMesh::get_triangle_normals)
-        .def_property_readonly("surface_area", &TriangleMesh::get_surface_area)
-        .def_property_readonly("bvh", &TriangleMesh::build_bvh)
-        .def("build_bvh", &TriangleMesh::build_bvh)
-        .def("get_self_intersection", &TriangleMesh::get_self_intersection,
-             "Find all self-intersecting triangle pairs")
-        .def("is_self_intersection", &TriangleMesh::is_self_intersection,
-             "Check if there are any self-intersecting triangle pairs")
+        .def_property_readonly("num_triangles", &TriangleMesh::get_num_triangles, R"doc(
+Total number of triangles.
+
+Returns:
+    int - Total number of triangles.
+)doc")
+        .def_property_readonly("vertices", &TriangleMesh::get_vertices, R"doc(
+Mesh vertices coordinates.
+
+Returns:
+    torch.Tensor - Shape (N, 3) float32 tensor of vertices.
+)doc")
+        .def_property_readonly("vertex_normals", &TriangleMesh::get_vertex_normals, R"doc(
+Area-weighted vertex normals.
+
+Returns:
+    torch.Tensor - Shape (N, 3) float32 tensor of vertex normals.
+)doc")
+        .def_property_readonly("vertex_colors", &TriangleMesh::get_vertex_colors, R"doc(
+Vertex colors.
+
+Returns:
+    torch.Tensor - Shape (N, 3) float32 tensor of vertex colors.
+)doc")
+        .def_property_readonly("triangles", &TriangleMesh::get_triangles, R"doc(
+Mesh triangles.
+
+Returns:
+    torch.Tensor - Shape (M, 3) int32 tensor of triangles.
+)doc")
+        .def_property_readonly("triangle_areas", &TriangleMesh::get_triangle_areas, R"doc(
+Areas of each triangle.
+
+Returns:
+    torch.Tensor - Shape (M,) float32 tensor of triangle areas.
+)doc")
+        .def_property_readonly("triangle_normals", &TriangleMesh::get_triangle_normals, R"doc(
+Normals of each triangle.
+
+Returns:
+    torch.Tensor - Shape (M, 3) float32 tensor of triangle normals.
+)doc")
+        .def_property_readonly("surface_area", &TriangleMesh::get_surface_area, R"doc(
+Total surface area of the mesh.
+
+Returns:
+    torch.Tensor - Total surface area of the mesh.
+)doc")
+        .def_property_readonly("bvh", &TriangleMesh::build_bvh, R"doc(
+The Bounding Volume Hierarchy built for this mesh.
+
+Returns:
+    MeshBVH - The Bounding Volume Hierarchy built for this mesh.
+)doc")
+        .def("build_bvh", &TriangleMesh::build_bvh, R"doc(
+Builds and returns the Bounding Volume Hierarchy for the mesh.
+
+Returns:
+    MeshBVH: The constructed BVH object.
+)doc")
+        .def("get_self_intersection", &TriangleMesh::get_self_intersection, R"doc(
+Finds all self-intersecting triangle pairs in the mesh.
+
+Returns:
+    torch.Tensor: A tensor of shape (K, 2) containing pairs of intersecting triangle indices.
+)doc")
+        .def("is_self_intersection", &TriangleMesh::is_self_intersection, R"doc(
+Checks whether the mesh contains any self-intersecting triangles.
+
+Returns:
+    bool: True if there is at least one self-intersection, False otherwise.
+)doc")
         .def("get_ray_intersection", [](TriangleMesh& self, const torch::Tensor& ray_origins, const torch::Tensor& ray_dirs, bool return_distance) -> py::object {
                  auto result = self.get_ray_intersection(ray_origins, ray_dirs, return_distance);
                  if (return_distance) {
@@ -437,34 +503,154 @@ void bind_ds_triangle_mesh(py::module_ &m)
              py::arg("ray_origins"),
              py::arg("ray_dirs"),
              py::arg("return_distance") = false,
-             "Find all ray-triangle intersections. Returns (ray_ids, triangle_ids, intersect_points, [distances])")
+             R"doc(
+Computes intersections between a batch of rays and the mesh triangles.
+
+Args:
+    ray_origins (torch.Tensor): Shape (R, 3) float32 tensor of ray origins.
+    ray_dirs (torch.Tensor): Shape (R, 3) float32 tensor of ray directions.
+    return_distance (bool, optional): If True, returns intersection distances. Defaults to False.
+
+Returns:
+    tuple: (ray_ids, triangle_ids, intersect_points, [distances])
+)doc")
         .def("query_points", &TriangleMesh::query_points,
              py::arg("query_pts"),
              py::arg("return_sdf") = false,
              py::arg("return_prj_pts") = true,
              py::arg("sign_mode") = 0,
              py::arg("distance_mode") = 0,
-             "Query points against the mesh. Returns (query_ids, triangle_ids, projected_points, distances)")
-        .def_property_readonly("edges", &TriangleMesh::get_edges)
-        .def_property_readonly("edge_to_triangle_offsets", &TriangleMesh::get_edge_to_triangle_offsets)
-        .def_property_readonly("edge_to_triangle_counts", &TriangleMesh::get_edge_to_triangle_counts)
-        .def_property_readonly("edge_to_triangle_indices", &TriangleMesh::get_edge_to_triangle_indices)
-        .def("compute_triangle_areas", &TriangleMesh::compute_triangle_areas)
-        .def("compute_triangle_normals", &TriangleMesh::compute_triangle_normals)
-        .def("compute_edges_to_triangle_map", &TriangleMesh::compute_edges_to_triangle_map)
-        .def("get_edges_to_triangle_map", &TriangleMesh::get_edges_to_triangle_map)
-        .def("compute_vertices_to_triangle_map", &TriangleMesh::compute_vertices_to_triangle_map)
-        .def("get_vertices_to_triangle_map", &TriangleMesh::get_vertices_to_triangle_map)
-        .def_property_readonly("vertex_to_triangle_offsets", &TriangleMesh::get_vertex_to_triangle_offsets)
-        .def_property_readonly("vertex_to_triangle_counts", &TriangleMesh::get_vertex_to_triangle_counts)
-        .def_property_readonly("vertex_to_triangle_indices", &TriangleMesh::get_vertex_to_triangle_indices)
-        .def("is_edge_manifold", &TriangleMesh::is_edge_manifold, py::arg("allow_boundary_edge") = true)
-        .def("is_vertex_manifold", &TriangleMesh::is_vertex_manifold)
-        .def("is_manifold", &TriangleMesh::is_manifold, py::arg("allow_boundary_edge") = true)
-        .def("get_non_manifold_vertices", &TriangleMesh::get_non_manifold_vertices)
-        .def("remove_triangles_by_mask", &TriangleMesh::remove_triangles_by_mask, py::arg("keep_mask"))
-        .def("sample_points", &TriangleMesh::sample_points, py::arg("num_points"), py::arg("uniform") = false, py::arg("return_normals") = false, py::arg("return_colors") = false, py::arg("use_triangle_normal") = true, "Sample points on the mesh")
-        .def("compute_vertex_normals", &TriangleMesh::compute_vertex_normals)
-        .def_property_readonly("euler_characteristic", &TriangleMesh::get_euler_characteristic)
-        .def_property_readonly("genus", &TriangleMesh::get_genus);
+             R"doc(
+Finds the closest triangles and computes distances/SDFs for query points.
+
+Args:
+    query_pts (torch.Tensor): Shape (Q, 3) float32 tensor of query points.
+    return_sdf (bool, optional): Whether to return Signed Distance Field values. Defaults to False.
+    return_prj_pts (bool, optional): Whether to return projected points on the mesh. Defaults to True.
+    sign_mode (int, optional): The method for computing signs. Defaults to 0.
+    distance_mode (int, optional): Distance computation mode. Defaults to 0.
+
+Returns:
+    tuple: (query_ids, triangle_ids, projected_points, distances)
+)doc")
+        .def_property_readonly("edges", &TriangleMesh::get_edges, R"doc(
+Unique edges of the mesh.
+
+Returns:
+    torch.Tensor - Shape (E, 2) int32 tensor of unique edges.
+)doc")
+        .def_property_readonly("edge_to_triangle_offsets", &TriangleMesh::get_edge_to_triangle_offsets, R"doc(
+Edge to triangle offsets.
+
+Returns:
+    torch.Tensor - Edge to triangle offsets.
+)doc")
+        .def_property_readonly("edge_to_triangle_counts", &TriangleMesh::get_edge_to_triangle_counts, R"doc(
+Edge to triangle counts.
+
+Returns:
+    torch.Tensor - Edge to triangle counts.
+)doc")
+        .def_property_readonly("edge_to_triangle_indices", &TriangleMesh::get_edge_to_triangle_indices, R"doc(
+Edge to triangle indices.
+
+Returns:
+    torch.Tensor - Edge to triangle indices.
+)doc")
+        .def("compute_triangle_areas", &TriangleMesh::compute_triangle_areas, "Computes the areas of all triangles.")
+        .def("compute_triangle_normals", &TriangleMesh::compute_triangle_normals, "Computes the normals for all triangles.")
+        .def("compute_edges_to_triangle_map", &TriangleMesh::compute_edges_to_triangle_map, "Computes the edge-to-triangle connectivity map.")
+        .def("get_edges_to_triangle_map", &TriangleMesh::get_edges_to_triangle_map, R"doc(
+Gets the edge to triangle connectivity mapping.
+
+Returns:
+    tuple: (edges, offsets, counts, indices)
+)doc")
+        .def("compute_vertices_to_triangle_map", &TriangleMesh::compute_vertices_to_triangle_map, "Computes the vertex-to-triangle connectivity map.")
+        .def("get_vertices_to_triangle_map", &TriangleMesh::get_vertices_to_triangle_map, R"doc(
+Gets the vertex to triangle connectivity mapping.
+
+Returns:
+    tuple: (offsets, counts, indices)
+)doc")
+        .def_property_readonly("vertex_to_triangle_offsets", &TriangleMesh::get_vertex_to_triangle_offsets, R"doc(
+Vertex to triangle offsets.
+
+Returns:
+    torch.Tensor - Vertex to triangle offsets.
+)doc")
+        .def_property_readonly("vertex_to_triangle_counts", &TriangleMesh::get_vertex_to_triangle_counts, R"doc(
+Vertex to triangle counts.
+
+Returns:
+    torch.Tensor - Vertex to triangle counts.
+)doc")
+        .def_property_readonly("vertex_to_triangle_indices", &TriangleMesh::get_vertex_to_triangle_indices, R"doc(
+Vertex to triangle indices.
+
+Returns:
+    torch.Tensor - Vertex to triangle indices.
+)doc")
+        .def("is_edge_manifold", &TriangleMesh::is_edge_manifold, py::arg("allow_boundary_edge") = true, R"doc(
+Checks if the mesh is edge manifold.
+
+Args:
+    allow_boundary_edge (bool, optional): Whether to permit boundary edges (count <= 2). Defaults to True.
+
+Returns:
+    bool: True if the mesh is edge manifold.
+)doc")
+        .def("is_vertex_manifold", &TriangleMesh::is_vertex_manifold, R"doc(
+Checks if the mesh is vertex manifold.
+
+Returns:
+    bool: True if all vertices are manifold.
+)doc")
+        .def("is_manifold", &TriangleMesh::is_manifold, py::arg("allow_boundary_edge") = true, R"doc(
+Checks if the mesh is fully manifold (edge, vertex, and no self-intersections).
+
+Args:
+    allow_boundary_edge (bool, optional): Whether to permit boundary edges. Defaults to True.
+
+Returns:
+    bool: True if fully manifold.
+)doc")
+        .def("get_non_manifold_vertices", &TriangleMesh::get_non_manifold_vertices, R"doc(
+Gets all non-manifold vertices.
+
+Returns:
+    torch.Tensor: Tensor of vertex indices that are non-manifold.
+)doc")
+        .def("remove_triangles_by_mask", &TriangleMesh::remove_triangles_by_mask, py::arg("keep_mask"), R"doc(
+Removes triangles from the mesh based on a boolean mask.
+
+Args:
+    keep_mask (torch.Tensor): Shape (M,) boolean tensor indicating which triangles to keep.
+)doc")
+        .def("sample_points", &TriangleMesh::sample_points, py::arg("num_points"), py::arg("uniform") = false, py::arg("return_normals") = false, py::arg("return_colors") = false, py::arg("use_triangle_normal") = true, R"doc(
+Samples random points on the surface of the mesh.
+
+Args:
+    num_points (int): The number of points to sample.
+    uniform (bool, optional): If True, samples uniformly by area. Defaults to False.
+    return_normals (bool, optional): If True, returns normals at sampled points. Defaults to False.
+    return_colors (bool, optional): If True, returns colors at sampled points. Defaults to False.
+    use_triangle_normal (bool, optional): If True, uses flat triangle normals instead of interpolated vertex normals. Defaults to True.
+
+Returns:
+    tuple: (points, triangle_indices, [normals], [colors])
+)doc")
+        .def("compute_vertex_normals", &TriangleMesh::compute_vertex_normals, "Computes area-weighted vertex normals.")
+        .def_property_readonly("euler_characteristic", &TriangleMesh::get_euler_characteristic, R"doc(
+The Euler characteristic (V - E + F) of the mesh.
+
+Returns:
+    int - The Euler characteristic (V - E + F) of the mesh.
+)doc")
+        .def_property_readonly("genus", &TriangleMesh::get_genus, R"doc(
+The topological genus of the mesh.
+
+Returns:
+    int - The topological genus of the mesh.
+)doc");
 }
