@@ -75,13 +75,30 @@ std::tuple<torch::Tensor, torch::Tensor> KDTree::query(const torch::Tensor &quer
 
 void bind_ds_kdtree(py::module_ &m)
 {
-    py::class_<KDTree>(m, "KDTree")
+    py::class_<KDTree>(m, "KDTree", R"doc(
+A highly efficient KDTree data structure natively backed by CUDA.
+)doc")
         .def(py::init<const torch::Tensor &>(),
              py::arg("points"),
-             "Initializes and builds the KDTree on the GPU.")
+             R"doc(
+Initializes and builds the KDTree on the GPU.
+
+Args:
+    points (torch.Tensor): Shape (N, 3) float32 tensor of points to build the KDTree.
+)doc")
         .def("query", &KDTree::query,
              py::arg("query_points"),
              py::arg("k") = 1,
              py::arg("exclude_self") = false,
-             "Queries the KDTree for the K nearest neighbors.");
+             R"doc(
+Queries the KDTree for the K nearest neighbors.
+
+Args:
+    query_points (torch.Tensor): Shape (M, 3) float32 tensor of query points.
+    k (int): Number of nearest neighbors to search for. Defaults to 1.
+    exclude_self (bool): Whether to exclude the exact query point (if it exists). Defaults to false.
+
+Returns:
+    tuple: (distances, indices)
+)doc");
 }
