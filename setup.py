@@ -110,12 +110,13 @@ class CustomBuildExt(BaseBuildExt):
                 sys.executable, "-m", "pybind11_stubgen", 
                 "conquer3d._C", 
                 "-o", 
-                "."
+                build_lib,
+                "--ignore-invalid-signature"
             ], env=env)
-            print("Successfully generated conquer3d/_C.pyi!")
+            print(f"Successfully generated conquer3d/_C.pyi in {build_lib}!")
         except Exception as e:
-            print(f"Warning: Failed to generate .pyi stubs automatically: {e}")
-            print("Make sure pybind11-stubgen is installed.")
+            print(f"Error: Failed to generate .pyi stubs automatically: {e}")
+            raise
         print("---------------------------------\n")
 
 setup(

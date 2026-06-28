@@ -30,5 +30,11 @@ jobs:
           TORCH_CUDA_ARCH_LIST: "8.0"
         run: pip install .[docs]
         
+      - name: Debug Import
+        run: |
+          python -c "import conquer3d; print(conquer3d.__file__)"
+          python -c "import conquer3d._C; print('Successfully imported _C!')"
+          ls -la $(python -c "import conquer3d, os; print(os.path.dirname(conquer3d.__file__))")
+          
       - name: Deploy to GitHub Pages
         run: mkdocs gh-deploy --force
