@@ -224,11 +224,20 @@ std::tuple<torch::Tensor, torch::Tensor> PGSBVH::query_edge(
 
 void bind_ds_pgs_bvh(py::module_& m)
 {
-    py::class_<PGSBVH, BVH>(m, "PGSBVH")
+    py::class_<PGSBVH, BVH>(m, "PGSBVH", R"doc(
+A specialized Bounding Volume Hierarchy for Planar Gaussian Splatting (PGS) operations.
+Inherits from BVH.
+)doc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
              py::arg("in_aabb_mins"),
              py::arg("in_aabb_maxs"),
-             "Construct and build the Karras LBVH for Planar Gaussians.")
+             R"doc(
+Construct and build the Karras LBVH for Planar Gaussians.
+
+Args:
+    in_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of PGS AABB minimums.
+    in_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of PGS AABB maximums.
+)doc")
         .def("query_voxel_pair", &PGSBVH::query_voxel_pair,
              py::arg("vx_aabb_mins"),
              py::arg("vx_aabb_maxs"),
@@ -241,7 +250,25 @@ void bind_ds_pgs_bvh(py::module_& m)
              py::arg("return_centroids") = false,
              py::arg("return_centroid_densities") = false,
              py::arg("max_capacity") = 10000000,
-             "Perform exact Broad-to-Narrow phase intersection between Voxels and PGS.")
+             R"doc(
+Perform exact Broad-to-Narrow phase intersection between Voxels and PGS.
+
+Args:
+    vx_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB minimums.
+    vx_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB maximums.
+    means (torch.Tensor): Shape (N, 3) float32 tensor of PGS means.
+    normals (torch.Tensor): Shape (N, 3) float32 tensor of PGS normals.
+    covis (torch.Tensor): Shape (N, 3) float32 tensor of PGS inverse covariances.
+    gs_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of PGS AABB minimums.
+    gs_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of PGS AABB maximums.
+    isos (float | torch.Tensor): Iso-surface threshold. Can be a float or (N,) float32 tensor. Defaults to ISO.
+    return_centroids (bool): Whether to compute and return intersection centroids. Defaults to false.
+    return_centroid_densities (bool): Whether to return densities at centroids. Defaults to false.
+    max_capacity (int): Max global capacity for hits. Defaults to 10000000.
+
+Returns:
+    tuple: (hit_mask, voxel_ids, gaussian_ids, centroids, densities)
+)doc")
         .def("query_edge", &PGSBVH::query_edge,
              py::arg("edge_starts"),
              py::arg("edge_ends"),
@@ -250,5 +277,19 @@ void bind_ds_pgs_bvh(py::module_& m)
              py::arg("opacities"),
              py::arg("covis"),
              py::arg("isos") = ISO,
-             "Find the single highest-density PGS intersected by each line segment.");
+             R"doc(
+Find the single highest-density PGS intersected by each line segment.
+
+Args:
+    edge_starts (torch.Tensor): Shape (E, 3) float32 tensor of edge start points.
+    edge_ends (torch.Tensor): Shape (E, 3) float32 tensor of edge end points.
+    means (torch.Tensor): Shape (N, 3) float32 tensor of PGS means.
+    normals (torch.Tensor): Shape (N, 3) float32 tensor of PGS normals.
+    opacities (torch.Tensor): Shape (N,) float32 tensor of PGS opacities.
+    covis (torch.Tensor): Shape (N, 3) float32 tensor of PGS inverse covariances.
+    isos (float | torch.Tensor): Iso-surface threshold. Defaults to ISO.
+
+Returns:
+    tuple: (hit_mask, gaussian_ids)
+)doc");
 }
