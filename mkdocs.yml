@@ -1,0 +1,65 @@
+nav:
+- Home: index.md
+- Examples:
+  - Basic Mesh Operations: examples/mesh/01_basic_mesh_operations.ipynb
+  - Find Non-Manifold Vertices: examples/mesh/02_find_non_manifold_vertices.ipynb
+  - Self Intersection: examples/mesh/03_self_intersection.ipynb
+  - Ray Intersection: examples/mesh/04_ray_intersection.ipynb
+  - Query Point SDF: examples/mesh/05_query_point_sdf.ipynb
+  - Fast Winding Number: examples/mesh/06_fast_winding_number.ipynb
+  - Sample Points (Colors & Normals): examples/mesh/07_sample_points_with_colors_and_normals.ipynb
+- API Reference:
+  - Data Structure:
+    - TriangleMesh: api/data_structure/triangle_mesh.md
+    - MeshBVH: api/data_structure/mesh_bvh.md
+    - KDTree: api/data_structure/kdtree.md
+    - BVH: api/data_structure/bvh.md
+    - GSBVH: api/data_structure/gsbvh.md
+    - PGSBVH: api/data_structure/pgsbvh.md
+  - Primitive:
+    - Gaussian Splatting (gs): api/primitive/gs.md
+    - Point Gaussian Splatting (pgs): api/primitive/pgs.md
+  - Creation: api/creation.md
+plugins:
+- search
+- mkdocstrings:
+    handlers:
+      python:
+        options:
+          docstring_style: google
+          docstring_section_style: list
+          show_signature_annotations: true
+          show_if_no_docstring: true
+          show_object_full_path: true
+          show_root_full_path: true
+          show_root_heading: true
+          filters: ["!^__doc__$"]
+        paths:
+        - .
+- mkdocs-jupyter:
+    execute: false
+site_description: Geometric Cuda Tool Box
+site_name: Conquer3D
+theme:
+  features:
+  - navigation.tabs
+  - navigation.indexes
+  - content.code.copy
+  name: material
+  palette:
+  - accent: indigo
+    media: '(prefers-color-scheme: light)'
+    primary: indigo
+    scheme: default
+    toggle:
+      icon: material/brightness-7
+      name: Switch to dark mode
+  - accent: indigo
+    media: '(prefers-color-scheme: dark)'
+    primary: indigo
+    scheme: slate
+    toggle:
+      icon: material/brightness-4
+      name: Switch to light mode
+extra_css:
+- stylesheets/extra.css
