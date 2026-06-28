@@ -362,3 +362,5 @@ __marimo__/
 
 # Antigravity Agents
 .agents/
+# Release script
+release.py
