@@ -1,0 +1,3601 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Geometric Cuda Tool Box">
+      
+      
+      
+      
+        <link rel="prev" href="../../../examples/mesh/07_sample_points_with_colors_and_normals/">
+      
+      
+        <link rel="next" href="../mesh_bvh/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>TriangleMesh - Conquer3D</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#trianglemesh" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Conquer3D" class="md-header__button md-logo" aria-label="Conquer3D" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Conquer3D
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              TriangleMesh
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../examples/mesh/01_basic_mesh_operations/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Conquer3D" class="md-nav__button md-logo" aria-label="Conquer3D" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Conquer3D
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/mesh/01_basic_mesh_operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TriangleMesh Example
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/mesh/02_find_non_manifold_vertices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Find Non-Manifold Vertices
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/mesh/03_self_intersection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MeshBVH and Self-Intersection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/mesh/04_ray_intersection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ray Intersection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/mesh/05_query_point_sdf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Query Point SDF
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/mesh/06_fast_winding_number/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fast Winding Number
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../examples/mesh/07_sample_points_with_colors_and_normals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sample Points (Colors & Normals)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Structure
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Data Structure
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TriangleMesh
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TriangleMesh
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TriangleMesh
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TriangleMesh">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.__module__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __module__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.bvh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bvh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.edge_to_triangle_counts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        edge_to_triangle_counts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.edge_to_triangle_indices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        edge_to_triangle_indices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.edge_to_triangle_offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        edge_to_triangle_offsets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.edges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        edges
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.euler_characteristic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        euler_characteristic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.genus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        genus
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.num_triangles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        num_triangles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.surface_area" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        surface_area
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.triangle_areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        triangle_areas
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.triangle_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        triangle_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.triangles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        triangles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_colors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_colors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_to_triangle_counts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_to_triangle_counts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_to_triangle_indices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_to_triangle_indices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_to_triangle_offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_to_triangle_offsets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh._pybind11_conduit_v1_" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _pybind11_conduit_v1_
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.build_bvh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_bvh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_edges_to_triangle_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_edges_to_triangle_map
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_triangle_areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_triangle_areas
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_triangle_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_triangle_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_vertex_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_vertex_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_vertices_to_triangle_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_vertices_to_triangle_map
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_edges_to_triangle_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_edges_to_triangle_map
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_non_manifold_vertices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_non_manifold_vertices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_ray_intersection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_ray_intersection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_self_intersection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_self_intersection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_vertices_to_triangle_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_vertices_to_triangle_map
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.is_edge_manifold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_edge_manifold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.is_manifold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_manifold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.is_self_intersection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_self_intersection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.is_vertex_manifold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_vertex_manifold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.query_points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        query_points
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.remove_triangles_by_mask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        remove_triangles_by_mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.sample_points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sample_points
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mesh_bvh/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MeshBVH
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kdtree/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    KDTree
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../bvh/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BVH
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gsbvh/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GSBVH
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pgsbvh/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PGSBVH
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Primitive
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Primitive
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../primitive/gs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gaussian Splatting (gs)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../primitive/pgs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Point Gaussian Splatting (pgs)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../creation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Creation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TriangleMesh
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TriangleMesh">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.__module__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __module__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.bvh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bvh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.edge_to_triangle_counts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        edge_to_triangle_counts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.edge_to_triangle_indices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        edge_to_triangle_indices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.edge_to_triangle_offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        edge_to_triangle_offsets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.edges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        edges
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.euler_characteristic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        euler_characteristic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.genus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        genus
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.num_triangles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        num_triangles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.surface_area" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        surface_area
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.triangle_areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        triangle_areas
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.triangle_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        triangle_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.triangles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        triangles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_colors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_colors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_to_triangle_counts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_to_triangle_counts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_to_triangle_indices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_to_triangle_indices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertex_to_triangle_offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertex_to_triangle_offsets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.vertices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vertices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.__init__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __init__
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh._pybind11_conduit_v1_" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        _pybind11_conduit_v1_
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.build_bvh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_bvh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_edges_to_triangle_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_edges_to_triangle_map
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_triangle_areas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_triangle_areas
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_triangle_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_triangle_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_vertex_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_vertex_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.compute_vertices_to_triangle_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_vertices_to_triangle_map
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_edges_to_triangle_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_edges_to_triangle_map
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_non_manifold_vertices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_non_manifold_vertices
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_ray_intersection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_ray_intersection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_self_intersection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_self_intersection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.get_vertices_to_triangle_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_vertices_to_triangle_map
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.is_edge_manifold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_edge_manifold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.is_manifold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_manifold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.is_self_intersection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_self_intersection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.is_vertex_manifold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        is_vertex_manifold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.query_points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        query_points
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.remove_triangles_by_mask" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        remove_triangles_by_mask
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conquer3d.data_structure.TriangleMesh.sample_points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sample_points
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="trianglemesh">TriangleMesh</h1>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="conquer3d.data_structure.TriangleMesh" class="doc doc-heading">
+            <code>conquer3d.data_structure.TriangleMesh</code>
+
+
+</h2>
+
+
+    <div class="doc doc-contents first">
+            <p class="doc doc-class-bases">
+              Bases: <code>pybind11_builtins.pybind11_object</code></p>
+
+
+
+        <p>A highly efficient Triangle Mesh data structure natively backed by CUDA.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>in_vertices</code></b>
+              (<code><span title="torch.Tensor">Tensor</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>A tensor of shape (N, 3) containing float32 vertex coordinates.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>in_triangles</code></b>
+              (<code><span title="torch.Tensor">Tensor</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>A tensor of shape (M, 3) containing int32 triangle indices.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>in_vertex_normals</code></b>
+              (<code><span title="torch.Tensor">Tensor</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>A tensor of shape (N, 3) containing float32 vertex normals. Defaults to None.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>in_vertex_colors</code></b>
+              (<code><span title="torch.Tensor">Tensor</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>A tensor of shape (N, 3) containing float32 vertex colors. Defaults to None.</p>
+          </div>
+        </li>
+    </ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.__module__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="vm">__module__</span> <span class="o">=</span> <span class="s1">&#39;conquer3d._C&#39;</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>str(object='') -&gt; str
+str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p>
+<p>Create a new string object from the given object. If encoding or
+errors is specified, then the object must expose a data buffer
+that will be decoded using the given encoding and error handler.
+Otherwise, returns the result of object.<strong>str</strong>() (if defined)
+or repr(object).
+encoding defaults to sys.getdefaultencoding().
+errors defaults to 'strict'.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.bvh" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">bvh</span><span class="p">:</span> <span class="n">MeshBVH</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The Bounding Volume Hierarchy built for this mesh.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><a class="autorefs autorefs-internal" title="conquer3d.data_structure.MeshBVH (conquer3d._C.MeshBVH)" href="../mesh_bvh/#conquer3d.data_structure.MeshBVH">MeshBVH</a></code>
+          –
+          <div class="doc-md-description">
+            <p>MeshBVH - The Bounding Volume Hierarchy built for this mesh.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.edge_to_triangle_counts" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">edge_to_triangle_counts</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Edge to triangle counts.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Edge to triangle counts.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.edge_to_triangle_indices" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">edge_to_triangle_indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Edge to triangle indices.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Edge to triangle indices.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.edge_to_triangle_offsets" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">edge_to_triangle_offsets</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Edge to triangle offsets.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Edge to triangle offsets.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.edges" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">edges</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Unique edges of the mesh.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Shape (E, 2) int32 tensor of unique edges.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.euler_characteristic" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">euler_characteristic</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The Euler characteristic (V - E + F) of the mesh.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="int">int</span></code>
+          –
+          <div class="doc-md-description">
+            <p>int - The Euler characteristic (V - E + F) of the mesh.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.genus" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">genus</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The topological genus of the mesh.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="int">int</span></code>
+          –
+          <div class="doc-md-description">
+            <p>int - The topological genus of the mesh.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.num_triangles" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">num_triangles</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Total number of triangles.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="int">int</span></code>
+          –
+          <div class="doc-md-description">
+            <p>int - Total number of triangles.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.surface_area" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">surface_area</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Total surface area of the mesh.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Total surface area of the mesh.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.triangle_areas" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">triangle_areas</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Areas of each triangle.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Shape (M,) float32 tensor of triangle areas.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.triangle_normals" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">triangle_normals</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Normals of each triangle.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Shape (M, 3) float32 tensor of triangle normals.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.triangles" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">triangles</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Mesh triangles.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Shape (M, 3) int32 tensor of triangles.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.vertex_colors" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">vertex_colors</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Vertex colors.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Shape (N, 3) float32 tensor of vertex colors.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.vertex_normals" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">vertex_normals</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Area-weighted vertex normals.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Shape (N, 3) float32 tensor of vertex normals.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.vertex_to_triangle_counts" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">vertex_to_triangle_counts</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Vertex to triangle counts.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Vertex to triangle counts.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.vertex_to_triangle_indices" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">vertex_to_triangle_indices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Vertex to triangle indices.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Vertex to triangle indices.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.vertex_to_triangle_offsets" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">vertex_to_triangle_offsets</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Vertex to triangle offsets.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Vertex to triangle offsets.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.vertices" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">vertices</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Mesh vertices coordinates.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor - Shape (N, 3) float32 tensor of vertices.</p>
+          </div>
+        </li>
+    </ul>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.__init__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p><strong>init</strong>(self: conquer3d._C.TriangleMesh, in_vertices: torch.Tensor, in_triangles: torch.Tensor, in_vertex_normals: Optional[torch.Tensor] = None, in_vertex_colors: Optional[torch.Tensor] = None) -&gt; None</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh._pybind11_conduit_v1_" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">_pybind11_conduit_v1_</span><span class="p">()</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.build_bvh" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">build_bvh</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">MeshBVH</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>build_bvh(self: conquer3d._C.TriangleMesh) -&gt; conquer3d._C.MeshBVH</p>
+<p>Builds and returns the Bounding Volume Hierarchy for the mesh.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>MeshBVH</code></b> (              <code><a class="autorefs autorefs-internal" title="conquer3d.data_structure.MeshBVH (conquer3d._C.MeshBVH)" href="../mesh_bvh/#conquer3d.data_structure.MeshBVH">MeshBVH</a></code>
+)          –
+          <div class="doc-md-description">
+            <p>The constructed BVH object.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.compute_edges_to_triangle_map" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">compute_edges_to_triangle_map</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>compute_edges_to_triangle_map(self: conquer3d._C.TriangleMesh) -&gt; None</p>
+<p>Computes the edge-to-triangle connectivity map.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.compute_triangle_areas" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">compute_triangle_areas</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>compute_triangle_areas(self: conquer3d._C.TriangleMesh) -&gt; None</p>
+<p>Computes the areas of all triangles.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.compute_triangle_normals" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">compute_triangle_normals</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>compute_triangle_normals(self: conquer3d._C.TriangleMesh) -&gt; None</p>
+<p>Computes the normals for all triangles.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.compute_vertex_normals" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">compute_vertex_normals</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>compute_vertex_normals(self: conquer3d._C.TriangleMesh) -&gt; None</p>
+<p>Computes area-weighted vertex normals.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.compute_vertices_to_triangle_map" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">compute_vertices_to_triangle_map</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>compute_vertices_to_triangle_map(self: conquer3d._C.TriangleMesh) -&gt; None</p>
+<p>Computes the vertex-to-triangle connectivity map.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.get_edges_to_triangle_map" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">get_edges_to_triangle_map</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>get_edges_to_triangle_map(self: conquer3d._C.TriangleMesh) -&gt; tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]</p>
+<p>Gets the edge to triangle connectivity mapping.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>tuple</code></b> (              <code><span title="tuple">tuple</span>[<span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>]</code>
+)          –
+          <div class="doc-md-description">
+            <p>(edges, offsets, counts, indices)</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.get_non_manifold_vertices" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">get_non_manifold_vertices</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>get_non_manifold_vertices(self: conquer3d._C.TriangleMesh) -&gt; torch.Tensor</p>
+<p>Gets all non-manifold vertices.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor: Tensor of vertex indices that are non-manifold.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.get_ray_intersection" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">get_ray_intersection</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">typing</span><span class="o">.</span><span class="n">Any</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>get_ray_intersection(self: conquer3d._C.TriangleMesh, ray_origins: torch.Tensor, ray_dirs: torch.Tensor, return_distance: bool = False) -&gt; object</p>
+<p>Computes intersections between a batch of rays and the mesh triangles.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>ray_origins</code></b>
+              (<code><span title="torch.Tensor">Tensor</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Shape (R, 3) float32 tensor of ray origins.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>ray_dirs</code></b>
+              (<code><span title="torch.Tensor">Tensor</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Shape (R, 3) float32 tensor of ray directions.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>return_distance</code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>If True, returns intersection distances. Defaults to False.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>tuple</code></b> (              <code><span title="typing.Any">Any</span></code>
+)          –
+          <div class="doc-md-description">
+            <p>(ray_ids, triangle_ids, intersect_points, [distances])</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.get_self_intersection" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">get_self_intersection</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>get_self_intersection(self: conquer3d._C.TriangleMesh) -&gt; torch.Tensor</p>
+<p>Finds all self-intersecting triangle pairs in the mesh.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+              <code><span title="torch.Tensor">Tensor</span></code>
+          –
+          <div class="doc-md-description">
+            <p>torch.Tensor: A tensor of shape (K, 2) containing pairs of intersecting triangle indices.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.get_vertices_to_triangle_map" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">get_vertices_to_triangle_map</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>get_vertices_to_triangle_map(self: conquer3d._C.TriangleMesh) -&gt; tuple[torch.Tensor, torch.Tensor, torch.Tensor]</p>
+<p>Gets the vertex to triangle connectivity mapping.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>tuple</code></b> (              <code><span title="tuple">tuple</span>[<span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>]</code>
+)          –
+          <div class="doc-md-description">
+            <p>(offsets, counts, indices)</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.is_edge_manifold" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">is_edge_manifold</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>is_edge_manifold(self: conquer3d._C.TriangleMesh, allow_boundary_edge: bool = True) -&gt; bool</p>
+<p>Checks if the mesh is edge manifold.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>allow_boundary_edge</code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Whether to permit boundary edges (count &lt;= 2). Defaults to True.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>bool</code></b> (              <code><span title="bool">bool</span></code>
+)          –
+          <div class="doc-md-description">
+            <p>True if the mesh is edge manifold.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.is_manifold" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">is_manifold</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>is_manifold(self: conquer3d._C.TriangleMesh, allow_boundary_edge: bool = True) -&gt; bool</p>
+<p>Checks if the mesh is fully manifold (edge, vertex, and no self-intersections).</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>allow_boundary_edge</code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Whether to permit boundary edges. Defaults to True.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>bool</code></b> (              <code><span title="bool">bool</span></code>
+)          –
+          <div class="doc-md-description">
+            <p>True if fully manifold.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.is_self_intersection" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">is_self_intersection</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>is_self_intersection(self: conquer3d._C.TriangleMesh) -&gt; bool</p>
+<p>Checks whether the mesh contains any self-intersecting triangles.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>bool</code></b> (              <code><span title="bool">bool</span></code>
+)          –
+          <div class="doc-md-description">
+            <p>True if there is at least one self-intersection, False otherwise.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.is_vertex_manifold" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">is_vertex_manifold</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>is_vertex_manifold(self: conquer3d._C.TriangleMesh) -&gt; bool</p>
+<p>Checks if the mesh is vertex manifold.</p>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>bool</code></b> (              <code><span title="bool">bool</span></code>
+)          –
+          <div class="doc-md-description">
+            <p>True if all vertices are manifold.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.query_points" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">query_points</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>query_points(self: conquer3d._C.TriangleMesh, query_pts: torch.Tensor, return_sdf: bool = False, return_prj_pts: bool = True, sign_mode: int = 0, distance_mode: int = 0) -&gt; tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]</p>
+<p>Finds the closest triangles and computes distances/SDFs for query points.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>query_pts</code></b>
+              (<code><span title="torch.Tensor">Tensor</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Shape (Q, 3) float32 tensor of query points.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>return_sdf</code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Whether to return Signed Distance Field values. Defaults to False.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>return_prj_pts</code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Whether to return projected points on the mesh. Defaults to True.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>sign_mode</code></b>
+              (<code><span title="int">int</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>The method for computing signs. Defaults to 0.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>distance_mode</code></b>
+              (<code><span title="int">int</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Distance computation mode. Defaults to 0.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>tuple</code></b> (              <code><span title="tuple">tuple</span>[<span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>]</code>
+)          –
+          <div class="doc-md-description">
+            <p>(query_ids, triangle_ids, projected_points, distances)</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.remove_triangles_by_mask" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">remove_triangles_by_mask</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>remove_triangles_by_mask(self: conquer3d._C.TriangleMesh, keep_mask: torch.Tensor) -&gt; None</p>
+<p>Removes triangles from the mesh based on a boolean mask.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>keep_mask</code></b>
+              (<code><span title="torch.Tensor">Tensor</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>Shape (M,) boolean tensor indicating which triangles to keep.</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="conquer3d.data_structure.TriangleMesh.sample_points" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">conquer3d</span><span class="o">.</span><span class="n">data_structure</span><span class="o">.</span><span class="n">TriangleMesh</span><span class="o">.</span><span class="n">sample_points</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-method descriptor"><code>method descriptor</code></small>
+  </span>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>sample_points(self: conquer3d._C.TriangleMesh, num_points: int, uniform: bool = False, return_normals: bool = False, return_colors: bool = False, use_triangle_normal: bool = True) -&gt; tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]</p>
+<p>Samples random points on the surface of the mesh.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+            <b><code>num_points</code></b>
+              (<code><span title="int">int</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>The number of points to sample.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>uniform</code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>If True, samples uniformly by area. Defaults to False.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>return_normals</code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>If True, returns normals at sampled points. Defaults to False.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>return_colors</code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>If True, returns colors at sampled points. Defaults to False.</p>
+          </div>
+        </li>
+        <li class="doc-section-item field-body">
+            <b><code>use_triangle_normal</code></b>
+              (<code><span title="bool">bool</span></code>)
+          –
+          <div class="doc-md-description">
+            <p>If True, uses flat triangle normals instead of interpolated vertex normals. Defaults to True.</p>
+          </div>
+        </li>
+    </ul>
+
+
+<p><span class="doc-section-title">Returns:</span></p>
+    <ul>
+        <li class="doc-section-item field-body">
+<b><code>tuple</code></b> (              <code><span title="tuple">tuple</span>[<span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span>, <span title="torch.Tensor">Tensor</span> | None, <span title="torch.Tensor">Tensor</span> | None]</code>
+)          –
+          <div class="doc-md-description">
+            <p>(points, triangle_indices, [normals], [colors])</p>
+          </div>
+        </li>
+    </ul>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.indexes", "content.code.copy"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
