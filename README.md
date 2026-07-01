@@ -28,7 +28,7 @@ pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https
 pip install pybind11-stubgen
 pip install git+https://github.com/KhoiDOO/geocutool.git --no-build-isolation
 
-pip install plotly open3d jupyter trimesh
+pip install plotly open3d jupyter trimesh point-cloud-utils
 ```
 
 # Development
