@@ -312,22 +312,22 @@ std::tuple<torch::Tensor, torch::Tensor> GSBVH::query_edge(
     return std::make_tuple(hit_mask, out_gaus_ids);
 }
 
-void bind_ds_gs_bvh(py::module_& m)
+void bind_ds_gs_bvh(py::module_ &m)
 {
     py::class_<GSBVH, BVH>(m, "GSBVH", R"doc(
-A specialized Bounding Volume Hierarchy for Gaussian Splatting operations.
-Inherits from BVH.
-)doc")
+        A specialized Bounding Volume Hierarchy for Gaussian Splatting operations.
+        Inherits from BVH.
+        )doc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
              py::arg("in_aabb_mins"),
              py::arg("in_aabb_maxs"),
              R"doc(
-Construct and build the Karras LBVH for Gaussians.
+        Construct and build the Karras LBVH for Gaussians.
 
-Args:
-    in_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB minimums.
-    in_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB maximums.
-)doc")
+        Args:
+            in_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB minimums.
+            in_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB maximums.
+        )doc")
         .def("query_voxel_pair", &GSBVH::query_voxel_pair,
              py::arg("vx_aabb_mins"),
              py::arg("vx_aabb_maxs"),
@@ -343,26 +343,26 @@ Args:
              py::arg("return_centroids") = false,
              py::arg("max_capacity") = BVH_MAX_CAPACITY,
              R"doc(
-Perform exact Broad-to-Narrow phase intersection between Voxels and Gaussians.
+        Perform exact Broad-to-Narrow phase intersection between Voxels and Gaussians.
 
-Args:
-    vx_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB minimums.
-    vx_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB maximums.
-    means (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian means.
-    covis (torch.Tensor): Shape (N, 6) float32 tensor of Gaussian inverse covariances.
-    opacities (torch.Tensor): Shape (N,) float32 tensor of Gaussian opacities.
-    gs_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB minimums.
-    gs_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB maximums.
-    contact_points (torch.Tensor): Shape (N, 3) float32 tensor of contact points.
-    isos (float | torch.Tensor): Iso-surface threshold. Can be a float or (N,) float32 tensor. Defaults to ISO.
-    ar_threshold (float): Alpha scaling threshold. Defaults to 0.0.
-    p_threshold (float): Probability threshold. Defaults to 0.0.
-    return_centroids (bool): Whether to compute and return intersection centroids/densities. Defaults to false.
-    max_capacity (int): Max global capacity for hits. Defaults to BVH_MAX_CAPACITY.
+        Args:
+            vx_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB minimums.
+            vx_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB maximums.
+            means (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian means.
+            covis (torch.Tensor): Shape (N, 6) float32 tensor of Gaussian inverse covariances.
+            opacities (torch.Tensor): Shape (N,) float32 tensor of Gaussian opacities.
+            gs_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB minimums.
+            gs_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB maximums.
+            contact_points (torch.Tensor): Shape (N, 3) float32 tensor of contact points.
+            isos (float | torch.Tensor): Iso-surface threshold. Can be a float or (N,) float32 tensor. Defaults to ISO.
+            ar_threshold (float): Alpha scaling threshold. Defaults to 0.0.
+            p_threshold (float): Probability threshold. Defaults to 0.0.
+            return_centroids (bool): Whether to compute and return intersection centroids/densities. Defaults to false.
+            max_capacity (int): Max global capacity for hits. Defaults to BVH_MAX_CAPACITY.
 
-Returns:
-    tuple: (hit_mask, voxel_ids, gaussian_ids, centroids, densities)
-)doc")
+        Returns:
+            tuple: (hit_mask, voxel_ids, gaussian_ids, centroids, densities)
+        )doc")
         .def("query_edge_pair", &GSBVH::query_edge_pair,
              py::arg("edge_starts"),
              py::arg("edge_ends"),
@@ -371,19 +371,19 @@ Returns:
              py::arg("isos") = ISO,
              py::arg("max_capacity") = BVH_MAX_CAPACITY,
              R"doc(
-Find all Gaussians intersected by each line segment.
+        Find all Gaussians intersected by each line segment.
 
-Args:
-    edge_starts (torch.Tensor): Shape (E, 3) float32 tensor of edge start points.
-    edge_ends (torch.Tensor): Shape (E, 3) float32 tensor of edge end points.
-    means (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian means.
-    covis (torch.Tensor): Shape (N, 6) float32 tensor of Gaussian inverse covariances.
-    isos (float | torch.Tensor): Iso-surface threshold. Can be a float or (N,) tensor. Defaults to ISO.
-    max_capacity (int): Max global capacity for hits. Defaults to BVH_MAX_CAPACITY.
+        Args:
+            edge_starts (torch.Tensor): Shape (E, 3) float32 tensor of edge start points.
+            edge_ends (torch.Tensor): Shape (E, 3) float32 tensor of edge end points.
+            means (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian means.
+            covis (torch.Tensor): Shape (N, 6) float32 tensor of Gaussian inverse covariances.
+            isos (float | torch.Tensor): Iso-surface threshold. Can be a float or (N,) tensor. Defaults to ISO.
+            max_capacity (int): Max global capacity for hits. Defaults to BVH_MAX_CAPACITY.
 
-Returns:
-    tuple: (hit_mask, edge_ids, gaussian_ids)
-)doc")
+        Returns:
+            tuple: (hit_mask, edge_ids, gaussian_ids)
+        )doc")
         .def("query_edge", &GSBVH::query_edge,
              py::arg("edge_starts"),
              py::arg("edge_ends"),
@@ -392,17 +392,17 @@ Returns:
              py::arg("covis"),
              py::arg("isos") = ISO,
              R"doc(
-Find the single highest-density Gaussian intersected by each line segment.
+        Find the single highest-density Gaussian intersected by each line segment.
 
-Args:
-    edge_starts (torch.Tensor): Shape (E, 3) float32 tensor of edge start points.
-    edge_ends (torch.Tensor): Shape (E, 3) float32 tensor of edge end points.
-    means (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian means.
-    opacities (torch.Tensor): Shape (N,) float32 tensor of Gaussian opacities.
-    covis (torch.Tensor): Shape (N, 6) float32 tensor of Gaussian inverse covariances.
-    isos (float | torch.Tensor): Iso-surface threshold. Defaults to ISO.
+        Args:
+            edge_starts (torch.Tensor): Shape (E, 3) float32 tensor of edge start points.
+            edge_ends (torch.Tensor): Shape (E, 3) float32 tensor of edge end points.
+            means (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian means.
+            opacities (torch.Tensor): Shape (N,) float32 tensor of Gaussian opacities.
+            covis (torch.Tensor): Shape (N, 6) float32 tensor of Gaussian inverse covariances.
+            isos (float | torch.Tensor): Iso-surface threshold. Defaults to ISO.
 
-Returns:
-    tuple: (hit_mask, gaussian_ids)
-)doc");
+        Returns:
+            tuple: (hit_mask, gaussian_ids)
+        )doc");
 }
