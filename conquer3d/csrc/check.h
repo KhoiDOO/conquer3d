@@ -24,6 +24,6 @@ inline bool check_cuda_result(cudaError_t code, const char *file, int line)
     return false;
 }
 
-#define CUDA_CHECK(code) check_cuda_result((code), __FILE__, __LINE__)
+#define CHECK_CUDA_INTERNAL(code) check_cuda_result((code), __FILE__, __LINE__)
 
 #endif // CHECK_H
