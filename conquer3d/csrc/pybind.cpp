@@ -12,7 +12,11 @@ void bind_ds_gs_bvh(py::module_& m);
 void bind_ds_pgs_bvh(py::module_& m);
 void bind_ds_mesh_bvh(py::module_& m);
 void bind_ds_triangle_mesh(py::module_& m);
+void bind_ds_grid(py::module_& m);
+
 void bind_creation_triangle_creation(py::module_& m);
+
+void bind_ops_mc(py::module_& m);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.doc() = "Geocutool Python bindings";
@@ -26,6 +30,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     bind_ds_pgs_bvh(m);
     bind_ds_mesh_bvh(m);
     bind_ds_triangle_mesh(m);
+    bind_ds_grid(m);
     
     bind_creation_triangle_creation(m);
+    
+    bind_ops_mc(m);
 }
