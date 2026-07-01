@@ -22,5 +22,6 @@
 // ==========================================
 #define ISO 11.345
 #define TOL 0.125
+#define EPS 1e-5f
 
 #endif // CONSTANTS_H
