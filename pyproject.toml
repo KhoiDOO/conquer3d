@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conquer3d"
-version = "0.2.8"
+version = "0.2.9"
 description = "Geometric Cuda Tool Box"
 readme = "README.md"
 license = "MIT"
