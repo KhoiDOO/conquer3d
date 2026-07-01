@@ -20,7 +20,7 @@ BVH::BVH(
     TORCH_CHECK(in_aabb_maxs.size(1) == 3, "aabb_maxs must have shape (N, 3)");
 
     this->num_objects = static_cast<uint32_t>(in_aabb_mins.size(0));
-    
+
     if (this->num_objects == 0)
     {
         throw std::runtime_error("Cannot build BVH with 0 objects.");
@@ -35,15 +35,15 @@ BVH::BVH(
         // The Root is the only Leaf.
         this->aabb_mins = in_aabb_mins.clone();
         this->aabb_maxs = in_aabb_maxs.clone();
-        
+
         // No children (-1 means null pointer)
         this->bvh_children = torch::full({1, 2}, -1, options_int32);
-        
+
         // The object ID is just index 0
         this->object_ids = torch::zeros({1}, options_int32);
-        
+
         // Bypass the entire Karras CUDA build!
-        return; 
+        return;
     }
 
     // A Binary Tree with N leaves always has 2N - 1 total nodes!
@@ -51,11 +51,11 @@ BVH::BVH(
     auto options = in_aabb_mins.options();
 
     // Allocate the full flat arrays
-    this->aabb_mins    = torch::empty({this->num_nodes, 3}, options);
-    this->aabb_maxs    = torch::empty({this->num_nodes, 3}, options);
+    this->aabb_mins = torch::empty({this->num_nodes, 3}, options);
+    this->aabb_maxs = torch::empty({this->num_nodes, 3}, options);
     this->bvh_children = torch::empty({this->num_nodes, 2}, options.dtype(torch::kInt32));
-    this->bvh_parents  = torch::empty({this->num_nodes}, options.dtype(torch::kInt32));
-    this->object_ids   = torch::empty({this->num_objects}, options.dtype(torch::kInt32));
+    this->bvh_parents = torch::empty({this->num_nodes}, options.dtype(torch::kInt32));
+    this->object_ids = torch::empty({this->num_objects}, options.dtype(torch::kInt32));
 
     bvh::build(
         this->num_objects,
@@ -66,8 +66,7 @@ BVH::BVH(
         reinterpret_cast<float3 *>(this->aabb_maxs.data_ptr<float>()),
         reinterpret_cast<int2 *>(this->bvh_children.data_ptr<int>()),
         reinterpret_cast<int *>(this->bvh_parents.data_ptr<int>()),
-        reinterpret_cast<int *>(this->object_ids.data_ptr<int>())
-    );
+        reinterpret_cast<int *>(this->object_ids.data_ptr<int>()));
 }
 
 std::tuple<torch::Tensor, torch::Tensor> BVH::query(
@@ -82,7 +81,7 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query(
     TORCH_CHECK(query_aabb_maxs.size(1) == 3, "query_aabb_maxs must have shape (M, 3)");
 
     const uint32_t num_queries = static_cast<uint32_t>(query_aabb_mins.size(0));
-    
+
     auto options_int64 = query_aabb_mins.options().dtype(torch::kInt64);
 
     if (num_queries == 0)
@@ -107,27 +106,26 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query(
         reinterpret_cast<int64_t *>(out_query_ids.data_ptr<int64_t>()),
         reinterpret_cast<int64_t *>(out_object_ids.data_ptr<int64_t>()),
         reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()),
-        static_cast<int64_t>(BVH_MAX_CAPACITY)
-    );
+        static_cast<int64_t>(BVH_MAX_CAPACITY));
 
     int64_t num_hits = hit_counter.item<int64_t>();
 
     num_hits = std::min(num_hits, static_cast<int64_t>(BVH_MAX_CAPACITY));
 
     return std::make_tuple(
-        out_query_ids.slice(0, 0, num_hits), 
-        out_object_ids.slice(0, 0, num_hits)
-    );
+        out_query_ids.slice(0, 0, num_hits),
+        out_object_ids.slice(0, 0, num_hits));
 }
 
 std::tuple<torch::Tensor, torch::Tensor> BVH::query_self()
 {
     auto options_int64 = this->aabb_mins.options().dtype(torch::kInt64);
-    
-    if (this->num_objects == 0) {
+
+    if (this->num_objects == 0)
+    {
         throw std::runtime_error("Cannot query BVH with 0 objects.");
     }
-    
+
     torch::Tensor out_query_ids = torch::empty({BVH_MAX_CAPACITY}, options_int64);
     torch::Tensor out_object_ids = torch::empty({BVH_MAX_CAPACITY}, options_int64);
     torch::Tensor hit_counter = torch::zeros({1}, options_int64);
@@ -141,16 +139,14 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query_self()
         reinterpret_cast<int64_t *>(out_query_ids.data_ptr<int64_t>()),
         reinterpret_cast<int64_t *>(out_object_ids.data_ptr<int64_t>()),
         reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()),
-        static_cast<int64_t>(BVH_MAX_CAPACITY)
-    );
+        static_cast<int64_t>(BVH_MAX_CAPACITY));
 
     int64_t num_hits = hit_counter.item<int64_t>();
     num_hits = std::min(num_hits, static_cast<int64_t>(BVH_MAX_CAPACITY));
 
     return std::make_tuple(
-        out_query_ids.slice(0, 0, num_hits), 
-        out_object_ids.slice(0, 0, num_hits)
-    );
+        out_query_ids.slice(0, 0, num_hits),
+        out_object_ids.slice(0, 0, num_hits));
 }
 
 std::tuple<torch::Tensor, torch::Tensor> BVH::query_ray(
@@ -191,11 +187,11 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query_ray(
         h_hit_counter = max_capacity;
     }
 
-    if (h_hit_counter == 0) {
+    if (h_hit_counter == 0)
+    {
         return std::make_tuple(
             torch::empty({0}, options_i64),
-            torch::empty({0}, options_i64)
-        );
+            torch::empty({0}, options_i64));
     }
 
     return std::make_tuple(
@@ -209,10 +205,10 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> BVH::query_point(
     CHECK_INPUT(query_points);
 
     int num_queries = query_points.size(0);
-    
+
     auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(query_points.device());
     auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(query_points.device());
-    
+
     torch::Tensor out_query_ids = torch::empty({num_queries}, options_i64);
     torch::Tensor out_object_ids = torch::empty({num_queries}, options_i64);
     torch::Tensor out_distances = torch::empty({num_queries}, options_f32);
@@ -232,68 +228,68 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> BVH::query_point(
     return std::make_tuple(out_query_ids, out_object_ids, out_distances);
 }
 
-void bind_ds_bvh(py::module_& m)
+void bind_ds_bvh(py::module_ &m)
 {
     py::class_<BVH>(m, "BVH", R"doc(
-A highly efficient Bounding Volume Hierarchy (LBVH) data structure natively backed by CUDA.
-)doc")
+        A highly efficient Bounding Volume Hierarchy (LBVH) data structure natively backed by CUDA.
+        )doc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
-             py::arg("in_aabb_mins"), 
+             py::arg("in_aabb_mins"),
              py::arg("in_aabb_maxs"),
              R"doc(
-Construct and build the Karras LBVH from Gaussian AABBs.
+        Construct and build the Karras LBVH from Gaussian AABBs.
 
-Args:
-    in_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of AABB minimum coordinates.
-    in_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of AABB maximum coordinates.
-)doc")
-             
+        Args:
+            in_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of AABB minimum coordinates.
+            in_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of AABB maximum coordinates.
+        )doc")
+
         .def("query", &BVH::query,
-             py::arg("query_aabb_mins"), 
+             py::arg("query_aabb_mins"),
              py::arg("query_aabb_maxs"),
              R"doc(
-Query the BVH with bounding boxes or segments.
+        Query the BVH with bounding boxes or segments.
 
-Args:
-    query_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of query AABB minimum coordinates.
-    query_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of query AABB maximum coordinates.
+        Args:
+            query_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of query AABB minimum coordinates.
+            query_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of query AABB maximum coordinates.
 
-Returns:
-    tuple: (query_ids, object_ids)
-)doc")
-             
+        Returns:
+            tuple: (query_ids, object_ids)
+        )doc")
+
         .def("query_self", &BVH::query_self,
              R"doc(
-Query the BVH against itself.
+        Query the BVH against itself.
 
-Returns:
-    tuple: (query_ids, object_ids) representing unique overlapping pairs.
-)doc")
+        Returns:
+            tuple: (query_ids, object_ids) representing unique overlapping pairs.
+        )doc")
 
         .def("query_ray", &BVH::query_ray,
              py::arg("ray_origins"),
              py::arg("ray_dirs"),
              py::arg("max_capacity") = BVH_MAX_CAPACITY,
              R"doc(
-Find all ray-AABB intersections.
+        Find all ray-AABB intersections.
 
-Args:
-    ray_origins (torch.Tensor): Shape (M, 3) float32 tensor of ray origins.
-    ray_dirs (torch.Tensor): Shape (M, 3) float32 tensor of ray directions.
-    max_capacity (int): Maximum global capacity for recording intersections. Defaults to BVH_MAX_CAPACITY.
+        Args:
+            ray_origins (torch.Tensor): Shape (M, 3) float32 tensor of ray origins.
+            ray_dirs (torch.Tensor): Shape (M, 3) float32 tensor of ray directions.
+            max_capacity (int): Maximum global capacity for recording intersections. Defaults to BVH_MAX_CAPACITY.
 
-Returns:
-    tuple: (ray_ids, object_ids)
-)doc")
+        Returns:
+            tuple: (ray_ids, object_ids)
+        )doc")
         .def("query_point", &BVH::query_point,
              py::arg("query_points"),
              R"doc(
-Find the closest leaf AABB to each query point.
+        Find the closest leaf AABB to each query point.
 
-Args:
-    query_points (torch.Tensor): Shape (M, 3) float32 tensor of query points.
+        Args:
+            query_points (torch.Tensor): Shape (M, 3) float32 tensor of query points.
 
-Returns:
-    tuple: (query_ids, object_ids, distances)
-)doc");
+        Returns:
+            tuple: (query_ids, object_ids, distances)
+        )doc");
 }
