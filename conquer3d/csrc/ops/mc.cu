@@ -1,5 +1,5 @@
 #include "mc.h"
-
+#include "../maths/maths.h"
 #include <cuda_runtime.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
@@ -25,7 +25,7 @@ namespace mc
     struct num_triangles_functor
     {
         __device__ uint32_t operator()(const uint8_t code) const {
-            return trinumTable[code + 1] - trinumTable[code];
+            return (trinumTable[code + 1] - trinumTable[code]) / 3;
         }
     };
 
@@ -175,8 +175,10 @@ namespace mc
         const Edge* unique_edges,
         const float3* grid_vertices,
         const float* values,
+        const float3* grid_normals,
         const float iso,
-        float3* out_verts
+        float3* out_verts,
+        float3* out_normals
     )
     {
         uint32_t v_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -196,28 +198,42 @@ namespace mc
 
         // 3. Interpolate (Differentiable formula)
         float3 p;
+        float3 n;
+        bool has_normals = grid_normals != nullptr;
+        float3 n0 = has_normals ? grid_normals[v0_idx] : make_float3(0, 0, 0);
+        float3 n1 = has_normals ? grid_normals[v1_idx] : make_float3(0, 0, 0);
 
         if (fabsf(iso - val0) < EPS)
         {
             p = p0;
+            if (has_normals) n = n0;
         }
         else if (fabsf(iso - val1) < EPS)
         {
             p = p1;
+            if (has_normals) n = n1;
         }
         else if (fabsf(val0 - val1) < EPS)
         {
             p = p0;
+            if (has_normals) n = n0;
         }
         else
         {
             float t = (val1 != val0) ? fmaxf(0.0f, fminf(1.0f, (iso - val0) / (val1 - val0))) : 0.5f;
-            p.x = p0.x + (p1.x - p0.x) * t;
-            p.y = p0.y + (p1.y - p0.y) * t;
-            p.z = p0.z + (p1.z - p0.z) * t;
+
+            p = p0 + (p1 - p0) * t;
+            
+            if (has_normals) {
+                n = n0 + (n1 - n0) * t;
+                n = maths::normalize(n);
+            }
         }
 
         out_verts[v_idx] = p;
+        if (has_normals) {
+            out_normals[v_idx] = n;
+        }
     }
 
     void compute_active_voxels(
@@ -340,15 +356,17 @@ namespace mc
         const Edge* unique_edges,
         const float3* grid_vertices,
         const float* values,
+        const float3* grid_normals,
         const float iso,
-        float3* out_verts
+        float3* out_verts,
+        float3* out_normals
     )
     {
         if (num_unique_edges == 0) return;
         int block_size = NTHREADS;
         int grid_size = (num_unique_edges + block_size - 1) / block_size;
         interpolate_vertices_kernel<<<grid_size, block_size>>>(
-            num_unique_edges, unique_edges, grid_vertices, values, iso, out_verts);
+            num_unique_edges, unique_edges, grid_vertices, values, grid_normals, iso, out_verts, out_normals);
     }
 
     void compute_number_triangles(
@@ -417,11 +435,12 @@ namespace mc
             num_active_voxels, used_voxel_codes, voxel_edge_to_vert_idx, voxel_triangle_prefix_sums, out_triangles);
     }
 
-    std::tuple<torch::Tensor, torch::Tensor> marching_cubes(
+    std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> marching_cubes(
         const uint32_t num_voxels,
         const float3* __restrict__ grid_vertices,
         const uint32_t* __restrict__ voxels,
         const float* __restrict__ voxel_values,
+        const float3* __restrict__ grid_normals,
         const float iso,
         torch::TensorOptions vert_options,
         torch::TensorOptions tri_options
@@ -437,9 +456,12 @@ namespace mc
 
         if (num_active_voxels == 0) {
             CHECK_CUDA_INTERNAL(cudaFree(voxel_codes));
+            std::optional<torch::Tensor> out_n = std::nullopt;
+            if (grid_normals != nullptr) out_n = torch::empty({0, 3}, vert_options);
             return std::make_tuple(
                 torch::empty({0, 3}, vert_options),
-                torch::empty({0, 3}, tri_options)
+                torch::empty({0, 3}, tri_options),
+                out_n
             );
         }
 
@@ -463,7 +485,15 @@ namespace mc
         torch::Tensor out_vertices = torch::empty({out_num_vertices, 3}, vert_options);
         float3* __restrict__ p_out_vertices = (float3*)out_vertices.data_ptr<float>();
 
-        interpolate_vertices(out_num_vertices, unique_edges, grid_vertices, voxel_values, iso, p_out_vertices);
+        std::optional<torch::Tensor> out_normals_opt = std::nullopt;
+        float3* __restrict__ p_out_normals = nullptr;
+        if (grid_normals != nullptr) {
+            torch::Tensor out_normals = torch::empty({out_num_vertices, 3}, vert_options);
+            p_out_normals = (float3*)out_normals.data_ptr<float>();
+            out_normals_opt = out_normals;
+        }
+
+        interpolate_vertices(out_num_vertices, unique_edges, grid_vertices, voxel_values, grid_normals, iso, p_out_vertices, p_out_normals);
 
         uint32_t out_num_triangles;
         uint32_t *__restrict__ voxel_triangle_prefix_sums;
@@ -484,6 +514,6 @@ namespace mc
         CHECK_CUDA_INTERNAL(cudaFree(voxel_edge_to_vert_idx));
         CHECK_CUDA_INTERNAL(cudaFree(voxel_triangle_prefix_sums));
 
-        return std::make_tuple(out_vertices, out_triangles);
+        return std::make_tuple(out_vertices, out_triangles, out_normals_opt);
     }
 }
