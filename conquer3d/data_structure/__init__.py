@@ -6,8 +6,10 @@ from .._C import (
     MeshBVH,
     TriangleMesh
 )
+from .grid import create_voxel_grid, compute_grid_normal, compute_active_voxels, voxel2sparse, sparse2voxel
 
 spatial_data_structures = ['KDTree', 'BVH', 'GSBVH', 'PGSBVH', 'MeshBVH']
 mesh_data_structures = ['TriangleMesh']
+grid_data_structures = ['create_voxel_grid', 'compute_grid_normal', 'compute_active_voxels', 'voxel2sparse', 'sparse2voxel']
 
-__all__ = spatial_data_structures + mesh_data_structures
+__all__ = spatial_data_structures + mesh_data_structures + grid_data_structures
