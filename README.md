@@ -23,7 +23,12 @@ conda activate geocutool
 
 conda install nvidia::cuda-toolkit==12.8.2 -y
 
+pip install setuptools wheel ninja
 pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+
+pip install git+https://github.com/mit-han-lab/torchsparse.git
+
+pip install kaolin==0.18.0 -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.8.0_cu128.html
 
 pip install pybind11-stubgen
 pip install git+https://github.com/KhoiDOO/geocutool.git --no-build-isolation
