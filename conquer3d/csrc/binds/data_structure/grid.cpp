@@ -121,9 +121,30 @@ torch::Tensor compute_grid_normal(torch::Tensor sdf, torch::Tensor grid_vertices
     return torch::nn::functional::normalize(normals, torch::nn::functional::NormalizeFuncOptions().p(2).dim(1));
 }
 
+torch::Tensor compute_active_voxels(torch::Tensor voxels, torch::Tensor sdf, float iso) {
+    TORCH_CHECK(voxels.is_cuda(), "voxels must be a CUDA tensor.");
+    TORCH_CHECK(sdf.is_cuda(), "sdf must be a CUDA tensor.");
+    TORCH_CHECK(voxels.dtype() == torch::kInt32, "voxels must be int32.");
+    TORCH_CHECK(sdf.dtype() == torch::kFloat32, "sdf must be float32.");
+    
+    auto voxels_flat = voxels.flatten().to(torch::kInt64);
+    auto voxel_sdfs = sdf.index_select(0, voxels_flat).view({-1, 8});
+    
+    auto below_iso = voxel_sdfs < iso;
+    auto any_below = below_iso.any(1);
+    auto any_above = (~below_iso).any(1);
+    
+    auto active_mask = any_below & any_above;
+    auto active_indices = torch::nonzero(active_mask).squeeze(1);
+    
+    return active_indices;
+}
+
 void bind_ds_grid(py::module_& m) {
     m.def("create_voxel_grid", &create_voxel_grid, "Creates a structured 3D voxel grid.",
           py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("device_str") = "cuda");
     m.def("compute_grid_normal", &compute_grid_normal, "Computes surface normals for a grid.",
           py::arg("sdf"), py::arg("grid_vertices"), py::arg("idx_grids"), py::arg("res"));
+    m.def("compute_active_voxels", &compute_active_voxels, "Computes active voxels intersecting the surface",
+          py::arg("voxels"), py::arg("sdf"), py::arg("iso"));
 }
