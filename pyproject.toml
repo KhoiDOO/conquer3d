@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conquer3d"
-version = "0.3.0"
+version = "0.3.1"
 description = "Geometric Cuda Tool Box"
 readme = "README.md"
 license = "MIT"
@@ -20,6 +20,7 @@ requires-python = ">=3.9"
 keywords = ["geometry"]
 dependencies = [
     "torch>=2.0.0",
+    "gdown",
 ]
 
 [project.optional-dependencies]
