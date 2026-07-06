@@ -167,6 +167,21 @@ namespace aabb
             (target_aabb_max.y) >= query_aabb_max.y &&
             (target_aabb_max.z) >= query_aabb_max.z);
     }
+
+    __device__ __forceinline__ bool test_point_inside_aabb(
+        const float3 &point,
+        const float3 &aabb_min,
+        const float3 &aabb_max
+    )
+    {
+        return (
+            aabb_min.x <= point.x &&
+            aabb_min.y <= point.y &&
+            aabb_min.z <= point.z &&
+            (aabb_max.x) >= point.x &&
+            (aabb_max.y) >= point.y &&
+            (aabb_max.z) >= point.z);
+    }
 }
 
 #endif // AABB_H
