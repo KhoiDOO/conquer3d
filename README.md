@@ -33,7 +33,7 @@ pip install kaolin==0.18.0 -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/t
 pip install pybind11-stubgen
 pip install git+https://github.com/KhoiDOO/geocutool.git --no-build-isolation
 
-pip install plotly open3d jupyter trimesh point-cloud-utils
+pip install plotly open3d jupyter trimesh point-cloud-utils meshlib
 ```
 
 # Development
