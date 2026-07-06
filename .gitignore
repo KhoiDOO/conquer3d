@@ -364,3 +364,13 @@ __marimo__/
 .agents/
 # Release script
 release.py
+
+# Data
+data/digit3d/src
+data/digit3d/debug
+data/digit3d/debug_mesh
+data/digit3d/sdf
+data/digit3d/*.zip
+
+# Examples
+*.pt
