@@ -122,8 +122,7 @@ torch::Tensor compute_grid_normal(torch::Tensor sdf, torch::Tensor grid_vertices
 }
 
 torch::Tensor compute_active_voxels(torch::Tensor voxels, torch::Tensor sdf, float iso) {
-    TORCH_CHECK(voxels.is_cuda(), "voxels must be a CUDA tensor.");
-    TORCH_CHECK(sdf.is_cuda(), "sdf must be a CUDA tensor.");
+    TORCH_CHECK(voxels.device() == sdf.device(), "voxels and sdf must be on the same device.");
     TORCH_CHECK(voxels.dtype() == torch::kInt32, "voxels must be int32.");
     TORCH_CHECK(sdf.dtype() == torch::kFloat32, "sdf must be float32.");
     
