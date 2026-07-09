@@ -34,6 +34,8 @@ pip install pybind11-stubgen
 pip install git+https://github.com/KhoiDOO/geocutool.git --no-build-isolation
 
 pip install plotly open3d jupyter trimesh point-cloud-utils meshlib
+
+pip install rectified-flow-pytorch
 ```
 
 # Development
