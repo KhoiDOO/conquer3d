@@ -1,14 +1,11 @@
 import torch
 import torch.nn as nn
 from typing import Union, List
-import numpy as np
 
-import torchsparse
 import torchsparse.nn as spnn
 from torchsparse import SparseTensor
 from torchsparse.backbones.modules.blocks import SparseResBlock
 
-# TripoSF DiagonalGaussianDistribution
 class DiagonalGaussianDistribution(object):
     def __init__(self, parameters: Union[torch.Tensor, List[torch.Tensor]], deterministic=False, feat_dim=-1):
         self.feat_dim = feat_dim
@@ -83,6 +80,15 @@ class SimpleSparseVAE(nn.Module):
             current_channels //= 2
             
         self.dec_out = spnn.Conv3d(current_channels, out_channels, kernel_size=3, stride=1)
+
+    def get_latent_resolution(self, input_resolution):
+        """
+        Calculate the spatial resolution of the latent grid given the input resolution.
+        """
+        stride = 2 ** (self.num_layers - 1)
+        if isinstance(input_resolution, (list, tuple)):
+            return [res // stride for res in input_resolution]
+        return input_resolution // stride
 
     def forward(self, x: SparseTensor):
         # MUST set default coordinate map for transposed convolutions to work!
