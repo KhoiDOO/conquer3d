@@ -9,8 +9,8 @@ import sys
 import open3d as o3d
 
 import conquer3d as c3d
-from conquer3d.data.dataset.digit3d import SparseDigit3D
-from conquer3d.data.collate.sparse_tensor import sparse_collate_fn
+from conquer3d.data.dataset.digit3d import Digit3D
+from conquer3d.data.collate.mesh import bmesh_collate_fn
 from torch.utils.data import DataLoader
 
 import torchsparse.nn as spnn
@@ -21,16 +21,18 @@ from torch.amp import autocast, GradScaler
 # Import the VAE from sparse_vae.py
 from sparse_vae import SimpleSparseVAE
 
+from conquer3d.conversion.mesh import mesh2sparse, mesh2sparse_with_dense
+
 # 1. Initialize Datasets & DataLoaders
 print("Initializing Datasets...")
-train_dataset = SparseDigit3D(root="~/.conquer3d/", train=True, download=False, cached=True)
-test_dataset = SparseDigit3D(root="~/.conquer3d/", train=False, download=False, cached=True)
+train_dataset = Digit3D(root="~/.conquer3d/", train=True, download=False, cached=True)
+test_dataset = Digit3D(root="~/.conquer3d/", train=False, download=False, cached=True)
 
 train_loader = DataLoader(
     train_dataset, 
     batch_size=16, 
     shuffle=True, 
-    collate_fn=sparse_collate_fn,
+    collate_fn=bmesh_collate_fn,
     num_workers=8,
     persistent_workers=True,
     pin_memory=True
@@ -40,7 +42,7 @@ test_loader = DataLoader(
     test_dataset, 
     batch_size=16, 
     shuffle=False, 
-    collate_fn=sparse_collate_fn,
+    collate_fn=bmesh_collate_fn,
     num_workers=8,
     persistent_workers=True,
     pin_memory=True
@@ -102,20 +104,111 @@ for epoch in range(num_epochs):
     total_kl_loss = 0.0
     
     progress_bar = tqdm(train_loader, desc=f"Epoch [{epoch+1}/{num_epochs}]")
-    for batch_idx, (batched_coords, batched_sdf, batched_labels) in enumerate(progress_bar):
+    for batch_idx, (bmesh, batched_labels) in enumerate(progress_bar):
+        bmesh = bmesh.cuda(non_blocking=True)
+        bmesh.vertices = bmesh.vertices.float()
+        batched_coords, batched_sdf = mesh2sparse(bmesh, res=[32, 32, 32], grid_bound=1.2, iso=0.0)
         # Send to GPU
         batched_coords = batched_coords.cuda(non_blocking=True)
         batched_sdf = batched_sdf.cuda(non_blocking=True)
         
+        # We need dense coords for the full bounding box loss to prevent solid block artifacts
+        bmesh = bmesh.cuda(non_blocking=True)
+        _, _, dense_coords, dense_sdfs = mesh2sparse_with_dense(bmesh, res=[32, 32, 32], grid_bound=1.2, iso=0.0)
+        dense_coords = dense_coords.to(batched_coords.device)
+        dense_sdfs = dense_sdfs.to(batched_sdf.device)
+        
         # Construct TorchSparse SparseTensor
-        x = SparseTensor(coords=batched_coords, feats=batched_sdf)
+        x = SparseTensor(coords=batched_coords.contiguous(), feats=batched_sdf.contiguous())
         
         optimizer.zero_grad()
         
         with autocast(device_type='cuda', dtype=torch.float16):
-            pred_feats, posterior = model(x)
+            # Encode
+            x._caches.cmaps.setdefault(x.stride, x.coords)
+            h = model.stem(x)
+            for layer in model.enc_layers:
+                h = layer(h)
+            enc_out = model.enc_out(h)
+            from sparse_vae import DiagonalGaussianDistribution
+            posterior = DiagonalGaussianDistribution(enc_out.feats, feat_dim=1)
+            z_feats = posterior.sample()
             
-            recon_loss = mse_criterion(pred_feats, batched_sdf)
+            gt_z_coords = enc_out.coords
+            
+            if len(gt_z_coords) > 0:
+                # Build full 32x32x32 dense cache to ensure all coordinates are covered
+                batch_size = bmesh.batch_size if hasattr(bmesh, 'batch_size') else len(torch.unique(gt_z_coords[:, 0]))
+                if batch_size == 0:
+                    batch_size = 1
+                    
+                all_b = torch.arange(batch_size, device=x.coords.device)
+                all_x = torch.arange(32, device=x.coords.device)
+                all_y = torch.arange(32, device=x.coords.device)
+                all_z = torch.arange(32, device=x.coords.device)
+                grid_b, grid_x, grid_y, grid_z = torch.meshgrid(all_b, all_x, all_y, all_z, indexing='ij')
+                dummy_coords = torch.stack([grid_b, grid_x, grid_y, grid_z], dim=-1).view(-1, 4).int()
+                
+                if len(dummy_coords) > 0:
+                    dummy_feats = torch.zeros((len(dummy_coords), 8), dtype=torch.float32, device=x.feats.device)
+                    dummy_x = SparseTensor(coords=dummy_coords.contiguous(), feats=dummy_feats.contiguous())
+                    dummy_x._caches.cmaps.setdefault(dummy_x.stride, dummy_x.coords)
+                    
+                    h_dummy = model.stem(dummy_x)
+                    for layer in model.enc_layers:
+                        h_dummy = layer(h_dummy)
+                        
+                    dummy_z_coords = dummy_x._caches.cmaps[(4, 4, 4)]
+                    if isinstance(dummy_z_coords, tuple):
+                        dummy_z_coords = dummy_z_coords[0]
+                        
+                    aligned_z_feats = torch.zeros((len(dummy_z_coords), z_feats.shape[-1]), device=x.feats.device, dtype=torch.float32)
+                    
+                    flat_gt_z = gt_z_coords[:, 0] * 32768 + gt_z_coords[:, 1] * 1024 + gt_z_coords[:, 2] * 32 + gt_z_coords[:, 3]
+                    flat_dummy_z = dummy_z_coords[:, 0] * 32768 + dummy_z_coords[:, 1] * 1024 + dummy_z_coords[:, 2] * 32 + dummy_z_coords[:, 3]
+                    
+                    sort_idx_dummy = torch.argsort(flat_dummy_z)
+                    sorted_dummy_z = flat_dummy_z[sort_idx_dummy]
+                    
+                    idx_in_dummy = torch.searchsorted(sorted_dummy_z, flat_gt_z)
+                    valid_mask = (idx_in_dummy < len(sorted_dummy_z)) & (sorted_dummy_z[torch.clamp(idx_in_dummy, max=len(sorted_dummy_z)-1)] == flat_gt_z)
+                    
+                    target_indices = sort_idx_dummy[idx_in_dummy[valid_mask]]
+                    aligned_z_feats[target_indices] = z_feats[valid_mask]
+                    
+                    z = SparseTensor(coords=dummy_z_coords.contiguous(), feats=aligned_z_feats.contiguous(), stride=(4, 4, 4))
+                    z._caches = dummy_x._caches
+                    
+                    # Decode
+                    h_dec = model.dec_in(z)
+                    for layer in model.dec_layers:
+                        h_dec = layer(h_dec)
+                    pred_feats = model.dec_out(h_dec)
+                    
+                    flat_dense = dense_coords[:, 0] * 32768 + dense_coords[:, 1] * 1024 + dense_coords[:, 2] * 32 + dense_coords[:, 3]
+                    flat_pred = pred_feats.coords[:, 0] * 32768 + pred_feats.coords[:, 1] * 1024 + pred_feats.coords[:, 2] * 32 + pred_feats.coords[:, 3]
+                    
+                    sort_idx = torch.argsort(flat_dense)
+                    sorted_dense = flat_dense[sort_idx]
+                    idx = torch.searchsorted(sorted_dense, flat_pred)
+                    valid_mask_dense = (idx < len(sorted_dense)) & (sorted_dense[torch.clamp(idx, max=len(sorted_dense)-1)] == flat_pred)
+                    
+                    dummy_indices = sort_idx[idx[valid_mask_dense]]
+                    dummy_target_sdf = dense_sdfs[dummy_indices]
+                    pred_feats_valid = pred_feats.feats[valid_mask_dense]
+                    
+                    if len(pred_feats_valid) > 0:
+                        recon_loss = mse_criterion(pred_feats_valid, dummy_target_sdf)
+
+                    else:
+                        recon_loss = mse_criterion(pred_feats.feats, batched_sdf)
+                else:
+                    pred_feats, posterior = model(x)
+                    recon_loss = mse_criterion(pred_feats, batched_sdf)
+            else:
+                pred_feats, posterior = model(x)
+                recon_loss = mse_criterion(pred_feats, batched_sdf)
+            
             kl_loss = posterior.kl(dims=-1).mean()
             loss = recon_loss + kl_weight * kl_loss
             
@@ -141,13 +234,17 @@ for epoch in range(num_epochs):
     test_loss = 0.0
     
     with torch.no_grad():
-        for batched_coords, batched_sdf, batched_labels in test_loader:
+        for bmesh, batched_labels in test_loader:
+            bmesh = bmesh.cuda(non_blocking=True)
+            bmesh.vertices = bmesh.vertices.float()
+            batched_coords, batched_sdf = mesh2sparse(bmesh, res=[32, 32, 32], grid_bound=1.2, iso=0.0)
             batched_coords = batched_coords.cuda(non_blocking=True)
             batched_sdf = batched_sdf.cuda(non_blocking=True)
             
             x = SparseTensor(coords=batched_coords, feats=batched_sdf)
             
             with autocast(device_type='cuda', dtype=torch.float16):
+                # Just use normal forward for validation to save time since we just want to track convergence
                 pred_feats, posterior = model(x)
                 
                 r_loss = mse_criterion(pred_feats, batched_sdf)
