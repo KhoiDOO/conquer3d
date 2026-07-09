@@ -1,9 +1,7 @@
 import os
 import zipfile
 import torch
-import numpy as np
 import conquer3d as c3d
-import trimesh
 import meshlib.mrmeshpy as mr
 import meshlib.mrmeshnumpy as mrnp
 
@@ -50,7 +48,7 @@ class Digit3D(BaseMeshDataset):
         if self.cached and idx in self._cache:
             vertices_t, faces_t, label = self._cache[idx]
             if self.transform:
-                vertices_t = self.transform(vertices_t.clone())
+                vertices_t, faces_t = self.transform(vertices_t.clone(), faces_t.clone())
             return vertices_t, faces_t, label
             
         f_path = self.all_files[idx]
@@ -72,7 +70,6 @@ class Digit3D(BaseMeshDataset):
                 vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
             elif line.startswith("f "):
                 parts = line.split()
-                # Wavefront OBJ faces are 1-indexed, so we subtract 1 for 0-indexed tensors
                 faces.append([int(parts[1])-1, int(parts[2])-1, int(parts[3])-1])
                 
         vertices_t = torch.tensor(vertices, dtype=torch.float32)
@@ -82,15 +79,14 @@ class Digit3D(BaseMeshDataset):
             self._cache[idx] = (vertices_t, faces_t, label)
         
         if self.transform:
-            vertices_t = self.transform(vertices_t.clone())
+            vertices_t, faces_t = self.transform(vertices_t.clone(), faces_t.clone())
             
         return vertices_t, faces_t, label
 
 
 class SparseDigit3D(Digit3D):
     """
-    Digit3D Dataset that constructs a sparse SDF voxel grid from the mesh on-the-fly using CPU (Open3D).
-    This allows arbitrary geometric augmentations on the mesh before voxelization without CUDA IPC issues.
+    Digit3D Dataset that constructs a sparse SDF voxel grid from the mesh on-the-fly.
     """
     def __init__(self, root: str = "~/.conquer3d/", train: bool = True, transform=None, download: bool = False, 
                  grid_res: int = 32, grid_bound: float = 1.2, cached: bool = False):
@@ -126,7 +122,7 @@ class SparseDigit3D(Digit3D):
         active_voxel_indices = c3d.data_structure.compute_active_voxels(voxels, sdf, iso=0.0)
         
         # 5. Extract purely Voxel-Centric representations using voxel2sparse
-        sparse_coords, sparse_sdfs = c3d.data_structure.voxel2sparse(
+        sparse_coords, sparse_sdfs = c3d.conversion.grid.voxel2sparse(
             active_voxel_indices, voxels, idx_grids, sdf=sdf, batch_idx=0
         )
         
