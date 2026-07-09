@@ -30,8 +30,10 @@ class SparseClassifier(nn.Module):
         self.pool = spnn.GlobalMaxPool()
         
         self.classifier = nn.Sequential(
+            nn.Dropout(p=0.1),
             nn.Linear(128, 64),
             nn.ReLU(True),
+            nn.Dropout(p=0.1),
             nn.Linear(64, num_classes)
         )
         
