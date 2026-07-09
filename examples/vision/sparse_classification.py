@@ -5,13 +5,12 @@ from tqdm.auto import tqdm
 import os
 
 import conquer3d as c3d
-from conquer3d.data.dataset.digit3d import SparseDigit3D
-from conquer3d.data.collate.sparse_tensor import sparse_collate_fn
+from conquer3d.data.dataset.digit3d import Digit3D
+from conquer3d.data.collate.mesh import bmesh_collate_fn
+from conquer3d.conversion.mesh import mesh2sparse
 from torch.utils.data import DataLoader
 
-import torchsparse.nn as spnn
 from torchsparse import SparseTensor
-from torchsparse.backbones.modules.blocks import SparseResBlock
 
 from torch.amp import autocast, GradScaler
 
@@ -22,14 +21,14 @@ import json
 
 # 1. Initialize Datasets & DataLoaders
 print("Initializing Datasets...")
-train_dataset = SparseDigit3D(root="~/.conquer3d/", train=True, download=False, cached=True)
-test_dataset = SparseDigit3D(root="~/.conquer3d/", train=False, download=False, cached=True)
+train_dataset = Digit3D(root="~/.conquer3d/", train=True, download=False, cached=True)
+test_dataset = Digit3D(root="~/.conquer3d/", train=False, download=False, cached=True)
 
 train_loader = DataLoader(
     train_dataset, 
     batch_size=16, 
     shuffle=True, 
-    collate_fn=sparse_collate_fn,
+    collate_fn=bmesh_collate_fn,
     num_workers=8,
     persistent_workers=True,
     pin_memory=True
@@ -39,7 +38,7 @@ test_loader = DataLoader(
     test_dataset, 
     batch_size=16, 
     shuffle=False, 
-    collate_fn=sparse_collate_fn,
+    collate_fn=bmesh_collate_fn,
     num_workers=8,
     persistent_workers=True,
     pin_memory=True
@@ -50,23 +49,33 @@ from sparse_classifier import SparseClassifier
 
 model = SparseClassifier(num_classes=10).cuda()
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-4)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--debug", action="store_true", help="Debug mode: reconstruct first sample and exit")
 args, unknown = parser.parse_known_args()
 
 # 4. Training Loop
-num_epochs = 10
+num_epochs = 20
+warmup_epochs = 5
+
+def lr_lambda(epoch):
+    import math
+    if epoch < warmup_epochs:
+        return float(epoch + 1) / warmup_epochs
+    else:
+        progress = (epoch - warmup_epochs) / max(1, num_epochs - warmup_epochs)
+        return 0.5 * (1.0 + math.cos(math.pi * progress))
+
+scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 if args.debug:
     print("Debug mode: reconstructing the first sample from train_dataset...")
-    sparse_idx_grids, sparse_sdfs, label = train_dataset[0]
-    
-    # sparse_idx_grids is [N, 3] (x, y, z). We need [batch_idx, x, y, z] with batch_idx=0
-    b_col = torch.zeros((sparse_idx_grids.size(0), 1), dtype=sparse_idx_grids.dtype)
-    sparse_coords = torch.cat([b_col, sparse_idx_grids], dim=1).cuda()
-    feats = sparse_sdfs.cuda()
+    batch = bmesh_collate_fn([train_dataset[0]])
+    bmesh, label = batch
+    sparse_coords, feats = mesh2sparse(bmesh, res=[32, 32, 32], grid_bound=1.2, iso=0.0)
+    sparse_coords = sparse_coords.cuda()
+    feats = feats.cuda()
     
     unique_vertices, local_voxels, merged_sdfs = c3d.data_structure.sparse2mesh_topology(
         sparse_coords, feats, grid_min=[-1.2, -1.2, -1.2], grid_max=[1.2, 1.2, 1.2], res=[32, 32, 32]
@@ -96,14 +105,17 @@ for epoch in range(num_epochs):
     total = 0
     
     progress_bar = tqdm(train_loader, desc=f"Epoch [{epoch+1}/{num_epochs}]")
-    for batch_idx, (batched_coords, batched_sdf, batched_labels) in enumerate(progress_bar):
+    for batch_idx, (bmesh, batched_labels) in enumerate(progress_bar):
+        bmesh = bmesh.cuda(non_blocking=True)
+        bmesh.vertices = bmesh.vertices.float()
+        batched_coords, batched_sdf = mesh2sparse(bmesh, res=[32, 32, 32], grid_bound=1.2, iso=0.0)
         # Send to GPU
         batched_coords = batched_coords.cuda(non_blocking=True)
         batched_sdf = batched_sdf.cuda(non_blocking=True) # Voxel-centric features already have 8 channels: [Total_N, 8]
         batched_labels = batched_labels.cuda(non_blocking=True)
         
         # Construct TorchSparse SparseTensor exactly as required
-        x = SparseTensor(coords=batched_coords, feats=batched_sdf)
+        x = SparseTensor(coords=batched_coords.contiguous(), feats=batched_sdf.contiguous())
         
         optimizer.zero_grad()
         
@@ -131,12 +143,15 @@ for epoch in range(num_epochs):
     test_correct = 0
     test_total = 0
     with torch.no_grad():
-        for batched_coords, batched_sdf, batched_labels in test_loader:
+        for bmesh, batched_labels in test_loader:
+            bmesh = bmesh.cuda(non_blocking=True)
+            bmesh.vertices = bmesh.vertices.float()
+            batched_coords, batched_sdf = mesh2sparse(bmesh, res=[32, 32, 32], grid_bound=1.2, iso=0.0)
             batched_coords = batched_coords.cuda(non_blocking=True)
             batched_sdf = batched_sdf.cuda(non_blocking=True)
             batched_labels = batched_labels.cuda(non_blocking=True)
             
-            x = SparseTensor(coords=batched_coords, feats=batched_sdf)
+            x = SparseTensor(coords=batched_coords.contiguous(), feats=batched_sdf.contiguous())
             
             with autocast(device_type='cuda', dtype=torch.float16):
                 logits = model(x)
@@ -168,5 +183,7 @@ for epoch in range(num_epochs):
     json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sparse_classification.json")
     with open(json_path, "w") as f:
         json.dump(history, f, indent=4)
+        
+    scheduler.step()
 
 print("Training finished.")
