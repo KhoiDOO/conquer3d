@@ -20,6 +20,7 @@ protected:
     torch::Tensor vertices;       // Size: [N, 3]
     torch::Tensor vertex_normals; // Size: [N, 3]
     torch::Tensor vertex_colors;  // Size: [N, 3]
+    torch::Tensor vertex_degrees; // Size: [N] -> Each row contains the degree of the corresponding vertex
 
     torch::Tensor triangles;        // Size: [M, 3] -> Each row contains indices into the vertices tensor
     torch::Tensor triangle_normals; // Size: [M, 3] -> Each row contains the normal of the corresponding triangle
@@ -28,6 +29,11 @@ protected:
 
     std::optional<MeshBVH> bvh;
 
+    torch::Tensor vertex_lb_uniform;
+    torch::Tensor vertex_lb_cotangent;
+    torch::Tensor voronoi_areas;
+    torch::Tensor gaussian_curvature;
+    
     torch::Tensor edges;
     torch::Tensor edge_to_triangle_offsets;
     torch::Tensor edge_to_triangle_counts;
@@ -57,6 +63,30 @@ public:
     torch::Tensor get_triangle_areas();
     torch::Tensor get_triangle_normals();
     torch::Tensor get_surface_area();
+    
+    void compute_vertex_degrees();
+    torch::Tensor get_vertex_degrees();
+    
+    void compute_vertex_lb_uniform();
+    torch::Tensor get_vertex_lb_uniform();
+    
+    void compute_vertex_lb_cotangent();
+    torch::Tensor get_vertex_lb_cotangent();
+    
+    void compute_voronoi_areas();
+    torch::Tensor get_voronoi_areas();
+    
+    void compute_gaussian_curvature();
+    torch::Tensor get_gaussian_curvature();
+    
+    torch::Tensor get_mean_curvature(bool signed_curvature = false);
+    torch::Tensor get_principal_curvatures(bool signed_curvature = true);
+    
+    torch::Tensor compute_laplacian(int mode);
+    
+    torch::Tensor get_isolated_vertices();
+    int32_t get_num_isolated_vertices();
+    void remove_isolated_vertices();
     
     MeshBVH build_bvh();
     torch::Tensor get_self_intersection();
@@ -169,6 +199,47 @@ namespace triangle_mesh
         float3 *__restrict__ out_points,
         float3 *__restrict__ out_normals,
         float3 *__restrict__ out_colors);
+    
+    __host__ void compute_vertex_degree(
+        const uint32_t num_unique_edges,
+        const int *__restrict__ unique_edges,
+        int *__restrict__ vertex_degrees
+    );
+
+    __host__ void compute_uniform_laplacian(
+        const uint32_t num_vertices,
+        const uint32_t num_unique_edges,
+        const int *__restrict__ unique_edges,
+        const int *__restrict__ vertex_degrees,
+        const float3 *__restrict__ vertices,
+        float3 *__restrict__ vertex_lb_uniform
+    );
+
+    __host__ void compute_voronoi_areas(
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ vertices,
+        float *__restrict__ voronoi_areas
+    );
+
+    __host__ void compute_cotangent_laplacian(
+        const uint32_t num_vertices,
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ vertices,
+        float *__restrict__ voronoi_areas,
+        float3 *__restrict__ vertex_lb_cot
+    );
+
+    __host__ void compute_gaussian_curvature(
+        const uint32_t num_vertices,
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ vertices,
+        const float *__restrict__ voronoi_areas,
+        float *__restrict__ vertex_angle_sum,
+        float *__restrict__ gaussian_curvature
+    );
 }
 
 #endif // TRIANGLE_MESH_H
