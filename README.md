@@ -102,6 +102,24 @@ twine upload dist/* --verbose
 }
 ```
 
+```bibtex
+@InProceedings{10.1007/978-3-662-05105-4_2,
+author="Meyer, Mark
+and Desbrun, Mathieu
+and Schr{\"o}der, Peter
+and Barr, Alan H.",
+editor="Hege, Hans-Christian
+and Polthier, Konrad",
+title="Discrete Differential-Geometry Operators for Triangulated 2-Manifolds",
+booktitle="Visualization and Mathematics III",
+year="2003",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="35--57",
+isbn="978-3-662-05105-4"
+}
+```
+
 ## Blog Post
 - [Thinking Parallel, Part I: Collision Detection on the GPU](https://developer.nvidia.com/blog/thinking-parallel-part-i-collision-detection-gpu/)
 - [Thinking Parallel, Part II: Tree Traversal on the GPU](https://developer.nvidia.com/blog/thinking-parallel-part-ii-tree-traversal-gpu/)
