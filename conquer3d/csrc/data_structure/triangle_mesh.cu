@@ -1,5 +1,5 @@
 #include "triangle_mesh.h"
-#include "../primitive/triangles.h"
+#include "../primitive/triangle.h"
 #include "../primitive/edge.h"
 #include <cuda_runtime.h>
 #include <cuda_runtime.h>
@@ -545,5 +545,303 @@ namespace triangle_mesh
             out_points,
             out_normals,
             out_colors);
+    }
+
+    __global__ void compute_vertex_degree_kernel(
+        const uint32_t num_unique_edges,
+        const int *__restrict__ unique_edges,
+        int *__restrict__ vertex_degrees)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_unique_edges) {
+            int v0 = unique_edges[2 * idx];
+            int v1 = unique_edges[2 * idx + 1];
+            atomicAdd(&vertex_degrees[v0], 1);
+            atomicAdd(&vertex_degrees[v1], 1);
+        }
+    }
+
+    __host__ void compute_vertex_degree(
+        const uint32_t num_unique_edges,
+        const int *__restrict__ unique_edges,
+        int *__restrict__ vertex_degrees)
+    {
+        if (num_unique_edges == 0) return;
+
+        int threads = NTHREADS;
+        int blocks = (num_unique_edges + threads - 1) / threads;
+
+        compute_vertex_degree_kernel<<<blocks, threads>>>(
+            num_unique_edges,
+            unique_edges,
+            vertex_degrees);
+    }
+
+    __global__ void compute_uniform_laplacian_kernel(
+        const uint32_t num_unique_edges,
+        const int *__restrict__ unique_edges,
+        const float3 *__restrict__ vertices,
+        float3 *__restrict__ vertex_lb_uniform)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_unique_edges) {
+            int u = unique_edges[2 * idx];
+            int v = unique_edges[2 * idx + 1];
+            
+            float3 pos_u = vertices[u];
+            float3 pos_v = vertices[v];
+            
+            atomicAdd(&vertex_lb_uniform[u], pos_v - pos_u);
+            atomicAdd(&vertex_lb_uniform[v], pos_u - pos_v);
+        }
+    }
+
+    __global__ void normalize_uniform_laplacian_kernel(
+        const uint32_t num_vertices,
+        const int *__restrict__ vertex_degrees,
+        float3 *__restrict__ vertex_lb_uniform)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_vertices) {
+            int degree = vertex_degrees[idx];
+            if (degree > 0) {
+                vertex_lb_uniform[idx] /= degree;
+            }
+        }
+    }
+
+    __host__ void compute_uniform_laplacian(
+        const uint32_t num_vertices,
+        const uint32_t num_unique_edges,
+        const int *__restrict__ unique_edges,
+        const int *__restrict__ vertex_degrees,
+        const float3 *__restrict__ vertices,
+        float3 *__restrict__ vertex_lb_uniform)
+    {
+        if (num_unique_edges == 0 || num_vertices == 0) return;
+
+        int threads = NTHREADS;
+        int blocks = (num_unique_edges + threads - 1) / threads;
+
+        compute_uniform_laplacian_kernel<<<blocks, threads>>>(
+            num_unique_edges,
+            unique_edges,
+            vertices,
+            vertex_lb_uniform);
+
+        int blocks_vert = (num_vertices + threads - 1) / threads;
+        normalize_uniform_laplacian_kernel<<<blocks_vert, threads>>>(
+            num_vertices,
+            vertex_degrees,
+            vertex_lb_uniform);
+    }
+
+    __global__ void compute_voronoi_areas_kernel(
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ vertices,
+        float *__restrict__ voronoi_areas)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles) {
+            int3 tri = triangles[idx];
+            int v0 = tri.x;
+            int v1 = tri.y;
+            int v2 = tri.z;
+            
+            float3 p0 = vertices[v0];
+            float3 p1 = vertices[v1];
+            float3 p2 = vertices[v2];
+            
+            float area = triangle::compute_area(p0, p1, p2);
+            float area0, area1, area2;
+            
+            if (triangle::is_obtuse(p0, p1, p2)) {
+                float3 e01 = p1 - p0;
+                float3 e12 = p2 - p1;
+                float3 e20 = p0 - p2;
+                
+                float d0 = maths::dot(e01, -e20);
+                float d1 = maths::dot(e12, -e01);
+                
+                if (d0 < 0.0f) {
+                    area0 = area * 0.5f;
+                    area1 = area * 0.25f;
+                    area2 = area * 0.25f;
+                } else if (d1 < 0.0f) {
+                    area0 = area * 0.25f;
+                    area1 = area * 0.5f;
+                    area2 = area * 0.25f;
+                } else {
+                    area0 = area * 0.25f;
+                    area1 = area * 0.25f;
+                    area2 = area * 0.5f;
+                }
+            } else {
+                float cot0, cot1, cot2;
+                Triangle(p0, p1, p2).compute_cotangents(cot0, cot1, cot2);
+                
+                float3 e01 = p1 - p0;
+                float3 e12 = p2 - p1;
+                float3 e20 = p0 - p2;
+                
+                float l01 = maths::dot(e01, e01);
+                float l12 = maths::dot(e12, e12);
+                float l20 = maths::dot(e20, e20);
+                
+                area0 = 0.125f * (l01 * cot2 + l20 * cot1);
+                area1 = 0.125f * (l01 * cot2 + l12 * cot0);
+                area2 = 0.125f * (l20 * cot1 + l12 * cot0);
+            }
+            
+            atomicAdd(&voronoi_areas[v0], area0);
+            atomicAdd(&voronoi_areas[v1], area1);
+            atomicAdd(&voronoi_areas[v2], area2);
+        }
+    }
+
+    __host__ void compute_voronoi_areas(
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ vertices,
+        float *__restrict__ voronoi_areas)
+    {
+        if (num_triangles == 0) return;
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+        compute_voronoi_areas_kernel<<<blocks, threads>>>(
+            num_triangles, triangles, vertices, voronoi_areas);
+    }
+
+    __global__ void compute_cotangent_laplacian_kernel(
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ vertices,
+        float3 *__restrict__ vertex_lb_cot)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles) {
+            int3 tri = triangles[idx];
+            int v0 = tri.x;
+            int v1 = tri.y;
+            int v2 = tri.z;
+            
+            float3 p0 = vertices[v0];
+            float3 p1 = vertices[v1];
+            float3 p2 = vertices[v2];
+            
+            float cot0, cot1, cot2;
+            Triangle(p0, p1, p2).compute_cotangents(cot0, cot1, cot2);
+            
+            // Contribution to edge (v1, v2) from v0
+            float3 w0 = cot0 * (p2 - p1);
+            atomicAdd(&vertex_lb_cot[v1], w0);
+            atomicAdd(&vertex_lb_cot[v2], -w0);
+            
+            // Contribution to edge (v2, v0) from v1
+            float3 w1 = cot1 * (p0 - p2);
+            atomicAdd(&vertex_lb_cot[v2], w1);
+            atomicAdd(&vertex_lb_cot[v0], -w1);
+            
+            // Contribution to edge (v0, v1) from v2
+            float3 w2 = cot2 * (p1 - p0);
+            atomicAdd(&vertex_lb_cot[v0], w2);
+            atomicAdd(&vertex_lb_cot[v1], -w2);
+        }
+    }
+
+    __global__ void normalize_cotangent_laplacian_kernel(
+        const uint32_t num_vertices,
+        const float *__restrict__ voronoi_areas,
+        float3 *__restrict__ vertex_lb_cot)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_vertices) {
+            float area = voronoi_areas[idx];
+            if (area > 1e-8f) {
+                float inv_area = 1.0f / (2.0f * area);
+                vertex_lb_cot[idx] *= inv_area;
+            }
+        }
+    }
+
+    __host__ void compute_cotangent_laplacian(
+        const uint32_t num_vertices,
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ vertices,
+        float *__restrict__ voronoi_areas,
+        float3 *__restrict__ vertex_lb_cot)
+    {
+        if (num_triangles == 0 || num_vertices == 0) return;
+
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+
+        compute_cotangent_laplacian_kernel<<<blocks, threads>>>(
+            num_triangles,
+            triangles,
+            vertices,
+            vertex_lb_cot);
+
+        int blocks_vert = (num_vertices + threads - 1) / threads;
+        normalize_cotangent_laplacian_kernel<<<blocks_vert, threads>>>(
+            num_vertices,
+            voronoi_areas,
+            vertex_lb_cot);
+    }
+
+    __global__ void compute_incident_angles_kernel(
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ vertices,
+        float *__restrict__ vertex_angle_sum)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles) {
+            int3 tri = triangles[idx];
+            float a0, a1, a2;
+            Triangle(vertices[tri.x], vertices[tri.y], vertices[tri.z]).compute_angles(a0, a1, a2);
+            
+            atomicAdd(&vertex_angle_sum[tri.x], a0);
+            atomicAdd(&vertex_angle_sum[tri.y], a1);
+            atomicAdd(&vertex_angle_sum[tri.z], a2);
+        }
+    }
+
+    __global__ void finalize_gaussian_curvature_kernel(
+        const uint32_t num_vertices,
+        const float *__restrict__ voronoi_areas,
+        const float *__restrict__ vertex_angle_sum,
+        float *__restrict__ gaussian_curvature)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_vertices) {
+            float area = voronoi_areas[idx];
+            float angle_sum = vertex_angle_sum[idx];
+            // 2.0f * M_PI = 6.28318530718f
+            gaussian_curvature[idx] = (6.28318530718f - angle_sum) / area;
+        }
+    }
+
+    __host__ void compute_gaussian_curvature(
+        const uint32_t num_vertices,
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ vertices,
+        const float *__restrict__ voronoi_areas,
+        float *__restrict__ vertex_angle_sum,
+        float *__restrict__ gaussian_curvature)
+    {
+        if (num_triangles == 0 || num_vertices == 0) return;
+        
+        int threads = NTHREADS;
+        int blocks_tri = (num_triangles + threads - 1) / threads;
+        compute_incident_angles_kernel<<<blocks_tri, threads>>>(
+            num_triangles, triangles, vertices, vertex_angle_sum);
+            
+        int blocks_vert = (num_vertices + threads - 1) / threads;
+        finalize_gaussian_curvature_kernel<<<blocks_vert, threads>>>(
+            num_vertices, voronoi_areas, vertex_angle_sum, gaussian_curvature);
     }
 }
