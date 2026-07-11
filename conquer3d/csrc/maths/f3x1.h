@@ -25,6 +25,10 @@ static inline __host__ __device__ void operator-=(float3 &a, float3 b) {
     a.x -= b.x; a.y -= b.y; a.z -= b.z;
 }
 
+static inline __host__ __device__ float3 operator-(float3 a) {
+    return make_float3(-a.x, -a.y, -a.z);
+}
+
 static inline __host__ __device__ float3 operator*(float3 a, float b) {
     return make_float3(a.x * b, a.y * b, a.z * b);
 }
@@ -46,6 +50,16 @@ static inline __host__ __device__ void operator/=(float3 &a, float b) {
     float inv = 1.0f / b;
     a.x *= inv; a.y *= inv; a.z *= inv;
 }
+
+#ifdef __CUDACC__
+static inline __device__ float3 atomicAdd(float3* address, float3 val) {
+    float3 old;
+    old.x = ::atomicAdd(&address->x, val.x);
+    old.y = ::atomicAdd(&address->y, val.y);
+    old.z = ::atomicAdd(&address->z, val.z);
+    return old;
+}
+#endif
 
 namespace maths
 {
