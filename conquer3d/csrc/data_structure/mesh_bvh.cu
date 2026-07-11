@@ -1,5 +1,5 @@
 #include "mesh_bvh.h"
-#include "../primitive/triangles.h"
+#include "../primitive/triangle.h"
 #include <thrust/device_vector.h>
 
 namespace mesh_bvh
