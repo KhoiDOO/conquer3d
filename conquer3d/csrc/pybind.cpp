@@ -5,6 +5,8 @@ namespace py = pybind11;
 
 void bind_primitive_gs(py::module_& m);
 void bind_primitive_pgs(py::module_& m);
+void bind_primitive_triangle(py::module_& m);
+void bind_primitive_ray(py::module_& m);
 
 void bind_ds_kdtree(py::module_& m);
 void bind_ds_bvh(py::module_& m);
@@ -24,6 +26,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
     bind_primitive_gs(m);
     bind_primitive_pgs(m);
+    bind_primitive_triangle(m);
+    bind_primitive_ray(m);
 
     bind_ds_kdtree(m);
     bind_ds_bvh(m);
