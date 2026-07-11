@@ -7,4 +7,6 @@ from . import primitive
 from . import ops
 from . import conversion
 
-__all__ = ['_C', 'creation', 'data_structure', 'primitive', 'ops', 'conversion']
+from .primitive import Triangle, Ray
+
+__all__ = ['_C', 'creation', 'data_structure', 'primitive', 'ops', 'conversion', 'Triangle', 'Ray']
