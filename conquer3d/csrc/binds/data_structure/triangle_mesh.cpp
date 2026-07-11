@@ -77,6 +77,238 @@ torch::Tensor TriangleMesh::get_vertex_normals()
     return this->vertex_normals;
 }
 
+void TriangleMesh::compute_vertex_degrees()
+{
+    if (this->vertex_degrees.defined()) return;
+
+    if (!this->edges.defined()) {
+        this->compute_edges_to_triangle_map();
+    }
+
+    uint32_t num_vertices = this->vertices.size(0);
+    this->vertex_degrees = torch::zeros({static_cast<int64_t>(num_vertices)}, torch::dtype(torch::kInt32).device(this->vertices.device()));
+
+    uint32_t num_edges = this->edges.size(0);
+    triangle_mesh::compute_vertex_degree(
+        num_edges,
+        reinterpret_cast<const int *>(this->edges.data_ptr<int>()),
+        reinterpret_cast<int *>(this->vertex_degrees.data_ptr<int>()));
+}
+
+torch::Tensor TriangleMesh::get_vertex_degrees()
+{
+    if (!this->vertex_degrees.defined())
+    {
+        this->compute_vertex_degrees();
+    }
+    return this->vertex_degrees;
+}
+
+void TriangleMesh::compute_vertex_lb_uniform()
+{
+    if (this->vertex_lb_uniform.defined()) return;
+
+    if (!this->edges.defined()) {
+        this->compute_edges_to_triangle_map();
+    }
+    if (!this->vertex_degrees.defined()) {
+        this->compute_vertex_degrees();
+    }
+
+    uint32_t num_vertices = this->vertices.size(0);
+    this->vertex_lb_uniform = torch::zeros({static_cast<int64_t>(num_vertices), 3}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
+
+    uint32_t num_edges = this->edges.size(0);
+    triangle_mesh::compute_uniform_laplacian(
+        num_vertices,
+        num_edges,
+        reinterpret_cast<const int *>(this->edges.data_ptr<int>()),
+        reinterpret_cast<const int *>(this->vertex_degrees.data_ptr<int>()),
+        reinterpret_cast<const float3 *>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<float3 *>(this->vertex_lb_uniform.data_ptr<float>()));
+}
+
+torch::Tensor TriangleMesh::get_vertex_lb_uniform()
+{
+    if (!this->vertex_lb_uniform.defined())
+    {
+        this->compute_vertex_lb_uniform();
+    }
+    return this->vertex_lb_uniform;
+}
+
+torch::Tensor TriangleMesh::compute_laplacian(int mode) {
+    if (mode == 0) {
+        return this->get_vertex_lb_uniform();
+    } else if (mode == 1) {
+        return this->get_vertex_lb_cotangent();
+    } else {
+        throw std::runtime_error("Unsupported laplacian mode. Use 0 for Uniform, 1 for Cotangent.");
+    }
+}
+
+torch::Tensor TriangleMesh::get_mean_curvature(bool signed_curvature) {
+    // mode 1 is cotangent laplacian
+    torch::Tensor lb_cotangent = this->compute_laplacian(1); 
+    
+    if (!signed_curvature) {
+        // Absolute Mean Curvature: || 2 * H * n || / 2.0 = |H|
+        return torch::norm(lb_cotangent, 2, 1) / 2.0f;
+    } else {
+        // Signed Mean Curvature: dot(2 * H * n, n) / 2.0 = H
+        torch::Tensor v_normals = this->get_vertex_normals();
+        return torch::sum(lb_cotangent * v_normals, 1) / 2.0f;
+    }
+}
+
+torch::Tensor TriangleMesh::get_principal_curvatures(bool signed_curvature) {
+    torch::Tensor H = this->get_mean_curvature(signed_curvature);
+    torch::Tensor K = this->get_gaussian_curvature();
+    
+    // In discrete settings, floating point inaccuracies can rarely cause H^2 < K. 
+    // We use torch::relu to clamp negative values to 0 before sqrt to prevent NaNs.
+    torch::Tensor delta = torch::relu(H * H - K);
+    torch::Tensor sqrt_delta = torch::sqrt(delta);
+    
+    torch::Tensor k1 = H + sqrt_delta;
+    torch::Tensor k2 = H - sqrt_delta;
+    
+    return torch::stack({k1, k2}, 1);
+}
+
+void TriangleMesh::compute_voronoi_areas()
+{
+    if (this->voronoi_areas.defined()) return;
+    
+    uint32_t num_vertices = this->vertices.size(0);
+    this->voronoi_areas = torch::zeros({static_cast<int64_t>(num_vertices)}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
+    uint32_t num_triangles = this->triangles.size(0);
+    
+    triangle_mesh::compute_voronoi_areas(
+        num_triangles,
+        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<const float3 *>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<float *>(this->voronoi_areas.data_ptr<float>()));
+}
+
+void TriangleMesh::compute_gaussian_curvature()
+{
+    if (this->gaussian_curvature.defined()) return;
+    
+    if (!this->voronoi_areas.defined()) {
+        this->compute_voronoi_areas();
+    }
+    
+    uint32_t num_vertices = this->vertices.size(0);
+    this->gaussian_curvature = torch::zeros({static_cast<int64_t>(num_vertices)}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
+    
+    uint32_t num_triangles = this->triangles.size(0);
+    auto vertex_angle_sum = torch::zeros({static_cast<int64_t>(num_vertices)}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
+    
+    triangle_mesh::compute_gaussian_curvature(
+        num_vertices,
+        num_triangles,
+        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<const float3 *>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<const float *>(this->voronoi_areas.data_ptr<float>()),
+        reinterpret_cast<float *>(vertex_angle_sum.data_ptr<float>()),
+        reinterpret_cast<float *>(this->gaussian_curvature.data_ptr<float>()));
+}
+
+torch::Tensor TriangleMesh::get_gaussian_curvature()
+{
+    if (!this->gaussian_curvature.defined())
+    {
+        this->compute_gaussian_curvature();
+    }
+    return this->gaussian_curvature;
+}
+void TriangleMesh::compute_vertex_lb_cotangent()
+{
+    if (this->vertex_lb_cotangent.defined()) return;
+
+    if (!this->voronoi_areas.defined()) {
+        this->compute_voronoi_areas();
+    }
+
+    uint32_t num_vertices = this->vertices.size(0);
+    this->vertex_lb_cotangent = torch::zeros({static_cast<int64_t>(num_vertices), 3}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
+
+    uint32_t num_triangles = this->triangles.size(0);
+    triangle_mesh::compute_cotangent_laplacian(
+        num_vertices,
+        num_triangles,
+        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<const float3 *>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<float *>(this->voronoi_areas.data_ptr<float>()),
+        reinterpret_cast<float3 *>(this->vertex_lb_cotangent.data_ptr<float>()));
+}
+
+torch::Tensor TriangleMesh::get_vertex_lb_cotangent()
+{
+    if (!this->vertex_lb_cotangent.defined())
+    {
+        this->compute_vertex_lb_cotangent();
+    }
+    return this->vertex_lb_cotangent;
+}
+
+torch::Tensor TriangleMesh::get_voronoi_areas()
+{
+    if (!this->voronoi_areas.defined())
+    {
+        this->compute_voronoi_areas();
+    }
+    return this->voronoi_areas;
+}
+
+torch::Tensor TriangleMesh::get_isolated_vertices() {
+    torch::Tensor degrees = this->get_vertex_degrees();
+    return torch::nonzero(degrees == 0).squeeze(1);
+}
+
+int32_t TriangleMesh::get_num_isolated_vertices() {
+    return this->get_isolated_vertices().size(0);
+}
+
+void TriangleMesh::remove_isolated_vertices() {
+    torch::Tensor degrees = this->get_vertex_degrees();
+    torch::Tensor keep_mask = degrees > 0;
+    
+    int64_t num_kept = keep_mask.sum().item<int64_t>();
+    if (num_kept == this->vertices.size(0)) {
+        return;
+    }
+    
+    // Create old to new mapping. Unused vertices map to -1.
+    torch::Tensor cumsum = torch::cumsum(keep_mask.to(torch::kInt32), 0);
+    torch::Tensor old_to_new = (cumsum - 1).masked_fill_(~keep_mask, -1);
+    
+    // Filter vertices
+    this->vertices = this->vertices.index({keep_mask});
+    
+    // Update triangles
+    torch::Tensor flat_tris = this->triangles.to(torch::kInt64).view({-1});
+    this->triangles = old_to_new.index_select(0, flat_tris).view({-1, 3}).to(torch::kInt32);
+    
+    // Invalidate all caches
+    this->triangle_areas = torch::Tensor();
+    this->triangle_normals = torch::Tensor();
+    this->surface_area = torch::Tensor();
+    this->bvh.reset();
+    this->edges = torch::Tensor();
+    this->edge_to_triangle_offsets = torch::Tensor();
+    this->edge_to_triangle_counts = torch::Tensor();
+    this->edge_to_triangle_indices = torch::Tensor();
+    this->vertex_to_triangle_offsets = torch::Tensor();
+    this->vertex_to_triangle_counts = torch::Tensor();
+    this->vertex_to_triangle_indices = torch::Tensor();
+    this->vertex_degrees = torch::Tensor();
+    this->vertex_lb_uniform = torch::Tensor();
+    this->vertex_lb_cotangent = torch::Tensor();
+    this->voronoi_areas = torch::Tensor();
+}
+
 void TriangleMesh::compute_triangle_areas()
 {
     this->triangle_areas = torch::empty({static_cast<int64_t>(this->num_triangles)}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
@@ -342,6 +574,11 @@ void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
     this->vertex_to_triangle_offsets = torch::Tensor();
     this->vertex_to_triangle_counts = torch::Tensor();
     this->vertex_to_triangle_indices = torch::Tensor();
+    
+    this->vertex_degrees = torch::Tensor();
+    this->vertex_lb_uniform = torch::Tensor();
+    this->vertex_lb_cotangent = torch::Tensor();
+    this->voronoi_areas = torch::Tensor();
 }
 
 int32_t TriangleMesh::get_euler_characteristic()
@@ -459,6 +696,18 @@ void bind_ds_triangle_mesh(py::module_ &m)
 
         Returns:
             torch.Tensor - Shape (N, 3) float32 tensor of vertex colors.
+        )doc")
+        .def_property_readonly("vertex_degrees", &TriangleMesh::get_vertex_degrees, R"doc(
+        Degree of each vertex (number of incident edges).
+
+        Returns:
+            torch.Tensor - Shape (N,) int32 tensor of vertex degrees.
+        )doc")
+        .def_property_readonly("vertex_lb_uniform", &TriangleMesh::get_vertex_lb_uniform, R"doc(
+        Uniform Laplace-Beltrami operator evaluated at each vertex.
+
+        Returns:
+            torch.Tensor - Shape (N, 3) float32 tensor of uniform laplacian vectors.
         )doc")
         .def_property_readonly("triangles", &TriangleMesh::get_triangles, R"doc(
         Mesh triangles.
@@ -628,6 +877,56 @@ void bind_ds_triangle_mesh(py::module_ &m)
 
         Returns:
             torch.Tensor: Tensor of vertex indices that are non-manifold.
+        )doc")
+        .def("get_isolated_vertices", &TriangleMesh::get_isolated_vertices, R"doc(
+        Gets the indices of all isolated vertices (degree 0).
+
+        Returns:
+            torch.Tensor - 1D tensor of isolated vertex indices.
+        )doc")
+        .def_property_readonly("num_isolated_vertices", &TriangleMesh::get_num_isolated_vertices, R"doc(
+        Gets the total number of isolated vertices.
+
+        Returns:
+            int - The total number of isolated vertices.
+        )doc")
+        .def("remove_isolated_vertices", &TriangleMesh::remove_isolated_vertices, R"doc(
+        Removes all isolated vertices from the mesh and reindexes the triangles.
+        )doc")
+        .def("get_voronoi_areas", &TriangleMesh::get_voronoi_areas, R"doc(
+            Get the per-vertex voronoi areas.
+        )doc")
+        .def("get_gaussian_curvature", &TriangleMesh::get_gaussian_curvature, R"doc(
+            Compute and return the discrete Gaussian curvature (angle deficit) at each vertex.
+        )doc")
+        .def("get_mean_curvature", &TriangleMesh::get_mean_curvature, py::arg("signed_curvature") = false, R"doc(
+            Compute and return the discrete Mean curvature at each vertex using the Laplace-Beltrami operator.
+            If signed_curvature is true, returns H. If false, returns |H|.
+        )doc")
+        .def("get_principal_curvatures", &TriangleMesh::get_principal_curvatures, py::arg("signed_curvature") = true, R"doc(
+            Compute and return the two principal curvatures (k1, k2) at each vertex as an [N, 2] tensor.
+            k1 is the maximum principal curvature, k2 is the minimum principal curvature.
+        )doc")
+        .def("compute_laplacian", &TriangleMesh::compute_laplacian, py::arg("mode") = 0, R"doc(
+        Computes the Laplace-Beltrami operator.
+
+        Args:
+            mode (int): The laplacian mode. 0 for Uniform, 1 for Cotangent.
+
+        Returns:
+            torch.Tensor - Shape (N, 3) float32 tensor of laplacian vectors.
+        )doc")
+        .def_property_readonly("vertex_lb_cotangent", &TriangleMesh::get_vertex_lb_cotangent, R"doc(
+        Cotangent Laplace-Beltrami operator evaluated at each vertex.
+
+        Returns:
+            torch.Tensor - Shape (N, 3) float32 tensor.
+        )doc")
+        .def_property_readonly("voronoi_areas", &TriangleMesh::get_voronoi_areas, R"doc(
+        Vertex voronoi areas (1/3 of the sum of incident triangle areas).
+
+        Returns:
+            torch.Tensor - Shape (N,) float32 tensor.
         )doc")
         .def("remove_triangles_by_mask", &TriangleMesh::remove_triangles_by_mask, py::arg("keep_mask"), R"doc(
         Removes triangles from the mesh based on a boolean mask.
