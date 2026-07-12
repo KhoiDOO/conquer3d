@@ -373,4 +373,4 @@ data/digit3d/sdf
 data/digit3d/*.zip
 
 # Examples
-*.pt
+*.pttest_data/
