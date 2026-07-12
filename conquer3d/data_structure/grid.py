@@ -63,3 +63,20 @@ def compute_active_voxels(
         torch.Tensor: An int64 tensor containing the indices of the active voxels.
     """
     return _C.compute_active_voxels(voxels.contiguous(), sdf.contiguous(), iso)
+
+def create_random_points_ball(n_points: int, radius: float = 1.0, device: str = 'cuda') -> torch.Tensor:
+    """
+    Creates a set of random points uniformly distributed inside a sphere.
+
+    Args:
+        n_points (int): Number of points to sample.
+        radius (float): Radius of the sphere. Defaults to 1.0.
+        device (str): Device to place the tensor on. Defaults to 'cuda'.
+
+    Returns:
+        torch.Tensor: Random points of shape (n_points, 3).
+    """
+    points = torch.randn(n_points, 3, device=device)
+    radii = torch.rand(n_points, 1, device=device) ** (1/3) * radius
+    points = (points / points.norm(dim=-1, keepdim=True)) * radii
+    return points
