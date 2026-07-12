@@ -1,23 +1,20 @@
 import torch
-import meshio
+import trimesh
 
 def read_off(filepath_or_filelike):
     """
-    Read an OFF (Object File Format) file and return vertices and faces as PyTorch tensors using meshio.
+    Read an OFF (Object File Format) file and return vertices and faces as PyTorch tensors using trimesh.
     
     Args:
-        filepath_or_filelike: A string path or a file-like object.
+        filepath_or_filelike: A string path or a file-like object (including binary streams).
         
     Returns:
         tuple: (vertices, faces) as torch.Tensor
     """
-    mesh = meshio.read(filepath_or_filelike, file_format="off")
-    vertices = torch.tensor(mesh.points, dtype=torch.float32)
+    # trimesh handles both string paths and binary file streams natively
+    mesh = trimesh.load(filepath_or_filelike, file_type='off', process=False, force='mesh')
     
-    faces = None
-    if "triangle" in mesh.cells_dict:
-        faces = torch.tensor(mesh.cells_dict["triangle"], dtype=torch.long)
-    else:
-        faces = torch.empty((0, 3), dtype=torch.long)
+    vertices = torch.tensor(mesh.vertices, dtype=torch.float32)
+    faces = torch.tensor(mesh.faces, dtype=torch.long)
         
     return vertices, faces
