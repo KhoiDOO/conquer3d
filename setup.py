@@ -57,6 +57,10 @@ def get_extensions():
             # nvcc_flags += ['-DTORCH_INDUCTOR_CPP_WRAPPER']
         else:
             nvcc_flags = nvcc_flags.split(" ")
+        
+        # Suppress harmless nvcc warnings (like conda's compiler-bindir redefinition)
+        nvcc_flags.append("-w")
+        
         extra_compile_args = {
             "cxx": ["-O3", "-Wno-attributes"],
             "nvcc": nvcc_flags,
