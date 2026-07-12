@@ -3,6 +3,7 @@
 
 #include <torch/extension.h>
 #include "mc_data.h"
+#include "../maths/maths.h"
 #include "../check.h"
 #include "../constants.h"
 #include "../primitive/edge.h"
