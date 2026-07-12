@@ -583,11 +583,9 @@ namespace mc
 
         float3 grad_p_out = adj_verts[v_idx];
 
-        float3 c0, c1, grad_c_out;
+        float3 grad_c_out;
         if (with_colors)
         {
-            c0 = grid_colors[v0_idx];
-            c1 = grid_colors[v1_idx];
             grad_c_out = adj_colors[v_idx];
         }
 
@@ -608,19 +606,14 @@ namespace mc
             float t0 = 1.0f - t;
             float t1 = t;
             
-            atomicAdd(&(adj_grid_colors[v0_idx].x), grad_c_out.x * t0);
-            atomicAdd(&(adj_grid_colors[v0_idx].y), grad_c_out.y * t0);
-            atomicAdd(&(adj_grid_colors[v0_idx].z), grad_c_out.z * t0);
-
-            atomicAdd(&(adj_grid_colors[v1_idx].x), grad_c_out.x * t1);
-            atomicAdd(&(adj_grid_colors[v1_idx].y), grad_c_out.y * t1);
-            atomicAdd(&(adj_grid_colors[v1_idx].z), grad_c_out.z * t1);
+            atomicAdd(&(adj_grid_colors[v0_idx]), grad_c_out * t0);
+            atomicAdd(&(adj_grid_colors[v1_idx]), grad_c_out * t1);
         }
 
         if (diff * diff < 1e-14f)
             return;
             
-        float dot_prod = (p1.x - p0.x) * grad_p_out.x + (p1.y - p0.y) * grad_p_out.y + (p1.z - p0.z) * grad_p_out.z;
+        float dot_prod = maths::dot(p1 - p0, grad_p_out);
         float common = dot_prod / (diff * diff);
         float grad_v0 = common * (iso - v1_val);
         float grad_v1 = common * (v0_val - iso);
