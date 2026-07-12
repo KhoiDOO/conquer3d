@@ -82,6 +82,9 @@ def main():
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: lr_schedule(x))
 
     print(f"Starting DMTet Optimization for {iter} iterations...")
+    best_loss = float('inf')
+    checkpoint_path = os.path.splitext(args.output)[0] + '.pt'
+
     for it in tqdm.tqdm(range(iter)): 
         optimizer.zero_grad()
         if it % 10 == 0:
@@ -113,15 +116,45 @@ def main():
         total_loss.backward()
         optimizer.step()
         scheduler.step()
+
+        # Check total loss for best checkpoint save for each 10 iterations
+        if (it + 1) % 10 == 0:
+            current_loss = total_loss.item()
+            if current_loss < best_loss:
+                best_loss = current_loss
+                checkpoint = {
+                    'sdf': sdf.data.clone(),
+                    'grid_vertices': grid_vertices.data.clone(),
+                    'tetras': tetras.clone() if isinstance(tetras, torch.Tensor) else tetras,
+                    'best_loss': best_loss,
+                    'iteration': it + 1,
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict()
+                }
+                checkpoint_dir = os.path.dirname(checkpoint_path)
+                if checkpoint_dir:
+                    os.makedirs(checkpoint_dir, exist_ok=True)
+                torch.save(checkpoint, checkpoint_path)
+                tqdm.tqdm.write(f"Iter {it+1}: New best total loss {best_loss:.4f}, saving checkpoint to {checkpoint_path}")
         
         if (it + 1) % 100 == 0:
             tqdm.tqdm.write(f"Iter {it+1}/{iter}, Mask: {mask_loss.item():.4f}, Depth: {depth_loss.item():.4f}, Normal: {normal_loss.item():.4f}, Reg SDF: {reg_sdf_loss.item():.4f}, Total: {total_loss.item():.4f}")
 
     print("Optimization finished.")
+    if os.path.exists(checkpoint_path):
+        print(f"Loading best checkpoint from {checkpoint_path} (best loss: {best_loss:.4f})")
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        with torch.no_grad():
+            sdf.data.copy_(checkpoint['sdf'])
+            grid_vertices.data.copy_(checkpoint['grid_vertices'])
+            tetras = checkpoint['tetras'].to(device)
+
     with torch.no_grad():
         final_vertices, final_faces = marching_tetrahedra(grid_vertices, tetras, sdf)
     
     print(f"Saving mesh to {args.output}...")
+    output_dir = os.path.dirname(args.output)
+    os.makedirs(output_dir, exist_ok=True)
     write_obj(args.output, final_vertices, final_faces)
     print("Done!")
 
