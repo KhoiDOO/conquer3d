@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import tetgen
 
 def find_near_duplicates_sort(points, epsilon=1e-7):
     """
