@@ -1,42 +1,38 @@
 import torch
-import meshio
+import trimesh
+import numpy as np
 
 def read_obj(file_obj):
     """
-    Reads an OBJ file and returns vertices, faces, and optional vertex colors using meshio.
+    Reads an OBJ file and returns vertices, faces, and optional vertex colors using trimesh.
     
     Args:
         file_obj: A file-like object or a string path.
     """
-    mesh = meshio.read(file_obj, file_format="obj")
-    vertices = torch.tensor(mesh.points, dtype=torch.float32)
+    # trimesh safely handles UV seams and mismatched v/vt counts
+    mesh = trimesh.load(file_obj, process=False, force='mesh', skip_materials=True)
     
-    faces = None
-    if "triangle" in mesh.cells_dict:
-        faces = torch.tensor(mesh.cells_dict["triangle"], dtype=torch.long)
-    else:
-        faces = torch.empty((0, 3), dtype=torch.long)
-        
-    # Meshio sometimes places vertex colors in point_data under 'obj:vc'
+    vertices = torch.tensor(mesh.vertices, dtype=torch.float32)
+    faces = torch.tensor(mesh.faces, dtype=torch.long)
+    
     colors = None
-    if mesh.point_data is not None and "obj:vc" in mesh.point_data:
-        colors = torch.tensor(mesh.point_data["obj:vc"], dtype=torch.float32)
+    if hasattr(mesh.visual, 'vertex_colors') and mesh.visual.vertex_colors is not None and len(mesh.visual.vertex_colors) > 0:
+        colors = torch.tensor(mesh.visual.vertex_colors[:, :3], dtype=torch.float32) / 255.0
         
     return vertices, faces, colors
 
 def write_obj(filepath, vertices, faces, colors=None):
     """
-    Writes vertices, faces, and optional vertex colors to an OBJ file using meshio.
+    Writes vertices, faces, and optional vertex colors to an OBJ file using trimesh.
     """
-    point_data = {}
+    v = vertices.detach().cpu().numpy()
+    f = faces.detach().cpu().numpy()
+    
+    vc = None
     if colors is not None:
-        point_data["obj:vc"] = colors.detach().cpu().numpy()
+        vc = (colors.detach().cpu().numpy() * 255.0).clip(0, 255).astype(np.uint8)
         
-    mesh = meshio.Mesh(
-        points=vertices.detach().cpu().numpy(),
-        cells=[("triangle", faces.detach().cpu().numpy())],
-        point_data=point_data if len(point_data) > 0 else None
-    )
-    meshio.write(filepath, mesh, file_format="obj")
+    mesh = trimesh.Trimesh(vertices=v, faces=f, vertex_colors=vc, process=False)
+    mesh.export(filepath)
 
 
