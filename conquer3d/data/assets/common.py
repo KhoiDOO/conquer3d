@@ -33,6 +33,13 @@ class Common3D:
         print(f"Reading {self.filename}...")
         self.vertices, self.faces, self.colors = read_obj(obj_path)
 
+    def get(self):
+        return (
+            self.vertices.clone(),
+            self.faces.clone(),
+            self.colors.clone() if self.colors is not None else None
+        )
+
 # --- Child Classes ---
 
 class Alligator(Common3D):
