@@ -15,6 +15,7 @@ class Iphiagenia:
         self.download_dir = os.path.expanduser(download_dir)
         self.vertices = None
         self.faces = None
+        self.colors = None
         
         self._load()
 
@@ -41,3 +42,9 @@ class Iphiagenia:
                 # off_file is a file-like object of bytes.
                 # read_off will automatically decode and parse it.
                 self.vertices, self.faces = read_off(off_file)
+    def get(self):
+        return (
+            self.vertices.clone(),
+            self.faces.clone(),
+            self.colors.clone() if self.colors is not None else None
+        )
