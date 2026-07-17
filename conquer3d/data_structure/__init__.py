@@ -11,6 +11,7 @@ from .grid import (
     compute_grid_normal, 
     compute_active_voxels, 
 )
+from .sort import z_curve_sort
 
 spatial_data_structures = ['KDTree', 'BVH', 'GSBVH', 'PGSBVH', 'MeshBVH']
 mesh_data_structures = ['TriangleMesh']
@@ -19,5 +20,6 @@ grid_data_structures = [
     'compute_grid_normal', 
     'compute_active_voxels', 
 ]
+sort_data_structures = ['z_curve_sort']
 
-__all__ = spatial_data_structures + mesh_data_structures + grid_data_structures
+__all__ = spatial_data_structures + mesh_data_structures + grid_data_structures + sort_data_structures
