@@ -2,6 +2,7 @@ import torch
 from typing import Tuple
 
 from .._C import create_sphere as create_sphere_c
+from .._C import create_tetrahedra as create_tetrahedra_c
 
 def create_sphere(
     sectors: int = 32,
@@ -21,3 +22,18 @@ def create_sphere(
         triangles: (M, 3) int32 tensor of triangle indices.
     """
     return create_sphere_c(sectors, stacks, radius)
+
+def create_tetrahedra(
+    radius: float = 1.0
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Creates a regular tetrahedron returning (vertices, triangles) tensors on the CPU.
+
+    Args:
+        radius (float, optional): Circumscribed radius of the tetrahedron. Defaults to 1.0.
+
+    Returns:
+        vertices: (4, 3) float32 tensor of vertex positions.
+        triangles: (4, 3) int32 tensor of triangle indices.
+    """
+    return create_tetrahedra_c(radius)
