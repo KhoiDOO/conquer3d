@@ -130,3 +130,32 @@ class SparseDigit3D(Digit3D):
         sparse_idx_grids = sparse_coords[:, 1:]
         
         return sparse_idx_grids, sparse_sdfs, label
+
+class PointDigit3D(Digit3D):
+    """
+    Digit3D Dataset that constructs a point cloud by sampling on the mesh.
+    """
+    def __init__(self, root: str = "~/.conquer3d/", train: bool = True, transform=None, download: bool = False, 
+                 cached: bool = False, num_points: int = 512):
+        super().__init__(root, train, transform, download, cached=cached)
+        self.num_points = num_points
+        
+    def __getitem__(self, idx: int):
+        # 1. Obtain vertices, faces, and label from Digit3D
+        vertices, faces, label = super().__getitem__(idx)
+        
+        import trimesh
+        # 2. Construct trimesh object (CPU safe for DataLoader workers)
+        mesh = trimesh.Trimesh(vertices=vertices.numpy(), faces=faces.numpy(), process=False)
+        
+        # 3. Sample points uniformly over the surface
+        points_np, face_indices = trimesh.sample.sample_surface(mesh, self.num_points)
+        normals_np = mesh.face_normals[face_indices]
+        
+        points = torch.tensor(points_np, dtype=torch.float32)
+        normals = torch.tensor(normals_np, dtype=torch.float32)
+        
+        # 4. Combine into features
+        features = torch.cat([points, normals], dim=-1)
+        
+        return points, features, label
