@@ -19,6 +19,161 @@ from conquer3d.io.obj import write_obj
 import conquer3d.data.assets as c3d_assets
 from conquer3d.data_structure.grid import create_random_points_ball
 
+def compute_circumcenter(vertices, tets):
+    """
+    Compute the circumcenters of a set of tetrahedra.
+    
+    Args:
+    - vertices: Tensor of shape (V, 3), where V is the number of vertices.
+    - tets: Tensor of shape (F, 4), where F is the number of tetrahedra.
+    
+    Returns:
+    - circumcenters: Tensor of shape (F, 3) representing the circumcenters.
+    - circumradii: Tensor of shape (F,) representing the radii of the circumspheres.
+    
+    Source: https://mathworld.wolfram.com/Circumsphere.html or https://rodolphe-vaillant.fr/entry/127/find-a-tetrahedron-circumcenter
+    """
+    tet_vertices = vertices[tets]
+    v0 = tet_vertices[:, 0]
+    v1 = tet_vertices[:, 1]
+    v2 = tet_vertices[:, 2]
+    v3 = tet_vertices[:, 3]
+    a = v1 - v0
+    b = v2 - v0
+    c = v3 - v0
+    d = 2 * torch.det(torch.stack([a, b, c], dim=-1))  # Shape (F,)
+    A = torch.linalg.norm(a, dim=-1) ** 2  # Shape (F,)
+    B = torch.linalg.norm(b, dim=-1) ** 2  # Shape (F,)
+    C = torch.linalg.norm(c, dim=-1) ** 2  # Shape (F,)
+    circumcenters = v0 + (A.unsqueeze(-1) * torch.cross(b, c, dim=-1) +
+                          B.unsqueeze(-1) * torch.cross(c, a, dim=-1) +
+                          C.unsqueeze(-1) * torch.cross(a, b, dim=-1)) / d.unsqueeze(-1)
+    circumradii = (v0 - circumcenters).norm(dim=-1)
+    return circumcenters, circumradii
+
+def compute_inertia_tensor(vertices, tets, circumcenters, volumes):
+    """
+    Compute the sum of principal moments of inertia (trace of inertia tensor) for tetrahedra using the formula in the referenced paper.
+
+    Args:
+    - vertices: Tensor of shape (V, 3), where V is the number of vertices.
+    - tets: Tensor of shape (F, 4), where F is the number of tetrahedra.
+    - circumcenters: Tensor of shape (F, 3), circumcenters for each tetrahedron.
+    - volumes: Tensor of shape (F,), volumes of the tetrahedra.
+
+    Returns:
+    - M_T: Tensor of shape (F,) representing the sum of the principal moments of inertia for each tetrahedron.
+    """
+
+    tet_vertices = vertices[tets]  # Shape: (F, 4, 3)
+    rel_vertices = tet_vertices - circumcenters.unsqueeze(1)  # Shape: (F, 4, 3)
+    x = rel_vertices[..., 0]  # x-coordinates (F, 4)
+    y = rel_vertices[..., 1]  # y-coordinates (F, 4)
+    z = rel_vertices[..., 2]  # z-coordinates (F, 4)
+
+    x_sum = x[..., 0] * x[..., 0] + x[..., 1] * x[..., 1] + x[..., 2] * x[..., 2] + x[..., 3] * x[..., 3] \
+            + x[..., 0] * x[..., 1] + x[..., 0] * x[..., 2] + x[..., 0] * x[..., 3] \
+            + x[..., 1] * x[..., 2] + x[..., 1] * x[..., 3] + x[..., 2] * x[..., 3]
+    
+    y_sum = y[..., 0] * y[..., 0] + y[..., 1] * y[..., 1] + y[..., 2] * y[..., 2] + y[..., 3] * y[..., 3] \
+            + y[..., 0] * y[..., 1] + y[..., 0] * y[..., 2] + y[..., 0] * y[..., 3] \
+            + y[..., 1] * y[..., 2] + y[..., 1] * y[..., 3] + y[..., 2] * y[..., 3]
+    
+    z_sum = z[..., 0] * z[..., 0] + z[..., 1] * z[..., 1] + z[..., 2] * z[..., 2] + z[..., 3] * z[..., 3] \
+            + z[..., 0] * z[..., 1] + z[..., 0] * z[..., 2] + z[..., 0] * z[..., 3] \
+            + z[..., 1] * z[..., 2] + z[..., 1] * z[..., 3] + z[..., 2] * z[..., 3]
+    
+    Ix = 6.0 * volumes * (y_sum + z_sum) / 60.0
+    Iy = 6.0 * volumes * (x_sum + z_sum) / 60.0
+    Iz = 6.0 * volumes * (x_sum + y_sum) / 60.0
+
+    M_T = Ix + Iy + Iz
+    return M_T
+
+def compute_shell_moment(circumradii, volumes):
+    """
+    Compute the moment of inertia for a spherical shell with equivalent mass.
+    
+    Args:
+    - circumradii: Tensor of shape (F,) representing the circumradii.
+    - volumes: Tensor of shape (F,) representing the volumes of the tetrahedra.
+    
+    Returns:
+    - M_S: Moment of inertia for each tetrahedron's circumshell.
+    """
+    M_S =  2.0/5.0*volumes * (circumradii ** 2)
+    return M_S
+
+def E_ODT(vertices, tets):
+    """
+    Compute the optimal Delaunay triangulation energy for a tetrahedral mesh.
+    
+    Args:
+    - vertices: Tensor of shape (V, 3), where V is the number of vertices.
+    - tets: Tensor of shape (F, 4), where F is the number of tetrahedra.
+    
+    Returns:
+    - energy: A scalar value representing the ODT energy of the whole mesh.
+    """
+    circumcenters, circumradii = compute_circumcenter(vertices, tets)
+    tet_vertices = vertices[tets]
+
+    v0, v1, v2, v3 = tet_vertices[:, 0], tet_vertices[:, 1], tet_vertices[:, 2], tet_vertices[:, 3]
+    volumes = torch.abs(torch.det(torch.stack([v1 - v0, v2 - v0, v3 - v0], dim=-1))) / 6.0
+
+    M_T = compute_inertia_tensor(vertices, tets, circumcenters, volumes)
+    M_S = compute_shell_moment(circumradii, volumes)
+    energy = torch.mean(torch.abs(M_T - M_S))
+
+    return energy
+
+def E_VOL(vertices, tets):
+    """
+    Compute the volume-based energy for a tetrahedral mesh.
+    E(v_i) = \sum_{m=1}^n p_m V_m^2(v_i)
+    where p_m = 1 / A_m(v_i), and A_m(v_i) is the area of the opposing triangle.
+    """
+    tet_vertices = vertices[tets]
+    v0, v1, v2, v3 = tet_vertices[:, 0], tet_vertices[:, 1], tet_vertices[:, 2], tet_vertices[:, 3]
+
+    # Volume calculation
+    e1 = v1 - v0
+    e2 = v2 - v0
+    e3 = v3 - v0
+    V = torch.abs(torch.det(torch.stack([e1, e2, e3], dim=-1))) / 6.0
+    V_sq = V ** 2
+
+    # Areas of opposing triangles
+    # A0: opposes v0, triangle (v1, v2, v3)
+    A0 = 0.5 * torch.linalg.norm(torch.cross(v2 - v1, v3 - v1, dim=-1), dim=-1)
+    
+    # A1: opposes v1, triangle (v0, v2, v3)
+    A1 = 0.5 * torch.linalg.norm(torch.cross(v2 - v0, v3 - v0, dim=-1), dim=-1)
+    
+    # A2: opposes v2, triangle (v0, v1, v3)
+    A2 = 0.5 * torch.linalg.norm(torch.cross(v1 - v0, v3 - v0, dim=-1), dim=-1)
+    
+    # A3: opposes v3, triangle (v0, v1, v2)
+    A3 = 0.5 * torch.linalg.norm(torch.cross(v1 - v0, v2 - v0, dim=-1), dim=-1)
+
+    eps = 1e-8
+    E_m0 = V_sq / (A0 + eps)
+    E_m1 = V_sq / (A1 + eps)
+    E_m2 = V_sq / (A2 + eps)
+    E_m3 = V_sq / (A3 + eps)
+
+    E_m = torch.stack([E_m0, E_m1, E_m2, E_m3], dim=1)  # (F, 4)
+
+    num_vertices = vertices.shape[0]
+    energy_per_vertex = torch.zeros(num_vertices, device=vertices.device)
+    
+    for i in range(4):
+        energy_per_vertex.scatter_add_(0, tets[:, i], E_m[:, i])
+    
+    energy = torch.mean(energy_per_vertex)
+        
+    return energy
+
 def compute_angle(a, b, c):
     """
     Compute the angle between vectors a-b and c-b (in radians)
@@ -73,6 +228,10 @@ def main():
     parser.add_argument('--weight_depth', type=float, default=250.0, help='Weight for depth loss')
     parser.add_argument('--weight_normal', type=float, default=1.0, help='Weight for normal loss')
     parser.add_argument('--weight_sdf_reg', type=float, default=0.1, help='Weight for sdf regularization loss')
+    parser.add_argument('--use_eodt', action='store_true', help='Turn on/off E_ODT loss')
+    parser.add_argument('--weight_eodt', type=float, default=0.1, help='Weight for E_ODT loss')
+    parser.add_argument('--use_evol', action='store_true', help='Turn on/off E_VOL loss')
+    parser.add_argument('--weight_evol', type=float, default=0.1, help='Weight for E_VOL loss')
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -165,6 +324,18 @@ def main():
         else:
             fairness_loss = torch.tensor(0.0, device=device)
             
+        if args.use_eodt:
+            eodt_loss = E_ODT(grid_vertices, tetras.long())
+            total_loss += args.weight_eodt * eodt_loss
+        else:
+            eodt_loss = torch.tensor(0.0, device=device)
+            
+        if args.use_evol:
+            evol_loss = E_VOL(grid_vertices, tetras.long())
+            total_loss += args.weight_evol * evol_loss
+        else:
+            evol_loss = torch.tensor(0.0, device=device)
+            
         total_loss.backward()
         optimizer.step()
         scheduler.step()
@@ -190,7 +361,7 @@ def main():
                 tqdm.tqdm.write(f"Iter {it+1}: New best total loss {best_loss:.4f}, saving checkpoint to {checkpoint_path}")
         
         if (it + 1) % 100 == 0:
-            tqdm.tqdm.write(f"Epoch {it+1}/{epoch}, Mask: {mask_loss.item():.4f}, Depth: {depth_loss.item():.4f}, Normal: {normal_loss.item():.4f}, Reg SDF: {reg_sdf_loss.item():.4f}, Fairness: {fairness_loss.item():.4f}, Total: {total_loss.item():.4f}")
+            tqdm.tqdm.write(f"Epoch {it+1}/{epoch}, Mask: {mask_loss.item():.4f}, Depth: {depth_loss.item():.4f}, Normal: {normal_loss.item():.4f}, Reg SDF: {reg_sdf_loss.item():.4f}, Fairness: {fairness_loss.item():.4f}, EODT: {eodt_loss.item():.4f}, EVOL: {evol_loss.item():.4f}, Total: {total_loss.item():.4f}")
 
     print("Optimization finished.")
     if os.path.exists(checkpoint_path):
