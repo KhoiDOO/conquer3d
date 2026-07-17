@@ -92,6 +92,31 @@ namespace triangle_creation
         return {V, F};
     }
 
+    inline std::tuple<torch::Tensor, torch::Tensor> create_tetrahedra(float radius = 1.0f) {
+        float a = radius / std::sqrt(3.0f);
+        std::vector<float> vertices = {
+             a,  a,  a,
+            -a, -a,  a,
+            -a,  a, -a,
+             a, -a, -a
+        };
+
+        std::vector<int> triangles = {
+            0, 2, 1,
+            0, 1, 3,
+            0, 3, 2,
+            1, 2, 3
+        };
+
+        auto opts_f32 = torch::TensorOptions().dtype(torch::kFloat32);
+        auto opts_i32 = torch::TensorOptions().dtype(torch::kInt32);
+
+        torch::Tensor V = torch::from_blob(vertices.data(), {4, 3}, opts_f32).clone();
+        torch::Tensor F = torch::from_blob(triangles.data(), {4, 3}, opts_i32).clone();
+
+        return {V, F};
+    }
+
 }
 
 #endif // TRIANGLE_CREATION_H
