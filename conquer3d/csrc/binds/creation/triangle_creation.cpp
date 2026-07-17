@@ -20,4 +20,15 @@ Args:
 Returns:
     tuple: A tuple containing the vertices tensor and the triangles tensor.
 )doc");
+
+    m.def("create_tetrahedra", &triangle_creation::create_tetrahedra,
+          py::arg("radius") = 1.0f,
+          R"doc(Creates a regular tetrahedron returning (vertices, triangles) tensors on the CPU.
+
+Args:
+    radius (float): The circumscribed radius of the tetrahedron. Defaults to 1.0.
+
+Returns:
+    tuple: A tuple containing the vertices tensor and the triangles tensor.
+)doc");
 }
