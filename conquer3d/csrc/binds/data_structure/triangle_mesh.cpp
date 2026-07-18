@@ -581,6 +581,29 @@ void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
     this->voronoi_areas = torch::Tensor();
 }
 
+void TriangleMesh::fix_normals()
+{
+    if (this->num_triangles == 0) return;
+    
+    if (!this->vertex_to_triangle_offsets.defined()) {
+        this->compute_vertices_to_triangle_map();
+    }
+    
+    triangle_mesh::fix_normals(
+        this->num_triangles,
+        reinterpret_cast<const float3 *>(this->vertices.data_ptr<float>()),
+        this->vertex_to_triangle_offsets,
+        this->vertex_to_triangle_counts,
+        this->vertex_to_triangle_indices,
+        reinterpret_cast<int3 *>(this->triangles.data_ptr<int>()));
+        
+    // Invalidate caches
+    this->triangle_areas = torch::Tensor();
+    this->triangle_normals = torch::Tensor();
+    this->vertex_normals = torch::Tensor();
+    this->bvh.reset();
+}
+
 int32_t TriangleMesh::get_euler_characteristic()
 {
     int32_t V = this->vertices.size(0);
@@ -933,6 +956,11 @@ void bind_ds_triangle_mesh(py::module_ &m)
 
         Args:
             keep_mask (torch.Tensor): Shape (M,) boolean tensor indicating which triangles to keep.
+        )doc")
+        .def("fix_normals", &TriangleMesh::fix_normals, R"doc(
+        Fixes the winding order and outward orientation of the mesh normals.
+        This uses a CUDA-accelerated BFS to ensure consistent winding, 
+        and computes signed volumes to ensure all disconnected components face outward.
         )doc")
         .def("sample_points", &TriangleMesh::sample_points, py::arg("num_points"), py::arg("uniform") = false, py::arg("return_normals") = false, py::arg("return_colors") = false, py::arg("use_triangle_normal") = true, R"doc(
         Samples random points on the surface of the mesh.
