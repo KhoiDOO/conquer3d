@@ -51,10 +51,12 @@ def get_extensions():
         define_macros += [("WITH_CUDA", None)]
         nvcc_flags = os.getenv("NVCC_FLAGS", "")
         if nvcc_flags == "":
-            major, minor = torch.cuda.get_device_capability()
-            nvcc_flags = [f"-arch=sm_{major}{minor}"]
-            # nvcc_flags = ["-O3"]
-            # nvcc_flags += ['-DTORCH_INDUCTOR_CPP_WRAPPER']
+            try:
+                major, minor = torch.cuda.get_device_capability()
+                nvcc_flags = [f"-arch=sm_{major}{minor}"]
+            except Exception:
+                # If no GPU is available during build, rely on TORCH_CUDA_ARCH_LIST or defaults
+                nvcc_flags = []
         else:
             nvcc_flags = nvcc_flags.split(" ")
         
