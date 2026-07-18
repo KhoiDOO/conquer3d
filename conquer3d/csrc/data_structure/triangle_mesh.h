@@ -131,6 +131,8 @@ public:
     torch::Tensor get_non_manifold_vertices();
 
     void remove_triangles_by_mask(const torch::Tensor &keep_mask);
+    
+    void fix_normals();
 
     int32_t get_euler_characteristic();
     int32_t get_genus();
@@ -186,6 +188,14 @@ namespace triangle_mesh
         const torch::Tensor& v2t_offsets,
         const torch::Tensor& v2t_counts,
         const torch::Tensor& v2t_indices);
+
+    __host__ void fix_normals(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const torch::Tensor &v2t_offsets,
+        const torch::Tensor &v2t_counts,
+        const torch::Tensor &v2t_indices,
+        int3 *__restrict__ triangles);
 
     __host__ void sample_points_triangle_mesh(
         const int num_points,
