@@ -10,6 +10,10 @@ ENV MAX_JOBS=4
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
+    pkg-config \
+    libegl1-mesa-dev \
+    libgl1-mesa-dev \
+    libgles2-mesa-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -30,9 +34,9 @@ RUN pip install setuptools wheel ninja && \
     pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 
 # Install heavy 3D and graphics dependencies
-RUN pip install git+https://github.com/mit-han-lab/torchsparse.git --no-build-isolation && \
-    pip install kaolin==0.18.0 -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.8.0_cu128.html && \
-    pip install git+https://github.com/NVlabs/nvdiffrast.git
+RUN pip install git+https://github.com/mit-han-lab/torchsparse.git --no-build-isolation
+RUN pip install kaolin==0.18.0 -f https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.8.0_cu128.html
+RUN pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation
 
 # Install visualization and meshing utilities
 RUN pip install pybind11-stubgen plotly open3d jupyter trimesh point-cloud-utils meshlib pymeshlab kiui rectified-flow-pytorch
