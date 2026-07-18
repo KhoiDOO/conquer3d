@@ -844,4 +844,196 @@ namespace triangle_mesh
         finalize_gaussian_curvature_kernel<<<blocks_vert, threads>>>(
             num_vertices, voronoi_areas, vertex_angle_sum, gaussian_curvature);
     }
+    __global__ void find_unvisited_kernel(
+        const int num_triangles,
+        const int *__restrict__ visited,
+        int *__restrict__ seed,
+        int *__restrict__ found)
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_triangles) return;
+        
+        if (visited[idx] == 0) {
+            if (atomicCAS(found, 0, 1) == 0) {
+                *seed = idx;
+            }
+        }
+    }
+
+    __global__ void fix_winding_bfs_kernel(
+        const int num_triangles,
+        int3 *__restrict__ triangles,
+        const int *__restrict__ v2t_offsets,
+        const int *__restrict__ v2t_counts,
+        const int *__restrict__ v2t_indices,
+        int *__restrict__ visited,
+        const int *__restrict__ frontier,
+        const int frontier_size,
+        int *__restrict__ next_frontier,
+        int *__restrict__ next_frontier_size)
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= frontier_size) return;
+
+        int tri_id = frontier[idx];
+        int3 tri = triangles[tri_id];
+
+        int edge_v[3][2] = {{tri.x, tri.y}, {tri.y, tri.z}, {tri.z, tri.x}};
+        
+        for (int e = 0; e < 3; ++e) {
+            int v0 = edge_v[e][0];
+            int v1 = edge_v[e][1];
+            
+            int shared_faces[10];
+            int num_shared = 0;
+            
+            int start0 = v2t_offsets[v0];
+            int end0 = start0 + v2t_counts[v0];
+            int start1 = v2t_offsets[v1];
+            int end1 = start1 + v2t_counts[v1];
+            for (int i = start0; i < end0; ++i) {
+                int f0 = v2t_indices[i];
+                for (int j = start1; j < end1; ++j) {
+                    if (f0 == v2t_indices[j]) {
+                        if (num_shared < 10) {
+                            shared_faces[num_shared++] = f0;
+                        }
+                    }
+                }
+            }
+            
+            for (int k = 0; k < num_shared; ++k) {
+                int neighbor_id = shared_faces[k];
+                if (neighbor_id != tri_id) {
+                    if (atomicCAS(&visited[neighbor_id], 0, 1) == 0) {
+                        int3 n_tri = triangles[neighbor_id];
+                        bool n_has_v0_v1 = (n_tri.x == v0 && n_tri.y == v1) || 
+                                           (n_tri.y == v0 && n_tri.z == v1) || 
+                                           (n_tri.z == v0 && n_tri.x == v1);
+                        if (n_has_v0_v1) {
+                            triangles[neighbor_id] = make_int3(n_tri.x, n_tri.z, n_tri.y);
+                        }
+                        int push_idx = atomicAdd(next_frontier_size, 1);
+                        next_frontier[push_idx] = neighbor_id;
+                    }
+                }
+            }
+        }
+    }
+
+    __global__ void component_signed_volume_kernel(
+        const int num_component_faces,
+        const int *__restrict__ component_faces,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ volumes)
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_component_faces) return;
+        
+        int tri_id = component_faces[idx];
+        int3 tri = triangles[tri_id];
+        float3 a = vertices[tri.x];
+        float3 b = vertices[tri.y];
+        float3 c = vertices[tri.z];
+        
+        float3 cross_bc = maths::cross(b, c);
+        float vol = maths::dot(a, cross_bc) / 6.0f;
+        volumes[idx] = vol;
+    }
+
+    __global__ void invert_component_kernel(
+        const int num_component_faces,
+        const int *__restrict__ component_faces,
+        int3 *__restrict__ triangles)
+    {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_component_faces) return;
+        
+        int tri_id = component_faces[idx];
+        int3 tri = triangles[tri_id];
+        triangles[tri_id] = make_int3(tri.x, tri.z, tri.y);
+    }
+
+    __host__ void fix_normals(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const torch::Tensor &v2t_offsets,
+        const torch::Tensor &v2t_counts,
+        const torch::Tensor &v2t_indices,
+        int3 *__restrict__ triangles)
+    {
+        auto options = torch::TensorOptions().device(v2t_offsets.device()).dtype(torch::kInt32);
+        torch::Tensor visited = torch::zeros({num_triangles}, options);
+        torch::Tensor frontier = torch::empty({num_triangles}, options);
+        torch::Tensor next_frontier = torch::empty({num_triangles}, options);
+        torch::Tensor component_faces = torch::empty({num_triangles}, options);
+        
+        int *d_visited = visited.data_ptr<int>();
+        int *d_frontier = frontier.data_ptr<int>();
+        int *d_next_frontier = next_frontier.data_ptr<int>();
+        int *d_component_faces = component_faces.data_ptr<int>();
+        
+        int *d_seed; cudaMalloc(&d_seed, sizeof(int));
+        int *d_found; cudaMalloc(&d_found, sizeof(int));
+        int *d_next_frontier_size; cudaMalloc(&d_next_frontier_size, sizeof(int));
+        
+        int h_found = 0;
+        int h_seed = 0;
+        
+        while (true) {
+            cudaMemset(d_found, 0, sizeof(int));
+            int blocks = (num_triangles + NTHREADS - 1) / NTHREADS;
+            find_unvisited_kernel<<<blocks, NTHREADS>>>(num_triangles, d_visited, d_seed, d_found);
+            cudaMemcpy(&h_found, d_found, sizeof(int), cudaMemcpyDeviceToHost);
+            
+            if (h_found == 0) break;
+            
+            cudaMemcpy(&h_seed, d_seed, sizeof(int), cudaMemcpyDeviceToHost);
+            
+            int h_one = 1;
+            cudaMemcpy(&d_visited[h_seed], &h_one, sizeof(int), cudaMemcpyHostToDevice);
+            cudaMemcpy(&d_frontier[0], &h_seed, sizeof(int), cudaMemcpyHostToDevice);
+            
+            int frontier_size = 1;
+            int component_size = 0;
+            
+            while (frontier_size > 0) {
+                cudaMemcpy(&d_component_faces[component_size], d_frontier, frontier_size * sizeof(int), cudaMemcpyDeviceToDevice);
+                component_size += frontier_size;
+                
+                cudaMemset(d_next_frontier_size, 0, sizeof(int));
+                
+                int bfs_blocks = (frontier_size + NTHREADS - 1) / NTHREADS;
+                fix_winding_bfs_kernel<<<bfs_blocks, NTHREADS>>>(
+                    num_triangles, triangles, 
+                    v2t_offsets.data_ptr<int>(), v2t_counts.data_ptr<int>(), v2t_indices.data_ptr<int>(),
+                    d_visited, d_frontier, frontier_size, d_next_frontier, d_next_frontier_size);
+                    
+                cudaMemcpy(&frontier_size, d_next_frontier_size, sizeof(int), cudaMemcpyDeviceToHost);
+                
+                int *tmp = d_frontier;
+                d_frontier = d_next_frontier;
+                d_next_frontier = tmp;
+            }
+            
+            auto vol_options = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kFloat32);
+            torch::Tensor volumes = torch::empty({component_size}, vol_options);
+            
+            int vol_blocks = (component_size + NTHREADS - 1) / NTHREADS;
+            component_signed_volume_kernel<<<vol_blocks, NTHREADS>>>(
+                component_size, d_component_faces, vertices, triangles, volumes.data_ptr<float>());
+                
+            float comp_volume = volumes.sum().item<float>();
+            
+            if (comp_volume < 0.0f) {
+                invert_component_kernel<<<vol_blocks, NTHREADS>>>(
+                    component_size, d_component_faces, triangles);
+            }
+        }
+        
+        cudaFree(d_seed);
+        cudaFree(d_found);
+        cudaFree(d_next_frontier_size);
+    }
 }
