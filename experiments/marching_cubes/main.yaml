@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: exp-mc
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      schedulerName: volcano
+      restartPolicy: Never
+      volumes:
+      - name: project
+        persistentVolumeClaim:
+          claimName: prj-1
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Gi
+      containers:
+      - name: exp-mc
+        image: kohido/conquer3d:v0.0.1
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: dokh-secret
+              key: GITHUB_TOKEN
+        command: ["bash","-lc"]
+        args:
+        - |
+          set -e
+          cd /mnt/prj/
+          export HOME=/tmp
+          export XDG_CONFIG_HOME=/tmp
+          mkdir -p /tmp/.cache || true
+          if [ -d "conquer3d" ]; then
+            cd conquer3d
+            git config --global --add safe.directory /mnt/project/conquer3d
+            git fetch
+            git pull
+          else
+            git clone https://${GITHUB_TOKEN}@github.com/KhoiDOO/conquer3d.git
+            cd conquer3d/
+          fi
+          cd experiments/marching_cubes
+          bash main.sh
+
+        volumeMounts:
+        - {name: project, mountPath: /mnt/prj/}
+        - {name: dshm, mountPath: /dev/shm}
+        resources:
+          limits:   { nvidia.com/gpu: 1, cpu: "32",  memory: "128Gi" }
+          requests: { nvidia.com/gpu: 1, cpu: "32",  memory: "128Gi" }
