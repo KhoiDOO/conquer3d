@@ -10,6 +10,7 @@ from .grid import (
     create_voxel_grid, 
     compute_grid_normal, 
     compute_active_voxels, 
+    create_voxel_grid_from_tmesh
 )
 from .sort import z_curve_sort
 
@@ -19,6 +20,7 @@ grid_data_structures = [
     'create_voxel_grid', 
     'compute_grid_normal', 
     'compute_active_voxels', 
+    'create_voxel_grid_from_tmesh',
 ]
 sort_data_structures = ['z_curve_sort']
 
