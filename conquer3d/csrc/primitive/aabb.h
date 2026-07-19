@@ -130,7 +130,7 @@ namespace aabb
         return d2;
     }
 
-    __device__ __forceinline__ bool test_aabb_overlap(
+    __host__ __device__ __forceinline__ bool test_aabb_overlap(
         const float3 &query_aabb_min,
         const float3 &query_aabb_max,
         const float3 &target_aabb_min,
