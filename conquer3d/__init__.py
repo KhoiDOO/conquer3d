@@ -1,4 +1,10 @@
 import torch
+import importlib.metadata
+
+try:
+    __version__ = importlib.metadata.version('conquer3d')
+except importlib.metadata.PackageNotFoundError:
+    __version__ = "unknown"
 
 from . import _C
 from . import creation
