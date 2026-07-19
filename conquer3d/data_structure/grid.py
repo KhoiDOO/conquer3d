@@ -26,6 +26,17 @@ def create_voxel_grid(
     """
     return _C.create_voxel_grid(list(grid_min), list(grid_max), list(res), device)
 
+def create_voxel_grid_from_tmesh(
+    grid_min: Union[List[float], Tuple[float, float, float]],
+    grid_max: Union[List[float], Tuple[float, float, float]],
+    res: Union[List[int], Tuple[int, int, int]],
+    tmesh: '_C.TriangleMesh'
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Creates a sparse 3D voxel grid strictly around the surface.
+    """
+    return _C.create_voxel_grid_from_tmesh(list(grid_min), list(grid_max), list(res), tmesh)
+
 def compute_grid_normal(
     sdf: torch.Tensor,
     grid_vertices: torch.Tensor,
