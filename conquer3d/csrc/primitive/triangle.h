@@ -4,6 +4,7 @@
 #include "../maths/maths.h"
 
 #include "ray.h"
+#include "aabb.h"
 
 struct Triangle {
     float3 v0, v1, v2;
@@ -300,6 +301,54 @@ struct Triangle {
         
         return true;
     }
+
+    __host__ __device__ __forceinline__ bool is_voxel_intersect(const float3& voxel_min, const float3& voxel_max) const {
+        float3 tri_min, tri_max;
+        compute_aabb(tri_min, tri_max);
+        
+        if (!aabb::test_aabb_overlap(voxel_min, voxel_max, tri_min, tri_max)) return false;
+
+        float3 extents = (voxel_max - voxel_min) * 0.5f;
+        float3 voxel_center = voxel_min + extents;
+
+        float3 p0 = v0 - voxel_center;
+        float3 p1 = v1 - voxel_center;
+        float3 p2 = v2 - voxel_center;
+
+        float3 f0 = p1 - p0;
+        float3 f1 = p2 - p1;
+        float3 f2 = p0 - p2;
+
+#define TEST_AXIS(axis) \
+        do { \
+            float p0_proj = maths::dot(p0, axis); \
+            float p1_proj = maths::dot(p1, axis); \
+            float p2_proj = maths::dot(p2, axis); \
+            float r = maths::dot(extents, maths::abs(axis)); \
+            if (fminf(fminf(p0_proj, p1_proj), p2_proj) > r || fmaxf(fmaxf(p0_proj, p1_proj), p2_proj) < -r) return false; \
+        } while(0)
+
+        TEST_AXIS(make_float3(0.0f, -f0.z, f0.y));
+        TEST_AXIS(make_float3(0.0f, -f1.z, f1.y));
+        TEST_AXIS(make_float3(0.0f, -f2.z, f2.y));
+
+        TEST_AXIS(make_float3(f0.z, 0.0f, -f0.x));
+        TEST_AXIS(make_float3(f1.z, 0.0f, -f1.x));
+        TEST_AXIS(make_float3(f2.z, 0.0f, -f2.x));
+
+        TEST_AXIS(make_float3(-f0.y, f0.x, 0.0f));
+        TEST_AXIS(make_float3(-f1.y, f1.x, 0.0f));
+        TEST_AXIS(make_float3(-f2.y, f2.x, 0.0f));
+
+#undef TEST_AXIS
+
+        float3 normal = maths::cross(f0, f1);
+        float radius = maths::dot(extents, maths::abs(normal));
+        float d = maths::dot(normal, p0);
+        if (fabsf(d) > radius) return false;
+
+        return true;
+    }
 };
 
 namespace triangle
@@ -337,6 +386,11 @@ namespace triangle
     __host__ __device__ __inline__ bool test_intersection(const Triangle& T1, const Triangle& T2)
     {
         return T1.test_intersection(T2);
+    }
+
+    __host__ __device__ __inline__ bool is_voxel_intersect(const float3 &v0, const float3 &v1, const float3 &v2, const float3 &voxel_min, const float3 &voxel_max)
+    {
+        return Triangle(v0, v1, v2).is_voxel_intersect(voxel_min, voxel_max);
     }
 
     __host__ __device__ __inline__ bool test_point_on_tria_plane(const float3 &v0, const float3 &v1, const float3 &v2, const float3 &p, float eps = 1e-5f)
