@@ -296,6 +296,10 @@ void TriangleMesh::remove_isolated_vertices() {
     this->triangle_normals = torch::Tensor();
     this->surface_area = torch::Tensor();
     this->bvh.reset();
+    this->opt_edge_manifold = std::nullopt;
+    this->opt_edge_manifold_w_boundary = std::nullopt;
+    this->opt_vertex_manifold = std::nullopt;
+    this->opt_self_intersected = std::nullopt;
     this->edges = torch::Tensor();
     this->edge_to_triangle_offsets = torch::Tensor();
     this->edge_to_triangle_counts = torch::Tensor();
@@ -347,8 +351,13 @@ torch::Tensor TriangleMesh::get_self_intersection()
 
 bool TriangleMesh::is_self_intersection()
 {
+    if (this->opt_self_intersected.has_value()) {
+        return this->opt_self_intersected.value();
+    }
     this->build_bvh();
-    return this->bvh.value().is_self_intersection(this->vertices, this->triangles);
+    bool self_int = this->bvh.value().is_self_intersection(this->vertices, this->triangles);
+    this->opt_self_intersected = self_int;
+    return self_int;
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleMesh::query_points(
@@ -358,6 +367,10 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleM
     int sign_mode,
     int distance_mode)
 {
+    if (!this->is_manifold(true)) {
+        sign_mode = 0;
+    }
+
     if (distance_mode == 0)
     {
         this->build_bvh();
@@ -541,15 +554,26 @@ bool TriangleMesh::is_edge_manifold(bool allow_boundary_edge)
 {
     if (this->num_triangles == 0)
         return true;
+
+    if (allow_boundary_edge && this->opt_edge_manifold_w_boundary.has_value()) {
+        return this->opt_edge_manifold_w_boundary.value();
+    } else if (!allow_boundary_edge && this->opt_edge_manifold.has_value()) {
+        return this->opt_edge_manifold.value();
+    }
+
     torch::Tensor counts = this->get_edge_to_triangle_counts();
+    bool is_manifold;
     if (allow_boundary_edge)
     {
-        return (counts <= 2).all().item<bool>();
+        is_manifold = (counts <= 2).all().item<bool>();
+        this->opt_edge_manifold_w_boundary = is_manifold;
     }
     else
     {
-        return (counts == 2).all().item<bool>();
+        is_manifold = (counts == 2).all().item<bool>();
+        this->opt_edge_manifold = is_manifold;
     }
+    return is_manifold;
 }
 
 void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
@@ -566,6 +590,10 @@ void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
     this->triangle_normals = torch::Tensor();
     this->surface_area = torch::Tensor();
     this->bvh.reset();
+    this->opt_edge_manifold = std::nullopt;
+    this->opt_edge_manifold_w_boundary = std::nullopt;
+    this->opt_vertex_manifold = std::nullopt;
+    this->opt_self_intersected = std::nullopt;
     this->edges = torch::Tensor();
     this->edge_to_triangle_offsets = torch::Tensor();
     this->edge_to_triangle_counts = torch::Tensor();
@@ -602,6 +630,10 @@ void TriangleMesh::fix_normals()
     this->triangle_normals = torch::Tensor();
     this->vertex_normals = torch::Tensor();
     this->bvh.reset();
+    this->opt_edge_manifold = std::nullopt;
+    this->opt_edge_manifold_w_boundary = std::nullopt;
+    this->opt_vertex_manifold = std::nullopt;
+    this->opt_self_intersected = std::nullopt;
 }
 
 int32_t TriangleMesh::get_euler_characteristic()
@@ -671,8 +703,13 @@ torch::Tensor TriangleMesh::get_non_manifold_vertices()
 
 bool TriangleMesh::is_vertex_manifold()
 {
+    if (this->opt_vertex_manifold.has_value()) {
+        return this->opt_vertex_manifold.value();
+    }
     torch::Tensor nm_vertices = this->get_non_manifold_vertices();
-    return nm_vertices.size(0) == 0;
+    bool is_manifold = (nm_vertices.size(0) == 0);
+    this->opt_vertex_manifold = is_manifold;
+    return is_manifold;
 }
 
 bool TriangleMesh::is_manifold(bool allow_boundary_edge)
