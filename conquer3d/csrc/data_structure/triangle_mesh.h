@@ -28,6 +28,10 @@ protected:
     torch::Tensor surface_area;     // Size: [] -> Total surface area
 
     std::optional<MeshBVH> bvh;
+    std::optional<bool> opt_edge_manifold;
+    std::optional<bool> opt_edge_manifold_w_boundary;
+    std::optional<bool> opt_vertex_manifold;
+    std::optional<bool> opt_self_intersected;
 
     torch::Tensor vertex_lb_uniform;
     torch::Tensor vertex_lb_cotangent;
