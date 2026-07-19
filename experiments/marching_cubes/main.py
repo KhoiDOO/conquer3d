@@ -18,6 +18,7 @@ def main():
     parser = argparse.ArgumentParser(description="Standard Marching Cubes Evaluation")
     parser.add_argument('--input', type=str, required=True, help='Name of asset from conquer3d.data.assets')
     parser.add_argument('--res', type=int, required=True, help='Resolution for the voxel grid')
+    parser.add_argument('--chunk_size', type=int, default=5000000, help='Chunk size for SDF computation')
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -44,6 +45,13 @@ def main():
     
     print("Building TriangleMesh...")
     tm = ds.TriangleMesh(vertices, faces)
+    
+    print("--- Mesh Diagnostics ---")
+    print(f"Is fully manifold: {tm.is_manifold()}")
+    print(f"Is edge manifold: {tm.is_edge_manifold()}")
+    print(f"Is vertex manifold: {tm.is_vertex_manifold()}")
+    print(f"Has self-intersections: {tm.is_self_intersection()}")
+    print("------------------------")
     print("Fixing normals with native CUDA fix_normals()...")
     tm.fix_normals()
     
@@ -55,12 +63,12 @@ def main():
     
     print("Creating sparse voxel grid and computing SDF...")
     grid_vertices, active_voxels, idx_grids, sdf = tmesh2sparse(
-        tm, r, grid_min=[-1.0, -1.0, -1.0], grid_max=[1.0, 1.0, 1.0], device=device
+        tm, r, grid_min=[-1.0, -1.0, -1.0], grid_max=[1.0, 1.0, 1.0], chunk_size=args.chunk_size, device=device
     )
     
     print(f"Active voxels: {active_voxels.shape[0]}")
     
-    pt_path = os.path.join(output_dir, f"{args.input}_{r}.pt")
+    pt_path = os.path.join(output_dir, f"{args.input.lower()}_{r}.pt")
     print(f"Saving active grid info to {pt_path}...")
     torch.save({
         'grid_vertices': grid_vertices,
@@ -69,13 +77,18 @@ def main():
         'sdf': sdf
     }, pt_path)
     
-    print("Performing standard marching cubes...")
-    mc_vertices, mc_faces, _, _ = marching_cubes(grid_vertices, active_voxels, sdf)
+    if active_voxels.shape[0] == 0:
+        print(f"Warning: No vertices extracted for resolution {r}")
+        mc_vertices = torch.empty((0, 3), dtype=torch.float32, device=device)
+        mc_faces = torch.empty((0, 3), dtype=torch.int32, device=device)
+    else:
+        print("Performing standard marching cubes...")
+        mc_vertices, mc_faces, _, _ = marching_cubes(grid_vertices, active_voxels, sdf)
     
     if mc_vertices.shape[0] == 0:
         print(f"Warning: No vertices extracted for resolution {r}")
     else:
-        obj_path = os.path.join(output_dir, f"{args.input}_{r}.obj")
+        obj_path = os.path.join(output_dir, f"{args.input.lower()}.obj")
         print(f"Saving mesh to {obj_path}...")
         write_obj(obj_path, mc_vertices, mc_faces)
 
