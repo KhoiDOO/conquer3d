@@ -4,6 +4,8 @@
 #include <tuple>
 #include <string>
 #include <vector>
+#include "../../data_structure/mesh_bvh.h"
+#include "../../data_structure/triangle_mesh.h"
 
 namespace py = pybind11;
 
@@ -139,9 +141,78 @@ torch::Tensor compute_active_voxels(torch::Tensor voxels, torch::Tensor sdf, flo
     return active_indices;
 }
 
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> create_voxel_grid_from_tmesh(
+    std::vector<float> grid_min,
+    std::vector<float> grid_max,
+    std::vector<int64_t> res,
+    TriangleMesh &tmesh
+) {
+    TORCH_CHECK(grid_min.size() == 3, "grid_min must have 3 elements.");
+    TORCH_CHECK(grid_max.size() == 3, "grid_max must have 3 elements.");
+    TORCH_CHECK(res.size() == 3, "res must have 3 elements.");
+
+    int64_t rx = res[0];
+    int64_t ry = res[1];
+    int64_t rz = res[2];
+
+    MeshBVH bvh = tmesh.build_bvh();
+    auto vertices = tmesh.get_vertices();
+    auto triangles = tmesh.get_triangles();
+
+    auto active_voxel_ids = bvh.get_active_voxel_ids_from_grid(grid_min, grid_max, res, vertices, triangles);
+
+    if (active_voxel_ids.size(0) == 0) {
+        return std::make_tuple(
+            torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device())),
+            torch::empty({0, 8}, torch::TensorOptions().dtype(torch::kInt32).device(vertices.device())),
+            torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(vertices.device()))
+        );
+    }
+
+    auto vi = active_voxel_ids.div((ry - 1) * (rz - 1), "trunc");
+    auto rem = active_voxel_ids.remainder((ry - 1) * (rz - 1));
+    auto vj = rem.div(rz - 1, "trunc");
+    auto vk = rem.remainder(rz - 1);
+
+    auto v0 = vi * ry * rz + vj * rz + vk;
+    auto v1 = (vi + 1) * ry * rz + vj * rz + vk;
+    auto v2 = (vi + 1) * ry * rz + (vj + 1) * rz + vk;
+    auto v3 = vi * ry * rz + (vj + 1) * rz + vk;
+    auto v4 = vi * ry * rz + vj * rz + (vk + 1);
+    auto v5 = (vi + 1) * ry * rz + vj * rz + (vk + 1);
+    auto v6 = (vi + 1) * ry * rz + (vj + 1) * rz + (vk + 1);
+    auto v7 = vi * ry * rz + (vj + 1) * rz + (vk + 1);
+
+    auto active_voxels = torch::stack({v0, v1, v2, v3, v4, v5, v6, v7}, -1);
+
+    torch::Tensor unique_vert_ids, inverse_indices, counts;
+    std::tie(unique_vert_ids, inverse_indices, counts) = torch::_unique2(active_voxels.flatten(), true, true, false);
+
+    auto remapped_voxels = inverse_indices.view({-1, 8}).to(torch::kInt32);
+
+    auto u_i = unique_vert_ids.div(ry * rz, "trunc");
+    auto u_rem = unique_vert_ids.remainder(ry * rz);
+    auto u_j = u_rem.div(rz, "trunc");
+    auto u_k = u_rem.remainder(rz);
+
+    float spacing_x = (grid_max[0] - grid_min[0]) / (rx - 1);
+    float spacing_y = (grid_max[1] - grid_min[1]) / (ry - 1);
+    float spacing_z = (grid_max[2] - grid_min[2]) / (rz - 1);
+
+    auto x = grid_min[0] + u_i.to(torch::kFloat32) * spacing_x;
+    auto y = grid_min[1] + u_j.to(torch::kFloat32) * spacing_y;
+    auto z = grid_min[2] + u_k.to(torch::kFloat32) * spacing_z;
+
+    auto sparse_grid_vertices = torch::stack({x, y, z}, 1).contiguous();
+
+    return std::make_tuple(sparse_grid_vertices, remapped_voxels, unique_vert_ids);
+}
+
 void bind_ds_grid(py::module_& m) {
     m.def("create_voxel_grid", &create_voxel_grid, "Creates a structured 3D voxel grid.",
           py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("device_str") = "cuda");
+    m.def("create_voxel_grid_from_tmesh", &create_voxel_grid_from_tmesh, "Creates a sparse 3D voxel grid strictly around the surface.",
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"));
     m.def("compute_grid_normal", &compute_grid_normal, "Computes surface normals for a grid.",
           py::arg("sdf"), py::arg("grid_vertices"), py::arg("idx_grids"), py::arg("res"));
     m.def("compute_active_voxels", &compute_active_voxels, "Computes active voxels intersecting the surface",
