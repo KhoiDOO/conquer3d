@@ -187,6 +187,112 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     return std::make_tuple(out_query_ids, out_object_ids, out_projected_pts, out_distances);
 }
 
+torch::Tensor MeshBVH::query_voxel(
+    const torch::Tensor &query_mins,
+    const torch::Tensor &query_maxs,
+    const torch::Tensor &vertices,
+    const torch::Tensor &triangles)
+{
+    int num_queries = query_mins.size(0);
+    int num_objects = this->object_ids.size(0);
+
+    auto options_bool = torch::TensorOptions().dtype(torch::kBool).device(query_mins.device());
+    torch::Tensor out_intersect = torch::empty({num_queries}, options_bool);
+
+    if (num_queries == 0 || num_objects == 0)
+    {
+        out_intersect.fill_(false);
+        return out_intersect;
+    }
+
+    mesh_bvh::query_voxel_mesh_bvh(
+        num_queries,
+        num_objects,
+        (const float3 *)query_mins.data_ptr<float>(),
+        (const float3 *)query_maxs.data_ptr<float>(),
+        (const float3 *)vertices.data_ptr<float>(),
+        (const int3 *)triangles.data_ptr<int>(),
+        (const float3 *)this->aabb_mins.data_ptr<float>(),
+        (const float3 *)this->aabb_maxs.data_ptr<float>(),
+        (const int2 *)this->bvh_children.data_ptr<int>(),
+        this->object_ids.data_ptr<int>(),
+        out_intersect.data_ptr<bool>());
+
+    return out_intersect;
+}
+
+torch::Tensor MeshBVH::get_active_voxel_ids_from_grid(
+    std::vector<float> grid_min,
+    std::vector<float> grid_max,
+    std::vector<int64_t> res,
+    const torch::Tensor &vertices,
+    const torch::Tensor &triangles)
+{
+    int64_t rx = res[0] - 1;
+    int64_t ry = res[1] - 1;
+    int64_t rz = res[2] - 1;
+    int64_t num_queries = rx * ry * rz;
+    int num_objects = this->object_ids.size(0);
+
+    auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(vertices.device());
+
+    if (num_queries <= 0 || num_objects == 0)
+    {
+        return torch::empty({0}, options_i64);
+    }
+
+    float spacing_x = (grid_max[0] - grid_min[0]) / (res[0] - 1);
+    float spacing_y = (grid_max[1] - grid_min[1]) / (res[1] - 1);
+    float spacing_z = (grid_max[2] - grid_min[2]) / (res[2] - 1);
+
+    int3 res_int = make_int3(rx, ry, rz);
+    float3 g_min = make_float3(grid_min[0], grid_min[1], grid_min[2]);
+    float3 v_size = make_float3(spacing_x, spacing_y, spacing_z);
+
+    // Pass 1: Count active voxels
+    torch::Tensor active_counter = torch::zeros({1}, options_i64);
+
+    mesh_bvh::count_active_voxels_mesh_bvh(
+        res_int,
+        g_min,
+        v_size,
+        num_objects,
+        (const float3 *)vertices.data_ptr<float>(),
+        (const int3 *)triangles.data_ptr<int>(),
+        (const float3 *)this->aabb_mins.data_ptr<float>(),
+        (const float3 *)this->aabb_maxs.data_ptr<float>(),
+        (const int2 *)this->bvh_children.data_ptr<int>(),
+        this->object_ids.data_ptr<int>(),
+        active_counter.data_ptr<int64_t>());
+
+    int64_t num_active = active_counter.item<int64_t>();
+
+    if (num_active == 0)
+    {
+        return torch::empty({0}, options_i64);
+    }
+
+    // Pass 2: Collect active voxels
+    torch::Tensor out_active_ids = torch::empty({num_active}, options_i64);
+    active_counter.zero_();
+
+    mesh_bvh::collect_active_voxels_mesh_bvh(
+        res_int,
+        g_min,
+        v_size,
+        num_objects,
+        (const float3 *)vertices.data_ptr<float>(),
+        (const int3 *)triangles.data_ptr<int>(),
+        (const float3 *)this->aabb_mins.data_ptr<float>(),
+        (const float3 *)this->aabb_maxs.data_ptr<float>(),
+        (const int2 *)this->bvh_children.data_ptr<int>(),
+        this->object_ids.data_ptr<int>(),
+        active_counter.data_ptr<int64_t>(),
+        out_active_ids.data_ptr<int64_t>());
+
+    return out_active_ids;
+}
+
 void MeshBVH::build_winding_data(
     const torch::Tensor &vertices,
     const torch::Tensor &triangles)
@@ -295,5 +401,18 @@ void bind_ds_mesh_bvh(py::module_ &m)
         Args:
             vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
             triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
+        )doc")
+        .def("query_voxel", &MeshBVH::query_voxel, py::arg("query_mins"), py::arg("query_maxs"), py::arg("vertices"), py::arg("triangles"),
+             R"doc(
+        Queries whether each voxel intersects the mesh.
+        
+        Args:
+            query_mins (torch.Tensor): Shape (Q, 3) float32 tensor of voxel minimums.
+            query_maxs (torch.Tensor): Shape (Q, 3) float32 tensor of voxel maximums.
+            vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
+            triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
+            
+        Returns:
+            torch.Tensor: Boolean tensor of shape (Q,) indicating intersection.
         )doc");
 }
