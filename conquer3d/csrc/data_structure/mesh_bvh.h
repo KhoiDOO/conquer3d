@@ -51,6 +51,19 @@ public:
         bool return_sdf = false,
         bool return_prj_pts = true,
         int sign_mode = 0);
+
+    torch::Tensor query_voxel(
+        const torch::Tensor &query_mins,
+        const torch::Tensor &query_maxs,
+        const torch::Tensor &vertices,
+        const torch::Tensor &triangles);
+
+    torch::Tensor get_active_voxel_ids_from_grid(
+        std::vector<float> grid_min,
+        std::vector<float> grid_max,
+        std::vector<int64_t> res,
+        const torch::Tensor &vertices,
+        const torch::Tensor &triangles);
 };
 
 namespace mesh_bvh
@@ -107,6 +120,46 @@ namespace mesh_bvh
         const int *bvh_parents,
         const int2 *bvh_children,
         WindingData *winding_data);
+
+    __host__ void query_voxel_mesh_bvh(
+        const int num_queries,
+        const int num_objects,
+        const float3 *query_mins,
+        const float3 *query_maxs,
+        const float3 *vertices,
+        const int3 *triangles,
+        const float3 *bvh_aabb_mins,
+        const float3 *bvh_aabb_maxs,
+        const int2 *bvh_children,
+        const int *object_ids,
+        bool *out_intersect);
+
+    __host__ void count_active_voxels_mesh_bvh(
+        const int3 res,
+        const float3 grid_min,
+        const float3 voxel_size,
+        const int num_objects,
+        const float3 *vertices,
+        const int3 *triangles,
+        const float3 *bvh_aabb_mins,
+        const float3 *bvh_aabb_maxs,
+        const int2 *bvh_children,
+        const int *object_ids,
+        int64_t *active_counter);
+
+    __host__ void collect_active_voxels_mesh_bvh(
+        const int3 res,
+        const float3 grid_min,
+        const float3 voxel_size,
+        const int num_objects,
+        const float3 *vertices,
+        const int3 *triangles,
+        const float3 *bvh_aabb_mins,
+        const float3 *bvh_aabb_maxs,
+        const int2 *bvh_children,
+        const int *object_ids,
+        int64_t *active_counter,
+        int64_t *out_active_ids);
 }
 
 #endif // MESH_BVH_H
