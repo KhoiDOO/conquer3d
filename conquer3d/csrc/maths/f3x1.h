@@ -91,6 +91,22 @@ namespace maths
     static inline __host__ __device__ bool equals(float3 a, float3 b) {
         return a.x == b.x && a.y == b.y && a.z == b.z;
     }
+
+    static inline __host__ __device__ float3 abs(float3 a) {
+        return make_float3(fabsf(a.x), fabsf(a.y), fabsf(a.z));
+    }
+
+    static inline __host__ __device__ float3 min(float3 a, float3 b) {
+        return make_float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z));
+    }
+
+    static inline __host__ __device__ float3 max(float3 a, float3 b) {
+        return make_float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z));
+    }
+}
+
+static inline __host__ __device__ float3 operator*(float3 a, float3 b) {
+    return make_float3(a.x * b.x, a.y * b.y, a.z * b.z);
 }
 
 #endif // F3x1_H
