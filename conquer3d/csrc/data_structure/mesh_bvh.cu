@@ -395,18 +395,18 @@ namespace mesh_bvh
 
     void query_point_mesh_bvh(const int num_queries,
         const int num_objects,
-        const float3 *__restrict__ query_points,
-        const float3 *__restrict__ vertices,
-        const int3 *__restrict__ triangles,
-        const float3 *__restrict__ bvh_aabb_mins,
-        const float3 *__restrict__ bvh_aabb_maxs,
-        const int2 *__restrict__ bvh_children,
-        const int *__restrict__ object_ids,
-        const WindingData *__restrict__ winding_data,
-        int64_t *__restrict__ out_query_ids,
-        int64_t *__restrict__ out_object_ids,
-        float3 *__restrict__ out_projected_pts,
-        float *__restrict__ out_distances,
+        const float3 *query_points,
+        const float3 *vertices,
+        const int3 *triangles,
+        const float3 *bvh_aabb_mins,
+        const float3 *bvh_aabb_maxs,
+        const int2 *bvh_children,
+        const int *object_ids,
+        const WindingData *winding_data,
+        int64_t *out_query_ids,
+        int64_t *out_object_ids,
+        float3 *out_projected_pts,
+        float *out_distances,
         bool return_sdf,
         bool return_prj_pts,
         int sign_mode)
@@ -522,12 +522,12 @@ namespace mesh_bvh
 
     void bottom_up_winding_data(
         const int num_objects,
-        const int *__restrict__ object_ids,
-        const float3 *__restrict__ vertices,
-        const int3 *__restrict__ triangles,
-        const int *__restrict__ bvh_parents,
-        const int2 *__restrict__ bvh_children,
-        WindingData *__restrict__ winding_data)
+        const int *object_ids,
+        const float3 *vertices,
+        const int3 *triangles,
+        const int *bvh_parents,
+        const int2 *bvh_children,
+        WindingData *winding_data)
     {
         int threads = NTHREADS;
         int blocks = (num_objects + threads - 1) / threads;
@@ -543,5 +543,313 @@ namespace mesh_bvh
             bvh_children,
             winding_data,
             thrust::raw_pointer_cast(atomic_flags.data()));
+    }
+    __global__ void query_voxel_mesh_bvh_kernel(
+        const int num_queries,
+        const int num_objects,
+        const float3 *__restrict__ query_mins,
+        const float3 *__restrict__ query_maxs,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        bool *__restrict__ out_intersect)
+    {
+        int q_idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (q_idx >= num_queries)
+            return;
+
+        float3 q_min = query_mins[q_idx];
+        float3 q_max = query_maxs[q_idx];
+
+        int stack[BVH_STACK_SIZE];
+        int stack_ptr = 0;
+        stack[0] = 0;
+
+        bool is_intersect = false;
+
+        while (stack_ptr >= 0)
+        {
+            int node_idx = stack[stack_ptr--];
+
+            if (!aabb::test_aabb_overlap(q_min, q_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]))
+                continue;
+
+            if (node_idx >= num_objects - 1)
+            {
+                int tri_id = object_ids[node_idx - (num_objects - 1)];
+                int3 tri = triangles[tri_id];
+                Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+
+                if (T.is_voxel_intersect(q_min, q_max))
+                {
+                    is_intersect = true;
+                    break;
+                }
+            }
+            else
+            {
+                if (stack_ptr + 2 < BVH_STACK_SIZE)
+                {
+                    int2 children = bvh_children[node_idx];
+                    stack[++stack_ptr] = children.x;
+                    stack[++stack_ptr] = children.y;
+                }
+            }
+        }
+
+        out_intersect[q_idx] = is_intersect;
+    }
+
+    void query_voxel_mesh_bvh(
+        const int num_queries,
+        const int num_objects,
+        const float3 *query_mins,
+        const float3 *query_maxs,
+        const float3 *vertices,
+        const int3 *triangles,
+        const float3 *bvh_aabb_mins,
+        const float3 *bvh_aabb_maxs,
+        const int2 *bvh_children,
+        const int *object_ids,
+        bool *out_intersect)
+    {
+        int threads = NTHREADS;
+        int blocks = (num_queries + threads - 1) / threads;
+
+        query_voxel_mesh_bvh_kernel<<<blocks, threads>>>(
+            num_queries,
+            num_objects,
+            query_mins,
+            query_maxs,
+            vertices,
+            triangles,
+            bvh_aabb_mins,
+            bvh_aabb_maxs,
+            bvh_children,
+            object_ids,
+            out_intersect);
+    }
+
+    __global__ void count_active_voxels_mesh_bvh_kernel(
+        const int3 res,
+        const float3 grid_min,
+        const float3 voxel_size,
+        const int num_objects,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        unsigned long long *__restrict__ active_counter)
+    {
+        int64_t rx = res.x;
+        int64_t ry = res.y;
+        int64_t rz = res.z;
+        int64_t num_voxels = rx * ry * rz;
+
+        int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_voxels)
+            return;
+
+        int64_t vi = idx / (ry * rz);
+        int64_t rem = idx % (ry * rz);
+        int64_t vj = rem / rz;
+        int64_t vk = rem % rz;
+
+        float3 q_min = make_float3(
+            grid_min.x + vi * voxel_size.x,
+            grid_min.y + vj * voxel_size.y,
+            grid_min.z + vk * voxel_size.z);
+
+        float3 q_max = make_float3(
+            q_min.x + voxel_size.x,
+            q_min.y + voxel_size.y,
+            q_min.z + voxel_size.z);
+
+        int stack[BVH_STACK_SIZE];
+        int stack_ptr = 0;
+        stack[0] = 0;
+        bool is_intersect = false;
+
+        while (stack_ptr >= 0)
+        {
+            int node_idx = stack[stack_ptr--];
+
+            if (!aabb::test_aabb_overlap(q_min, q_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]))
+                continue;
+
+            if (node_idx >= num_objects - 1)
+            {
+                int tri_id = object_ids[node_idx - (num_objects - 1)];
+                int3 tri = triangles[tri_id];
+                Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+
+                if (T.is_voxel_intersect(q_min, q_max))
+                {
+                    is_intersect = true;
+                    break;
+                }
+            }
+            else
+            {
+                if (stack_ptr + 2 < BVH_STACK_SIZE)
+                {
+                    int2 children = bvh_children[node_idx];
+                    stack[++stack_ptr] = children.x;
+                    stack[++stack_ptr] = children.y;
+                }
+            }
+        }
+
+        if (is_intersect) {
+            atomicAdd(active_counter, 1ULL);
+        }
+    }
+
+    __global__ void collect_active_voxels_mesh_bvh_kernel(
+        const int3 res,
+        const float3 grid_min,
+        const float3 voxel_size,
+        const int num_objects,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs,
+        const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids,
+        unsigned long long *__restrict__ active_counter,
+        int64_t *__restrict__ out_active_ids)
+    {
+        int64_t rx = res.x;
+        int64_t ry = res.y;
+        int64_t rz = res.z;
+        int64_t num_voxels = rx * ry * rz;
+
+        int64_t idx = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_voxels)
+            return;
+
+        int64_t vi = idx / (ry * rz);
+        int64_t rem = idx % (ry * rz);
+        int64_t vj = rem / rz;
+        int64_t vk = rem % rz;
+
+        float3 q_min = make_float3(
+            grid_min.x + vi * voxel_size.x,
+            grid_min.y + vj * voxel_size.y,
+            grid_min.z + vk * voxel_size.z);
+
+        float3 q_max = make_float3(
+            q_min.x + voxel_size.x,
+            q_min.y + voxel_size.y,
+            q_min.z + voxel_size.z);
+
+        int stack[BVH_STACK_SIZE];
+        int stack_ptr = 0;
+        stack[0] = 0;
+        bool is_intersect = false;
+
+        while (stack_ptr >= 0)
+        {
+            int node_idx = stack[stack_ptr--];
+
+            if (!aabb::test_aabb_overlap(q_min, q_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]))
+                continue;
+
+            if (node_idx >= num_objects - 1)
+            {
+                int tri_id = object_ids[node_idx - (num_objects - 1)];
+                int3 tri = triangles[tri_id];
+                Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+
+                if (T.is_voxel_intersect(q_min, q_max))
+                {
+                    is_intersect = true;
+                    break;
+                }
+            }
+            else
+            {
+                if (stack_ptr + 2 < BVH_STACK_SIZE)
+                {
+                    int2 children = bvh_children[node_idx];
+                    stack[++stack_ptr] = children.x;
+                    stack[++stack_ptr] = children.y;
+                }
+            }
+        }
+
+        if (is_intersect) {
+            unsigned long long write_idx = atomicAdd(active_counter, 1ULL);
+            out_active_ids[write_idx] = idx;
+        }
+    }
+
+    void count_active_voxels_mesh_bvh(
+        const int3 res,
+        const float3 grid_min,
+        const float3 voxel_size,
+        const int num_objects,
+        const float3 *vertices,
+        const int3 *triangles,
+        const float3 *bvh_aabb_mins,
+        const float3 *bvh_aabb_maxs,
+        const int2 *bvh_children,
+        const int *object_ids,
+        int64_t *active_counter)
+    {
+        int64_t num_queries = (int64_t)res.x * res.y * res.z;
+        int threads = NTHREADS;
+        int blocks = (num_queries + threads - 1) / threads;
+
+        count_active_voxels_mesh_bvh_kernel<<<blocks, threads>>>(
+            res,
+            grid_min,
+            voxel_size,
+            num_objects,
+            vertices,
+            triangles,
+            bvh_aabb_mins,
+            bvh_aabb_maxs,
+            bvh_children,
+            object_ids,
+            (unsigned long long *)active_counter);
+    }
+
+    void collect_active_voxels_mesh_bvh(
+        const int3 res,
+        const float3 grid_min,
+        const float3 voxel_size,
+        const int num_objects,
+        const float3 *vertices,
+        const int3 *triangles,
+        const float3 *bvh_aabb_mins,
+        const float3 *bvh_aabb_maxs,
+        const int2 *bvh_children,
+        const int *object_ids,
+        int64_t *active_counter,
+        int64_t *out_active_ids)
+    {
+        int64_t num_queries = (int64_t)res.x * res.y * res.z;
+        int threads = NTHREADS;
+        int blocks = (num_queries + threads - 1) / threads;
+
+        collect_active_voxels_mesh_bvh_kernel<<<blocks, threads>>>(
+            res,
+            grid_min,
+            voxel_size,
+            num_objects,
+            vertices,
+            triangles,
+            bvh_aabb_mins,
+            bvh_aabb_maxs,
+            bvh_children,
+            object_ids,
+            (unsigned long long *)active_counter,
+            out_active_ids);
     }
 }
