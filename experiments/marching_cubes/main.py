@@ -68,7 +68,7 @@ def main():
     
     print(f"Active voxels: {active_voxels.shape[0]}")
     
-    pt_path = os.path.join(output_dir, f"{args.input.lower()}_{r}.pt")
+    pt_path = os.path.join(output_dir, f"{args.input.lower()}.pt")
     print(f"Saving active grid info to {pt_path}...")
     torch.save({
         'grid_vertices': grid_vertices,
