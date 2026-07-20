@@ -372,8 +372,7 @@ data/digit3d/debug_mesh
 data/digit3d/sdf
 data/digit3d/*.zip
 
-# Examples
-*.pt
-
 # Experiments
-experiments/*/base/
+*.pt
+*.ply
+*.xyz
