@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 import torch
 import torch.nn as nn
 
-from experiments.pc.generation import checkpoint
+from experiments.pc.generation.checkpoint import checkpoint
 
 
 def init_linear(l, stddev):
@@ -210,7 +210,7 @@ class PointTransformer(nn.Module):
             self.output_proj.weight.zero_()
             self.output_proj.bias.zero_()
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor):
+    def forward(self, x: torch.Tensor, t: torch.Tensor, *args, **kwargs):
         """
         :param x: an [N x C x T] tensor.
         :param t: an [N] tensor.
@@ -242,3 +242,48 @@ class PointTransformer(nn.Module):
             h = h[:, sum(h.shape[1] for h in extra_tokens) :]
         h = self.output_proj(h)
         return h.permute(0, 2, 1)
+
+class ClassConditionedPointTransformer(PointTransformer):
+    def __init__(
+        self,
+        *,
+        device: torch.device,
+        dtype: torch.dtype,
+        num_classes: int = 10,
+        cond_drop_prob: float = 0.15,
+        token_cond: bool = False,
+        **kwargs,
+    ):
+        n_ctx = kwargs.get('n_ctx', 1024)
+        kwargs['n_ctx'] = n_ctx + int(token_cond)
+        
+        super().__init__(device=device, dtype=dtype, **kwargs)
+        self.original_n_ctx = n_ctx
+        self.num_classes = num_classes
+        self.cond_drop_prob = cond_drop_prob
+        self.token_cond = token_cond
+        
+        # +1 for the unconditional/null token
+        self.class_embed = nn.Embedding(num_classes + 1, self.backbone.width, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor, cond: torch.Tensor = None, *args, **kwargs):
+        """
+        :param x: an [N x C x T] tensor.
+        :param t: an [N] tensor.
+        :param cond: an [N] tensor of class labels.
+        :return: an [N x C' x T] tensor.
+        """
+        assert x.shape[-1] == self.original_n_ctx, f"Expected {self.original_n_ctx}, got {x.shape[-1]}"
+        
+        t_embed = self.time_embed(timestep_embedding(t, self.backbone.width))
+        
+        # Handle conditional dropout (CFG)
+        if self.training and self.cond_drop_prob > 0.0:
+            mask = torch.rand(size=[len(x)], device=x.device) < self.cond_drop_prob
+            cond = cond.clone()
+            cond[mask] = self.num_classes
+            
+        c_embed = self.class_embed(cond)
+        
+        cond_list = [(c_embed, self.token_cond), (t_embed, self.time_token_cond)]
+        return self._forward_with_cond(x, cond_list)
