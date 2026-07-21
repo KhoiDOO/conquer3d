@@ -15,7 +15,7 @@ services:
               count: all
               capabilities: [gpu]
     # The Dockerfile ENTRYPOINT handles the conda environment activation automatically
-    command: ["/bin/bash", "experiments/marching_tetrahedra/base.sh"]
+    command: ["/bin/bash", "experiments/marching_tetrahedra/main.sh", "base"]
 
   fairness:
     image: conquer3d:latest
@@ -31,7 +31,7 @@ services:
               count: all
               capabilities: [gpu]
     # The Dockerfile ENTRYPOINT handles the conda environment activation automatically
-    command: ["/bin/bash", "experiments/marching_tetrahedra/fairness.sh"]
+    command: ["/bin/bash", "experiments/marching_tetrahedra/main.sh", "fairness"]
 
   odt:
     image: conquer3d:latest
@@ -45,7 +45,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    command: ["/bin/bash", "experiments/marching_tetrahedra/odt.sh"]
+    command: ["/bin/bash", "experiments/marching_tetrahedra/main.sh", "odt"]
 
   fairodt:
     image: conquer3d:latest
@@ -59,7 +59,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    command: ["/bin/bash", "experiments/marching_tetrahedra/fairodt.sh"]
+    command: ["/bin/bash", "experiments/marching_tetrahedra/main.sh", "fairodt"]
 
   vol:
     image: conquer3d:latest
@@ -73,7 +73,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    command: ["/bin/bash", "experiments/marching_tetrahedra/vol.sh"]
+    command: ["/bin/bash", "experiments/marching_tetrahedra/main.sh", "vol"]
 
   fairvol:
     image: conquer3d:latest
@@ -87,7 +87,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    command: ["/bin/bash", "experiments/marching_tetrahedra/fairvol.sh"]
+    command: ["/bin/bash", "experiments/marching_tetrahedra/main.sh", "fairvol"]
 
   odtvol:
     image: conquer3d:latest
@@ -101,7 +101,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    command: ["/bin/bash", "experiments/marching_tetrahedra/odtvol.sh"]
+    command: ["/bin/bash", "experiments/marching_tetrahedra/main.sh", "odtvol"]
 
   fairodtvol:
     image: conquer3d:latest
@@ -115,4 +115,4 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    command: ["/bin/bash", "experiments/marching_tetrahedra/fairodtvol.sh"]
+    command: ["/bin/bash", "experiments/marching_tetrahedra/main.sh", "fairodtvol"]
