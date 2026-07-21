@@ -41,7 +41,7 @@ class PointTransformerCls(nn.Module):
             nn.Linear(128, num_classes)
         )
 
-    def forward(self, x):
+    def forward(self, x, return_features=False):
         """
         x: (B, N, in_channels)
         Note: The first 3 channels of x are assumed to be (X, Y, Z) coordinates.
@@ -61,6 +61,9 @@ class PointTransformerCls(nn.Module):
         # Global Average Pooling over the points (dim=1)
         pooled_features = features.mean(dim=1)
         
+        if return_features:
+            return pooled_features
+            
         # Classification
         res = self.cls(pooled_features)
         
