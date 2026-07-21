@@ -266,15 +266,20 @@ class ClassConditionedPointTransformer(PointTransformer):
         # +1 for the unconditional/null token
         self.class_embed = nn.Embedding(num_classes + 1, self.backbone.width, device=device, dtype=dtype)
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor, cond: torch.Tensor = None, *args, **kwargs):
+    def forward(self, x: torch.Tensor, t: torch.Tensor = None, s: torch.Tensor = None, cond: torch.Tensor = None, *args, **kwargs):
         """
         :param x: an [N x C x T] tensor.
         :param t: an [N] tensor.
+        :param s: an [N] tensor (used by MeanFlow and SoFlow).
         :param cond: an [N] tensor of class labels.
         :return: an [N x C' x T] tensor.
         """
         assert x.shape[-1] == self.original_n_ctx, f"Expected {self.original_n_ctx}, got {x.shape[-1]}"
         
+        # In case t is passed through kwargs (e.g., RectifiedFlow with time_cond_kwarg='t')
+        if t is None and 't' in kwargs:
+            t = kwargs['t']
+            
         t_embed = self.time_embed(timestep_embedding(t, self.backbone.width))
         
         # Handle conditional dropout (CFG)
