@@ -1,1 +1,15 @@
 *.ipynb linguist-generated=true
+
+# Exclude unnecessary files and folders from GitHub release source archives
+.agents export-ignore
+.cache export-ignore
+.vscode export-ignore
+.editorconfig export-ignore
+experiments/ export-ignore
+setup/ export-ignore
+Dockerfile export-ignore
+docker-compose.yml export-ignore
+release.py export-ignore
+release_notes.txt export-ignore
+output.log export-ignore
+data/ export-ignore
