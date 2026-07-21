@@ -91,7 +91,7 @@ def main():
         flow_model = RectifiedFlow(model, time_cond_kwarg='t', predict='flow')
         mode_name = "rectified_flow"
     elif args.mode == 1:
-        flow_model = MeanFlow(model)
+        flow_model = MeanFlow(model, accept_cond=accept_cond)
         mode_name = "mean_flow"
     elif args.mode == 2:
         flow_model = SoFlow(model, accept_cond=accept_cond)
