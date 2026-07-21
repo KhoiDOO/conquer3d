@@ -41,6 +41,9 @@ RUN pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolatio
 # Install visualization and meshing utilities
 RUN pip install pybind11-stubgen plotly open3d jupyter trimesh point-cloud-utils meshlib pymeshlab kiui rectified-flow-pytorch
 
+# Others
+RUN pip install pytorch-fid
+
 # Copy only the necessary files for compiling
 COPY setup.py pyproject.toml README.md /workspace/
 COPY conquer3d /workspace/conquer3d/
