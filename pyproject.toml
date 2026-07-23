@@ -3,13 +3,14 @@ requires = [
     "setuptools>=68.0", 
     "wheel",
     "pybind11-stubgen",
-    "torch>=2.0.0"
+    "torch>=2.0.0",
+    "numpy"
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "conquer3d"
-version = "0.4.5"
+version = "0.4.6"
 description = "Geometric Cuda Tool Box"
 readme = "README.md"
 license = "MIT"
@@ -20,6 +21,7 @@ requires-python = ">=3.9"
 keywords = ["geometry"]
 dependencies = [
     "torch>=2.0.0",
+    "numpy",
     "meshio>=5.3.5",
     "gdown",
 ]
