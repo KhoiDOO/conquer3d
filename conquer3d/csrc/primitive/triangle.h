@@ -199,6 +199,97 @@ struct Triangle {
         return circumcenter;
     }
 
+    __host__ __device__ __forceinline__ float compute_quality() const {
+        float area = compute_area();
+        float3 e1 = v1 - v0;
+        float3 e2 = v2 - v1;
+        float3 e3 = v0 - v2;
+        float l1 = maths::norm(e1);
+        float l2 = maths::norm(e2);
+        float l3 = maths::norm(e3);
+        float l = fmaxf(fmaxf(l1, l2), l3);
+        float s = (l1 + l2 + l3) * 0.5f;
+        float q = (6 / sqrtf(3.0f)) * (area / (s * l));
+        return q;
+    }
+
+    __host__ __device__ __forceinline__ float compute_triangle_regularity() const {
+        float area = compute_area();
+        if (area <= 1e-8f) return 0.0f;
+        float3 e1 = v1 - v0;
+        float3 e2 = v2 - v1;
+        float3 e3 = v0 - v2;
+        float l1 = maths::norm(e1);
+        float l2 = maths::norm(e2);
+        float l3 = maths::norm(e3);
+        float s = (l1 + l2 + l3) * 0.5f;
+        float r = area / s;
+        float l = fmaxf(fmaxf(l1, l2), l3);
+        return (2.0f * sqrtf(3.0f) * r) / l;
+    }
+
+    __host__ __device__ __forceinline__ float compute_radius_edge_ratio() const {
+        float area = compute_area();
+        if (area <= 1e-8f) return 0.0f;
+        float3 e1 = v1 - v0;
+        float3 e2 = v2 - v1;
+        float3 e3 = v0 - v2;
+        float l1 = maths::norm(e1);
+        float l2 = maths::norm(e2);
+        float l3 = maths::norm(e3);
+        float R = (l1 * l2 * l3) / (4.0f * area);
+        float e = fminf(fminf(l1, l2), l3);
+        if (e <= 1e-8f) return 0.0f;
+        return R / e;
+    }
+
+    __host__ __device__ __forceinline__ float compute_angle_deviation() const {
+        float a0, a1, a2;
+        compute_angles(a0, a1, a2);
+        float opt = 1.0471975511965977f; // 60 degrees in radians (PI / 3)
+        return (fabsf(a0 - opt) + fabsf(a1 - opt) + fabsf(a2 - opt)) / 3.0f;
+    }
+
+    __host__ __device__ __forceinline__ float compute_radii_ratio() const {
+        float area = compute_area();
+        if (area <= 1e-8f) return 0.0f;
+        float3 e1 = v1 - v0;
+        float3 e2 = v2 - v1;
+        float3 e3 = v0 - v2;
+        float l1 = maths::norm(e1);
+        float l2 = maths::norm(e2);
+        float l3 = maths::norm(e3);
+        float s = (l1 + l2 + l3) * 0.5f;
+        float r = area / s;
+        float R = (l1 * l2 * l3) / (4.0f * area);
+        return r / R;
+    }
+
+    __host__ __device__ __forceinline__ float compute_ar(int mode) const {
+        float3 e1 = v1 - v0;
+        float3 e2 = v2 - v1;
+        float3 e3 = v0 - v2;
+        float l1 = maths::norm(e1);
+        float l2 = maths::norm(e2);
+        float l3 = maths::norm(e3);
+
+        if (mode == 0){
+            float area = compute_area();
+            float l = fmaxf(fmaxf(l1, l2), l3);
+            return (sqrtf(3.0f) * l * l) / (4.0f * area);
+        } else if (mode == 1){
+            float s = (l1 + l2 + l3) * 0.5f;
+            return (l1 * l2 * l3) / (8.0f * (s - l1) * (s - l2) * (s - l3));
+        } else if (mode == 2){
+            float area = compute_area();
+            return (l1 + l2 + l3) / (4.0f * area);
+        } else {
+            return 0.0f;
+        }
+    }
+
+    
+
     __host__ __device__ __forceinline__ bool test_point_on_tria_plane(const float3& p, float eps = 1e-5f) const {
         float3 n = compute_normal();
         float dist = fabsf(maths::dot(n, p - v0));
