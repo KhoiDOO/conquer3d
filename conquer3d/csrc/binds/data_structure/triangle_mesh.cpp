@@ -104,6 +104,16 @@ torch::Tensor TriangleMesh::get_vertex_degrees()
     return this->vertex_degrees;
 }
 
+float TriangleMesh::get_valence_567_percentage()
+{
+    torch::Tensor degrees = this->get_vertex_degrees();
+    if (degrees.numel() == 0) return 0.0f;
+
+    torch::Tensor mask = (degrees == 5).logical_or(degrees == 6).logical_or(degrees == 7);
+    float count = mask.sum().item<float>();
+    return (count / degrees.numel()) * 100.0f;
+}
+
 void TriangleMesh::compute_vertex_lb_uniform()
 {
     if (this->vertex_lb_uniform.defined()) return;
@@ -491,6 +501,106 @@ torch::Tensor TriangleMesh::get_surface_area()
     return this->surface_area;
 }
 
+std::tuple<float, float> TriangleMesh::get_quality() {
+    if (this->num_triangles == 0) return std::make_tuple(0.0f, 0.0f);
+
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+    torch::Tensor qualities = torch::empty({static_cast<int64_t>(this->num_triangles)}, options);
+
+    triangle_mesh::compute_quality(
+        this->num_triangles,
+        reinterpret_cast<const float3*>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<const int3*>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<float*>(qualities.data_ptr<float>())
+    );
+    
+    float min_q = qualities.min().item<float>();
+    float avg_q = qualities.mean().item<float>();
+    
+    return std::make_tuple(min_q, avg_q);
+}
+
+torch::Tensor TriangleMesh::get_aspect_ratio(int mode) {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+    torch::Tensor ar = torch::empty({static_cast<int64_t>(this->num_triangles)}, options);
+    
+    if (this->num_triangles == 0) return ar;
+
+    triangle_mesh::compute_aspect_ratio(
+        this->num_triangles,
+        reinterpret_cast<const float3*>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<const int3*>(this->triangles.data_ptr<int>()),
+        mode,
+        reinterpret_cast<float*>(ar.data_ptr<float>())
+    );
+    
+    return ar;
+}
+
+torch::Tensor TriangleMesh::get_radii_ratio() {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+    torch::Tensor ratios = torch::empty({static_cast<int64_t>(this->num_triangles)}, options);
+    
+    if (this->num_triangles == 0) return ratios;
+
+    triangle_mesh::compute_radii_ratio(
+        this->num_triangles,
+        reinterpret_cast<const float3*>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<const int3*>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<float*>(ratios.data_ptr<float>())
+    );
+    
+    return ratios;
+}
+
+torch::Tensor TriangleMesh::get_triangle_regularity() {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+    torch::Tensor regularities = torch::empty({static_cast<int64_t>(this->num_triangles)}, options);
+    
+    if (this->num_triangles == 0) return regularities;
+
+    triangle_mesh::compute_triangle_regularity(
+        this->num_triangles,
+        reinterpret_cast<const float3*>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<const int3*>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<float*>(regularities.data_ptr<float>())
+    );
+    
+    return regularities;
+}
+
+torch::Tensor TriangleMesh::get_radius_edge_ratio() {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+    torch::Tensor ratios = torch::empty({static_cast<int64_t>(this->num_triangles)}, options);
+    
+    if (this->num_triangles == 0) return ratios;
+
+    triangle_mesh::compute_radius_edge_ratio(
+        this->num_triangles,
+        reinterpret_cast<const float3*>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<const int3*>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<float*>(ratios.data_ptr<float>())
+    );
+    
+    return ratios;
+}
+
+torch::Tensor TriangleMesh::get_angle_deviation() {
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+    torch::Tensor deviations = torch::empty({static_cast<int64_t>(this->num_triangles)}, options);
+    
+    if (this->num_triangles == 0) return deviations;
+
+    triangle_mesh::compute_angle_deviation(
+        this->num_triangles,
+        reinterpret_cast<const float3*>(this->vertices.data_ptr<float>()),
+        reinterpret_cast<const int3*>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<float*>(deviations.data_ptr<float>())
+    );
+    
+    return deviations;
+}
+
 void TriangleMesh::compute_edges_to_triangle_map()
 {
     if (this->num_triangles == 0)
@@ -763,6 +873,12 @@ void bind_ds_triangle_mesh(py::module_ &m)
         Returns:
             torch.Tensor - Shape (N,) int32 tensor of vertex degrees.
         )doc")
+        .def_property_readonly("valence_567_percentage", &TriangleMesh::get_valence_567_percentage, R"doc(
+        Percentage of vertices whose degrees (valences) are 5, 6, or 7.
+
+        Returns:
+            float - Percentage in range [0, 100].
+        )doc")
         .def_property_readonly("vertex_lb_uniform", &TriangleMesh::get_vertex_lb_uniform, R"doc(
         Uniform Laplace-Beltrami operator evaluated at each vertex.
 
@@ -792,6 +908,45 @@ void bind_ds_triangle_mesh(py::module_ &m)
 
         Returns:
             torch.Tensor - Total surface area of the mesh.
+        )doc")
+        .def("get_quality", &TriangleMesh::get_quality, R"doc(
+        Compute the global quality of the mesh.
+
+        Returns:
+            Tuple[float, float] - Minimum and average triangle quality.
+        )doc")
+        .def("get_aspect_ratio", &TriangleMesh::get_aspect_ratio, py::arg("mode"), R"doc(
+        Compute aspect ratio for all triangles.
+
+        Args:
+            mode (int): The formula mode to use.
+
+        Returns:
+            torch.Tensor - Shape (M,) float32 tensor of triangle aspect ratios.
+        )doc")
+        .def("get_radii_ratio", &TriangleMesh::get_radii_ratio, R"doc(
+        Compute the radii ratio (incircle / circumcircle) for all triangles.
+
+        Returns:
+            torch.Tensor - Shape (M,) float32 tensor of triangle radii ratios.
+        )doc")
+        .def("get_triangle_regularity", &TriangleMesh::get_triangle_regularity, R"doc(
+        Compute the triangle regularity (2 * sqrt(3) * r / l) for all triangles.
+
+        Returns:
+            torch.Tensor - Shape (M,) float32 tensor of triangle regularities.
+        )doc")
+        .def("get_radius_edge_ratio", &TriangleMesh::get_radius_edge_ratio, R"doc(
+        Compute the radius edge ratio (R / e) for all triangles.
+
+        Returns:
+            torch.Tensor - Shape (M,) float32 tensor of triangle radius edge ratios.
+        )doc")
+        .def("get_angle_deviation", &TriangleMesh::get_angle_deviation, R"doc(
+        Compute the mean angle deviation from 60 degrees for all triangles.
+
+        Returns:
+            torch.Tensor - Shape (M,) float32 tensor of triangle angle deviations.
         )doc")
         .def_property_readonly("bvh", &TriangleMesh::build_bvh, R"doc(
         The Bounding Volume Hierarchy built for this mesh.
