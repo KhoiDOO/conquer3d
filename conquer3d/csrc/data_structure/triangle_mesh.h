@@ -70,6 +70,7 @@ public:
     
     void compute_vertex_degrees();
     torch::Tensor get_vertex_degrees();
+    float get_valence_567_percentage();
     
     void compute_vertex_lb_uniform();
     torch::Tensor get_vertex_lb_uniform();
@@ -140,6 +141,13 @@ public:
 
     int32_t get_euler_characteristic();
     int32_t get_genus();
+
+    std::tuple<float, float> get_quality();
+    torch::Tensor get_aspect_ratio(int mode);
+    torch::Tensor get_radii_ratio();
+    torch::Tensor get_triangle_regularity();
+    torch::Tensor get_radius_edge_ratio();
+    torch::Tensor get_angle_deviation();
 };
 
 namespace triangle_mesh
@@ -162,6 +170,43 @@ namespace triangle_mesh
         const float3 *__restrict__ vertices,
         const int3 *__restrict__ triangles,
         float *__restrict__ triangle_areas);
+
+    __host__ void compute_quality(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ qualities);
+
+    __host__ void compute_aspect_ratio(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        int mode,
+        float *__restrict__ aspect_ratios);
+
+    __host__ void compute_radii_ratio(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ ratios);
+
+    __host__ void compute_triangle_regularity(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ regularities);
+
+    __host__ void compute_radius_edge_ratio(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ ratios);
+
+    __host__ void compute_angle_deviation(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ deviations);
 
     __host__ void compute_triangle_aabbs(
         const uint32_t num_triangles,
