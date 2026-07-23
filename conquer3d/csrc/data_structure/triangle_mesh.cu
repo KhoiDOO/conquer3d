@@ -46,6 +46,97 @@ namespace triangle_mesh
         }
     }
 
+    __global__ void compute_quality_kernel(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ qualities)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles)
+        {
+            int3 tri = triangles[idx];
+            Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+            qualities[idx] = T.compute_quality();
+        }
+    }
+
+    __global__ void compute_aspect_ratio_kernel(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        int mode,
+        float *__restrict__ aspect_ratios)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles)
+        {
+            int3 tri = triangles[idx];
+            Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+            aspect_ratios[idx] = T.compute_ar(mode);
+        }
+    }
+
+    __global__ void compute_radii_ratio_kernel(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ ratios)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles)
+        {
+            int3 tri = triangles[idx];
+            Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+            ratios[idx] = T.compute_radii_ratio();
+        }
+    }
+
+    __global__ void compute_triangle_regularity_kernel(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ regularities)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles)
+        {
+            int3 tri = triangles[idx];
+            Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+            regularities[idx] = T.compute_triangle_regularity();
+        }
+    }
+
+    __global__ void compute_radius_edge_ratio_kernel(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ ratios)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles)
+        {
+            int3 tri = triangles[idx];
+            Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+            ratios[idx] = T.compute_radius_edge_ratio();
+        }
+    }
+
+    __global__ void compute_angle_deviation_kernel(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ deviations)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles)
+        {
+            int3 tri = triangles[idx];
+            Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+            deviations[idx] = T.compute_angle_deviation();
+        }
+    }
+
     __global__ void compute_triangle_aabbs_kernel(
         const uint32_t num_triangles,
         const float3 *__restrict__ vertices,
@@ -93,6 +184,97 @@ namespace triangle_mesh
         
         compute_triangle_areas_kernel<<<blocks, threads>>>(
             num_triangles, vertices, triangles, triangle_areas);
+    }
+
+    __host__ void compute_quality(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ qualities)
+    {
+        if (num_triangles == 0) return;
+        
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+        
+        compute_quality_kernel<<<blocks, threads>>>(
+            num_triangles, vertices, triangles, qualities);
+    }
+
+    __host__ void compute_aspect_ratio(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        int mode,
+        float *__restrict__ aspect_ratios)
+    {
+        if (num_triangles == 0) return;
+        
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+        
+        compute_aspect_ratio_kernel<<<blocks, threads>>>(
+            num_triangles, vertices, triangles, mode, aspect_ratios);
+    }
+
+    __host__ void compute_radii_ratio(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ ratios)
+    {
+        if (num_triangles == 0) return;
+        
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+        
+        compute_radii_ratio_kernel<<<blocks, threads>>>(
+            num_triangles, vertices, triangles, ratios);
+    }
+
+    __host__ void compute_triangle_regularity(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ regularities)
+    {
+        if (num_triangles == 0) return;
+        
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+        
+        compute_triangle_regularity_kernel<<<blocks, threads>>>(
+            num_triangles, vertices, triangles, regularities);
+    }
+
+    __host__ void compute_radius_edge_ratio(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ ratios)
+    {
+        if (num_triangles == 0) return;
+        
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+        
+        compute_radius_edge_ratio_kernel<<<blocks, threads>>>(
+            num_triangles, vertices, triangles, ratios);
+    }
+
+    __host__ void compute_angle_deviation(
+        const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
+        const int3 *__restrict__ triangles,
+        float *__restrict__ deviations)
+    {
+        if (num_triangles == 0) return;
+        
+        int threads = NTHREADS;
+        int blocks = (num_triangles + threads - 1) / threads;
+        
+        compute_angle_deviation_kernel<<<blocks, threads>>>(
+            num_triangles, vertices, triangles, deviations);
     }
 
     __host__ void compute_triangle_aabbs(
