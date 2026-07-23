@@ -58,14 +58,7 @@ twine upload dist/* --verbose
     author = {Karras, Tero},
     title = {Maximizing parallelism in the construction of BVHs, octrees, and k-d trees},
     year = {2012},
-    isbn = {9783905674415},
-    publisher = {Eurographics Association},
-    address = {Goslar, DEU},
     booktitle = {Proceedings of the Fourth ACM SIGGRAPH / Eurographics Conference on High-Performance Graphics},
-    pages = {33–37},
-    numpages = {5},
-    location = {Paris, France},
-    series = {EGGH-HPG'12}
 }
 ```
 
@@ -74,18 +67,7 @@ twine upload dist/* --verbose
     author = {M\"{o}ller, Tomas},
     title = {A fast triangle-triangle intersection test},
     year = {1997},
-    issue_date = {1997},
-    publisher = {A. K. Peters, Ltd.},
-    address = {USA},
-    volume = {2},
-    number = {2},
-    issn = {1086-7651},
-    url = {https://doi.org/10.1080/10867651.1997.10487472},
-    doi = {10.1080/10867651.1997.10487472},
     journal = {J. Graph. Tools},
-    month = nov,
-    pages = {25–30},
-    numpages = {6}
 }
 ```
 
@@ -94,34 +76,34 @@ twine upload dist/* --verbose
     author = {M\"{o}ller, Tomas and Trumbore, Ben},
     title = {Fast, minimum storage ray/triangle intersection},
     year = {2005},
-    isbn = {9781450378338},
-    publisher = {Association for Computing Machinery},
-    address = {New York, NY, USA},
-    url = {https://doi.org/10.1145/1198555.1198746},
-    doi = {10.1145/1198555.1198746},
-    pages = {7–es},
-    keywords = {base transformation, intersection, ray tracing, ray/triangle-intersection},
-    location = {Los Angeles, California},
-    series = {SIGGRAPH '05}
+    booktitle = {ACM SIGGRAPH 2005 Courses},
 }
 ```
 
 ```bibtex
-@InProceedings{10.1007/978-3-662-05105-4_2,
-    author="Meyer, Mark
-    and Desbrun, Mathieu
-    and Schr{\"o}der, Peter
-    and Barr, Alan H.",
-    editor="Hege, Hans-Christian
-    and Polthier, Konrad",
+@inproceedings{10.1007/978-3-662-05105-4_2,
+    author="Meyer, Mark and Desbrun, Mathieu and Schr{\"o}der, Peter and Barr, Alan H.",
     title="Discrete Differential-Geometry Operators for Triangulated 2-Manifolds",
     booktitle="Visualization and Mathematics III",
-    year="2003",
-    publisher="Springer Berlin Heidelberg",
-    address="Berlin, Heidelberg",
-    pages="35--57",
-    isbn="978-3-662-05105-4"
+    year="2003"
 }
+```
+
+```bibtex
+@article{9167456,
+    author={Khan, Dawar and Plopski, Alexander and Fujimoto, Yuichiro and Kanbara, Masayuki and Jabeen, Gul and Zhang, Yongjie Jessica and Zhang, Xiaopeng and Kato, Hirokazu},
+    journal={IEEE Transactions on Visualization and Computer Graphics}, 
+    title={Surface Remeshing: A Systematic Literature Review of Methods and Research Directions}, 
+    year={2022}
+}
+```
+
+```bibtex
+@article{4487066,
+    author={Dietrich, Carlos A. and Scheidegger, Carlos E. and Schreiner, John and Comba, João L.D. and Nedel, Luciana P. and Silva, Cláudio T.},
+    journal={IEEE Transactions on Visualization and Computer Graphics}, 
+    title={Edge Transformations for Improving Mesh Quality of Marching Cubes}, 
+    year={2009}}
 ```
 
 ## Blog Post
