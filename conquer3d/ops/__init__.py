@@ -3,6 +3,8 @@ from .diff_marching_cubes import diff_marching_cubes
 
 from .delaunay_triangulation import tetrahedralize, get_edges
 from .marching_tetrahedra import marching_tetrahedra
+from .marching_tetrahedra_grid import marching_tetrahedra_grid
+from .diff_marching_tetrahedra_grid import diff_marching_tetrahedra_grid
 
 from .distance import one_sided_chamfer_distance, chamfer_distance, one_sided_hausdorff_distance, hausdorff_distance
 
@@ -15,5 +17,7 @@ __all__ = [
     "hausdorff_distance",
     "tetrahedralize",
     "get_edges",
-    "marching_tetrahedra"
+    "marching_tetrahedra",
+    "marching_tetrahedra_grid",
+    "diff_marching_tetrahedra_grid"
 ]
