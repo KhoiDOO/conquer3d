@@ -281,14 +281,13 @@ struct Triangle {
             float s = (l1 + l2 + l3) * 0.5f;
             return (l1 * l2 * l3) / (8.0f * (s - l1) * (s - l2) * (s - l3));
         } else if (mode == 2){
-            float area = compute_area();
-            return (l1 + l2 + l3) / (4.0f * area);
+            float l_min = fminf(fminf(l1, l2), l3);
+            float l_max = fmaxf(fmaxf(l1, l2), l3);
+            return l_min / l_max;
         } else {
             return 0.0f;
         }
     }
-
-    
 
     __host__ __device__ __forceinline__ bool test_point_on_tria_plane(const float3& p, float eps = 1e-5f) const {
         float3 n = compute_normal();
