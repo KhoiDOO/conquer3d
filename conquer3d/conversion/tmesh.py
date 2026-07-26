@@ -1,6 +1,7 @@
 import torch
 import tqdm
 from conquer3d.data_structure.grid import create_voxel_grid, compute_active_voxels
+from conquer3d.data_structure import create_voxel_grid_from_tmesh
 
 def tmesh2voxel(tm, res, grid_min=None, grid_max=None, chunk_size=5000000, device='cuda', show_progress=True):
     """
@@ -41,7 +42,7 @@ def tmesh2sparse(tm, res, grid_min=None, grid_max=None, chunk_size=5000000, iso=
     This now completely bypasses dense memory allocation!
     
     Returns:
-        grid_vertices, active_voxels, idx_grids, sdfs
+        grid_vertices, active_voxels, sdfs
     """
     if grid_min is None:
         grid_min = [-1.0, -1.0, -1.0]
@@ -52,8 +53,6 @@ def tmesh2sparse(tm, res, grid_min=None, grid_max=None, chunk_size=5000000, iso=
         res_list = [res, res, res]
     else:
         res_list = list(res)
-
-    from conquer3d.data_structure import create_voxel_grid_from_tmesh
     
     if tm.bvh is None:
         tm.build_bvh()
@@ -75,9 +74,5 @@ def tmesh2sparse(tm, res, grid_min=None, grid_max=None, chunk_size=5000000, iso=
         _, _, _, chunk_sdf = tm.query_points(chunk_points, return_sdf=True, return_prj_pts=False, sign_mode=1)
         sdfs[i:end] = chunk_sdf
         
-    # Since we strictly extracted surface-intersecting voxels in C++, 
-    # we don't strictly need to re-filter them, but we can do a quick check to refine the band.
-    # However, marching_cubes only uses active_voxels.
-    # To keep identical API, we return None for idx_grids since it's dense and unnecessary.
-    return grid_vertices, active_voxels.to(torch.int64), None, sdfs
+    return grid_vertices, active_voxels.to(torch.int64), sdfs
 
