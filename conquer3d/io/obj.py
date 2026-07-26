@@ -25,14 +25,28 @@ def write_obj(filepath, vertices, faces, colors=None):
     """
     Writes vertices, faces, and optional vertex colors to an OBJ file using trimesh.
     """
-    v = vertices.detach().cpu().numpy()
-    f = faces.detach().cpu().numpy()
+    if isinstance(vertices, torch.Tensor):
+        vertices = vertices.detach().cpu().numpy()
+    elif isinstance(vertices, np.ndarray):
+        vertices = vertices
+    else:
+        raise TypeError("vertices must be a torch.Tensor or numpy.ndarray")
+    if isinstance(faces, torch.Tensor):
+        faces = faces.detach().cpu().numpy()
+    elif isinstance(faces, np.ndarray):
+        faces = faces
+    else:
+        raise TypeError("faces must be a torch.Tensor or numpy.ndarray")
     
     vc = None
     if colors is not None:
-        vc = (colors.detach().cpu().numpy() * 255.0).clip(0, 255).astype(np.uint8)
+        if isinstance(colors, torch.Tensor):
+            colors = colors.detach().cpu().numpy()
+        elif isinstance(colors, np.ndarray):
+            colors = colors
+        else:
+            raise TypeError("colors must be a torch.Tensor or numpy.ndarray")
+        vc = (colors * 255.0).clip(0, 255).astype(np.uint8)
         
-    mesh = trimesh.Trimesh(vertices=v, faces=f, vertex_colors=vc, process=False)
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, vertex_colors=vc, process=False)
     mesh.export(filepath)
-
-
