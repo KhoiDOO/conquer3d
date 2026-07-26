@@ -30,9 +30,9 @@ def mesh2voxel(vertices: torch.Tensor, res: Union[List[int], Tuple[int, int, int
     
     return grid_vertices, voxels, idx_grids, grid_min, grid_max
 
-def mesh2voxel_sdf(vertices: torch.Tensor, faces: torch.Tensor, grid_vertices: torch.Tensor):
+def mesh2voxel_sdf(vertices: torch.Tensor, faces: torch.Tensor, grid_vertices: torch.Tensor, sign_mode: int = 2):
     """
-    Computes SDF for grid vertices against the mesh using C++ TriangleMesh fast winding numbers.
+    Computes SDF for grid vertices against the mesh using C++ TriangleMesh queries (defaulting to pseudonormals).
     """
     mesh = TriangleMesh(vertices, faces.to(torch.int32))
     
@@ -41,7 +41,7 @@ def mesh2voxel_sdf(vertices: torch.Tensor, faces: torch.Tensor, grid_vertices: t
         grid_vertices,
         return_sdf=True,
         return_prj_pts=False,
-        sign_mode=0,
+        sign_mode=sign_mode,
         distance_mode=0
     )
     return sdf
