@@ -19,15 +19,21 @@ protected:
 
     torch::Tensor vertices;       // Size: [N, 3]
     torch::Tensor vertex_normals; // Size: [N, 3]
+    std::optional<int> vertex_normals_mode = std::nullopt;
     torch::Tensor vertex_colors;  // Size: [N, 3]
     torch::Tensor vertex_degrees; // Size: [N] -> Each row contains the degree of the corresponding vertex
 
     torch::Tensor triangles;        // Size: [M, 3] -> Each row contains indices into the vertices tensor
     torch::Tensor triangle_normals; // Size: [M, 3] -> Each row contains the normal of the corresponding triangle
+    torch::Tensor edge_normals;     // Size: [3*M, 3] -> Edge normals for sign queries
     torch::Tensor triangle_areas;   // Size: [M] -> Each row contains the area of the corresponding triangle
     torch::Tensor surface_area;     // Size: [] -> Total surface area
 
     std::optional<MeshBVH> bvh;
+    std::optional<torch::Tensor> flood_fill_mask = std::nullopt;
+    std::optional<std::vector<float>> flood_grid_min = std::nullopt;
+    std::optional<std::vector<float>> flood_grid_max = std::nullopt;
+    std::optional<std::vector<int64_t>> flood_grid_res = std::nullopt;
     std::optional<bool> opt_edge_manifold;
     std::optional<bool> opt_edge_manifold_w_boundary;
     std::optional<bool> opt_vertex_manifold;
@@ -56,16 +62,20 @@ public:
 
     uint32_t get_num_triangles() const { return num_triangles; }
     torch::Tensor get_vertices() const { return vertices; }
-    torch::Tensor get_vertex_normals();
+    torch::Tensor get_vertex_normals(int mode = 0);
     torch::Tensor get_vertex_colors() const { return vertex_colors; }
     torch::Tensor get_triangles() const { return triangles; }
 
     void compute_triangle_normals();
-    void compute_vertex_normals();
+    void compute_vertex_normals(int mode = 0);
+    void compute_edge_normals();
+    void compute_edge_normal() { compute_edge_normals(); }
     void compute_triangle_areas();
 
     torch::Tensor get_triangle_areas();
     torch::Tensor get_triangle_normals();
+    torch::Tensor get_edge_normals();
+    torch::Tensor get_edge_normal() { return get_edge_normals(); }
     torch::Tensor get_surface_area();
     
     void compute_vertex_degrees();
@@ -94,6 +104,16 @@ public:
     void remove_isolated_vertices();
     
     MeshBVH build_bvh();
+    void build_flood_fill_data(
+        std::optional<std::vector<float>> grid_min = std::nullopt,
+        std::optional<std::vector<float>> grid_max = std::nullopt,
+        std::optional<std::vector<int64_t>> res = std::nullopt,
+        int connectivity = 6);
+    torch::Tensor get_flood_fill_mask();
+    std::vector<float> get_flood_grid_min();
+    std::vector<float> get_flood_grid_max();
+    std::vector<int64_t> get_flood_grid_res();
+
     torch::Tensor get_self_intersection();
     bool is_self_intersection();
 
@@ -161,9 +181,17 @@ namespace triangle_mesh
     __host__ void compute_vertex_normals(
         const uint32_t num_vertices,
         const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
         const int3 *__restrict__ triangles,
         const float3 *__restrict__ triangle_normals,
-        float3 *__restrict__ vertex_normals);
+        float3 *__restrict__ vertex_normals,
+        int mode = 0);
+
+    __host__ void compute_edge_normals(
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ triangle_normals,
+        float3 *__restrict__ edge_normals);
 
     __host__ void compute_triangle_areas(
         const uint32_t num_triangles,
