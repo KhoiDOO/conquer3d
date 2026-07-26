@@ -295,9 +295,11 @@ namespace triangle_mesh
 
     __global__ void compute_vertex_normals_kernel(
         const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
         const int3 *__restrict__ triangles,
         const float3 *__restrict__ triangle_normals,
-        float3 *__restrict__ vertex_normals)
+        float3 *__restrict__ vertex_normals,
+        int mode)
     {
         uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < num_triangles)
@@ -305,17 +307,46 @@ namespace triangle_mesh
             int3 tri = triangles[idx];
             float3 n = triangle_normals[idx];
             
-            atomicAdd(&vertex_normals[tri.x].x, n.x);
-            atomicAdd(&vertex_normals[tri.x].y, n.y);
-            atomicAdd(&vertex_normals[tri.x].z, n.z);
-            
-            atomicAdd(&vertex_normals[tri.y].x, n.x);
-            atomicAdd(&vertex_normals[tri.y].y, n.y);
-            atomicAdd(&vertex_normals[tri.y].z, n.z);
-            
-            atomicAdd(&vertex_normals[tri.z].x, n.x);
-            atomicAdd(&vertex_normals[tri.z].y, n.y);
-            atomicAdd(&vertex_normals[tri.z].z, n.z);
+            if (mode == 0) {
+                atomicAdd(&vertex_normals[tri.x].x, n.x);
+                atomicAdd(&vertex_normals[tri.x].y, n.y);
+                atomicAdd(&vertex_normals[tri.x].z, n.z);
+                
+                atomicAdd(&vertex_normals[tri.y].x, n.x);
+                atomicAdd(&vertex_normals[tri.y].y, n.y);
+                atomicAdd(&vertex_normals[tri.y].z, n.z);
+                
+                atomicAdd(&vertex_normals[tri.z].x, n.x);
+                atomicAdd(&vertex_normals[tri.z].y, n.y);
+                atomicAdd(&vertex_normals[tri.z].z, n.z);
+            } else if (mode == 1) {
+                float3 v0 = vertices[tri.x];
+                float3 v1 = vertices[tri.y];
+                float3 v2 = vertices[tri.z];
+                float3 e0 = maths::normalize(v1 - v0);
+                float3 e1 = maths::normalize(v2 - v1);
+                float3 e2 = maths::normalize(v0 - v2);
+
+                float a0 = acosf(fminf(fmaxf(-maths::dot(e0, e2), -1.0f), 1.0f));
+                float a1 = acosf(fminf(fmaxf(-maths::dot(e1, e0), -1.0f), 1.0f));
+                float a2 = acosf(fminf(fmaxf(-maths::dot(e2, e1), -1.0f), 1.0f));
+
+                if (isfinite(a0)) {
+                    atomicAdd(&vertex_normals[tri.x].x, a0 * n.x);
+                    atomicAdd(&vertex_normals[tri.x].y, a0 * n.y);
+                    atomicAdd(&vertex_normals[tri.x].z, a0 * n.z);
+                }
+                if (isfinite(a1)) {
+                    atomicAdd(&vertex_normals[tri.y].x, a1 * n.x);
+                    atomicAdd(&vertex_normals[tri.y].y, a1 * n.y);
+                    atomicAdd(&vertex_normals[tri.y].z, a1 * n.z);
+                }
+                if (isfinite(a2)) {
+                    atomicAdd(&vertex_normals[tri.z].x, a2 * n.x);
+                    atomicAdd(&vertex_normals[tri.z].y, a2 * n.y);
+                    atomicAdd(&vertex_normals[tri.z].z, a2 * n.z);
+                }
+            }
         }
     }
 
@@ -337,9 +368,11 @@ namespace triangle_mesh
     __host__ void compute_vertex_normals(
         const uint32_t num_vertices,
         const uint32_t num_triangles,
+        const float3 *__restrict__ vertices,
         const int3 *__restrict__ triangles,
         const float3 *__restrict__ triangle_normals,
-        float3 *__restrict__ vertex_normals)
+        float3 *__restrict__ vertex_normals,
+        int mode)
     {
         if (num_triangles == 0 || num_vertices == 0) return;
         
@@ -347,11 +380,103 @@ namespace triangle_mesh
         int blocks = (num_triangles + threads - 1) / threads;
         
         compute_vertex_normals_kernel<<<blocks, threads>>>(
-            num_triangles, triangles, triangle_normals, vertex_normals);
+            num_triangles, vertices, triangles, triangle_normals, vertex_normals, mode);
             
         int blocks_vert = (num_vertices + threads - 1) / threads;
         normalize_vertex_normals_kernel<<<blocks_vert, threads>>>(
             num_vertices, vertex_normals);
+    }
+
+    __global__ void extract_edge_slots_kernel(
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        Edge *__restrict__ edge_keys,
+        int *__restrict__ edge_indices)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_triangles)
+        {
+            int3 tri = triangles[idx];
+            edge_keys[3 * idx + 0] = Edge(tri.x, tri.y);
+            edge_indices[3 * idx + 0] = 3 * idx + 0;
+
+            edge_keys[3 * idx + 1] = Edge(tri.y, tri.z);
+            edge_indices[3 * idx + 1] = 3 * idx + 1;
+
+            edge_keys[3 * idx + 2] = Edge(tri.z, tri.x);
+            edge_indices[3 * idx + 2] = 3 * idx + 2;
+        }
+    }
+
+    __global__ void compute_edge_normals_kernel(
+        const uint32_t num_edges,
+        const Edge *__restrict__ sorted_edge_keys,
+        const int *__restrict__ sorted_edge_indices,
+        const float3 *__restrict__ triangle_normals,
+        float3 *__restrict__ edge_normals)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < num_edges)
+        {
+            Edge my_key = sorted_edge_keys[idx];
+            int my_orig_idx = sorted_edge_indices[idx];
+
+            float3 N = triangle_normals[my_orig_idx / 3];
+
+            int j = idx - 1;
+            while (j >= 0 && sorted_edge_keys[j] == my_key)
+            {
+                N = N + triangle_normals[sorted_edge_indices[j] / 3];
+                j--;
+            }
+
+            j = idx + 1;
+            while (j < num_edges && sorted_edge_keys[j] == my_key)
+            {
+                N = N + triangle_normals[sorted_edge_indices[j] / 3];
+                j++;
+            }
+
+            edge_normals[my_orig_idx] = maths::normalize(N);
+        }
+    }
+
+    __host__ void compute_edge_normals(
+        const uint32_t num_triangles,
+        const int3 *__restrict__ triangles,
+        const float3 *__restrict__ triangle_normals,
+        float3 *__restrict__ edge_normals)
+    {
+        if (num_triangles == 0) return;
+        int threads = NTHREADS;
+        int blocks_tri = (num_triangles + threads - 1) / threads;
+
+        uint32_t num_edges = num_triangles * 3;
+        int blocks_edge = (num_edges + threads - 1) / threads;
+
+        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA);
+        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA);
+
+        torch::Tensor edge_keys = torch::empty({static_cast<int64_t>(num_edges)}, options_i64);
+        torch::Tensor edge_indices = torch::empty({static_cast<int64_t>(num_edges)}, options_i32);
+
+        extract_edge_slots_kernel<<<blocks_tri, threads>>>(
+            num_triangles, triangles,
+            reinterpret_cast<Edge *>(edge_keys.data_ptr<int64_t>()),
+            edge_indices.data_ptr<int>());
+
+        thrust::sort_by_key(
+            thrust::device,
+            reinterpret_cast<Edge *>(edge_keys.data_ptr<int64_t>()),
+            reinterpret_cast<Edge *>(edge_keys.data_ptr<int64_t>()) + num_edges,
+            edge_indices.data_ptr<int>());
+
+        compute_edge_normals_kernel<<<blocks_edge, threads>>>(
+            num_edges,
+            reinterpret_cast<const Edge *>(edge_keys.data_ptr<int64_t>()),
+            edge_indices.data_ptr<int>(),
+            triangle_normals,
+            edge_normals);
     }
 
     __global__ void extract_edges_kernel(
