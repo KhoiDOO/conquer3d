@@ -3,4 +3,17 @@ from . import dataset
 from . import transform
 from . import collate
 
-__all__ = ['assets', 'dataset', 'transform', 'collate']
+from .dataset import BaseMeshDataset, MeshDataset, MeshFolderDataset, ToyMeshDataset, Digit3D, PointDigit3D
+
+__all__ = [
+    'assets', 
+    'dataset', 
+    'transform', 
+    'collate',
+    'BaseMeshDataset',
+    'MeshDataset',
+    'MeshFolderDataset',
+    'ToyMeshDataset',
+    'Digit3D',
+    'PointDigit3D',
+]
