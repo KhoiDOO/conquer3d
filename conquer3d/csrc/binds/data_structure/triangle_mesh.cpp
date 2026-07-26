@@ -1,8 +1,9 @@
 #include <torch/extension.h>
 #include "../../data_structure/triangle_mesh.h"
+#include "../../ops/flood_fill.h"
 #include "../../check.h"
-
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 #include <optional>
 #include <vector>
 
@@ -34,6 +35,7 @@ TriangleMesh::TriangleMesh(
         TORCH_CHECK(in_vertex_normals->scalar_type() == torch::kFloat32, "vertex_normals must be float32");
         TORCH_CHECK(in_vertex_normals->size(1) == 3, "vertex_normals must have shape (N, 3)");
         this->vertex_normals = in_vertex_normals->clone();
+        this->vertex_normals_mode = 0;
     }
 
     if (in_vertex_colors.has_value() && in_vertex_colors->defined())
@@ -55,7 +57,7 @@ void TriangleMesh::compute_triangle_normals()
         reinterpret_cast<float3 *>(this->triangle_normals.data_ptr<float>()));
 }
 
-void TriangleMesh::compute_vertex_normals()
+void TriangleMesh::compute_vertex_normals(int mode)
 {
     uint32_t num_vertices = this->vertices.size(0);
     this->vertex_normals = torch::zeros({static_cast<int64_t>(num_vertices), 3}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
@@ -63,16 +65,30 @@ void TriangleMesh::compute_vertex_normals()
     triangle_mesh::compute_vertex_normals(
         num_vertices,
         this->num_triangles,
+        reinterpret_cast<const float3 *>(this->vertices.data_ptr<float>()),
         reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
         reinterpret_cast<const float3 *>(this->get_triangle_normals().data_ptr<float>()),
-        reinterpret_cast<float3 *>(this->vertex_normals.data_ptr<float>()));
+        reinterpret_cast<float3 *>(this->vertex_normals.data_ptr<float>()),
+        mode);
+    
+    this->vertex_normals_mode = mode;
 }
 
-torch::Tensor TriangleMesh::get_vertex_normals()
+void TriangleMesh::compute_edge_normals()
 {
-    if (!this->vertex_normals.defined())
+    this->edge_normals = torch::empty({static_cast<int64_t>(this->num_triangles) * 3, 3}, torch::dtype(torch::kFloat32).device(this->triangles.device()));
+    triangle_mesh::compute_edge_normals(
+        this->num_triangles,
+        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
+        reinterpret_cast<const float3 *>(this->get_triangle_normals().data_ptr<float>()),
+        reinterpret_cast<float3 *>(this->edge_normals.data_ptr<float>()));
+}
+
+torch::Tensor TriangleMesh::get_vertex_normals(int mode)
+{
+    if (!this->vertex_normals.defined() || !this->vertex_normals_mode.has_value() || this->vertex_normals_mode.value() != mode)
     {
-        this->compute_vertex_normals();
+        this->compute_vertex_normals(mode);
     }
     return this->vertex_normals;
 }
@@ -353,6 +369,80 @@ MeshBVH TriangleMesh::build_bvh()
     return this->bvh.value();
 }
 
+void TriangleMesh::build_flood_fill_data(
+    std::optional<std::vector<float>> grid_min,
+    std::optional<std::vector<float>> grid_max,
+    std::optional<std::vector<int64_t>> res,
+    int connectivity)
+{
+    this->build_bvh();
+    std::vector<float> min_vals;
+    std::vector<float> max_vals;
+    if (grid_min.has_value()) {
+        min_vals = grid_min.value();
+    } else {
+        auto v_min = std::get<0>(torch::min(this->vertices, 0));
+        v_min = v_min - 0.05f;
+        min_vals = {v_min[0].item<float>(), v_min[1].item<float>(), v_min[2].item<float>()};
+    }
+    if (grid_max.has_value()) {
+        max_vals = grid_max.value();
+    } else {
+        auto v_max = std::get<0>(torch::max(this->vertices, 0));
+        v_max = v_max + 0.05f;
+        max_vals = {v_max[0].item<float>(), v_max[1].item<float>(), v_max[2].item<float>()};
+    }
+    std::vector<int64_t> res_vals;
+    if (res.has_value()) {
+        res_vals = res.value();
+    } else {
+        res_vals = {128, 128, 128};
+    }
+    
+    auto active_voxel_ids = this->bvh.value().get_active_voxel_ids_from_grid(min_vals, max_vals, res_vals, this->vertices, this->triangles);
+    
+    int64_t vx = res_vals[0] - 1;
+    int64_t vy = res_vals[1] - 1;
+    int64_t vz = res_vals[2] - 1;
+    
+    this->flood_fill_mask = ops::compute_flood_fill(active_voxel_ids, vx, vy, vz, connectivity);
+    this->flood_grid_min = min_vals;
+    this->flood_grid_max = max_vals;
+    this->flood_grid_res = res_vals;
+}
+
+torch::Tensor TriangleMesh::get_flood_fill_mask()
+{
+    if (!this->flood_fill_mask.has_value()) {
+        this->build_flood_fill_data();
+    }
+    return this->flood_fill_mask.value();
+}
+
+std::vector<float> TriangleMesh::get_flood_grid_min()
+{
+    if (!this->flood_grid_min.has_value()) {
+        this->build_flood_fill_data();
+    }
+    return this->flood_grid_min.value();
+}
+
+std::vector<float> TriangleMesh::get_flood_grid_max()
+{
+    if (!this->flood_grid_max.has_value()) {
+        this->build_flood_fill_data();
+    }
+    return this->flood_grid_max.value();
+}
+
+std::vector<int64_t> TriangleMesh::get_flood_grid_res()
+{
+    if (!this->flood_grid_res.has_value()) {
+        this->build_flood_fill_data();
+    }
+    return this->flood_grid_res.value();
+}
+
 torch::Tensor TriangleMesh::get_self_intersection()
 {
     this->build_bvh();
@@ -377,14 +467,26 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleM
     int sign_mode,
     int distance_mode)
 {
-    if (!this->is_manifold(true)) {
-        sign_mode = 0;
-    }
-
     if (distance_mode == 0)
     {
         this->build_bvh();
-        return this->bvh.value().query_point(query_pts, this->vertices, this->triangles, return_sdf, return_prj_pts, sign_mode);
+        if (sign_mode == 3 && !this->flood_fill_mask.has_value()) {
+            this->build_flood_fill_data();
+        }
+        return this->bvh.value().query_point(
+            query_pts,
+            this->vertices,
+            this->triangles,
+            return_sdf,
+            return_prj_pts,
+            sign_mode,
+            this->get_triangle_normals(),
+            (sign_mode == 2 || sign_mode == 3 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_vertex_normals(1)) : std::nullopt,
+            (sign_mode == 2 || sign_mode == 3 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_edge_normals()) : std::nullopt,
+            (sign_mode == 3) ? this->flood_fill_mask : std::nullopt,
+            (sign_mode == 3) ? this->flood_grid_min : std::nullopt,
+            (sign_mode == 3) ? this->flood_grid_max : std::nullopt,
+            (sign_mode == 3) ? this->flood_grid_res : std::nullopt);
     }
     else
     {
@@ -490,6 +592,15 @@ torch::Tensor TriangleMesh::get_triangle_normals()
         this->compute_triangle_normals();
     }
     return this->triangle_normals;
+}
+
+torch::Tensor TriangleMesh::get_edge_normals()
+{
+    if (!this->edge_normals.defined())
+    {
+        this->compute_edge_normals();
+    }
+    return this->edge_normals;
 }
 
 torch::Tensor TriangleMesh::get_surface_area()
@@ -855,11 +966,26 @@ void bind_ds_triangle_mesh(py::module_ &m)
         Returns:
             torch.Tensor - Shape (N, 3) float32 tensor of vertices.
         )doc")
-        .def_property_readonly("vertex_normals", &TriangleMesh::get_vertex_normals, R"doc(
-        Area-weighted vertex normals.
+        .def_property_readonly("vertex_normals", [](TriangleMesh &self) { return self.get_vertex_normals(0); }, R"doc(
+        Vertex normals (unweighted mode 0 by default).
 
         Returns:
             torch.Tensor - Shape (N, 3) float32 tensor of vertex normals.
+        )doc")
+        .def("get_vertex_normals", &TriangleMesh::get_vertex_normals, py::arg("mode") = 0, R"doc(
+        Get vertex normals with specific mode (0: unweighted average, 1: angle-weighted pseudonormals).
+
+        Args:
+            mode (int, optional): Normal computation mode. Defaults to 0.
+
+        Returns:
+            torch.Tensor - Shape (N, 3) float32 tensor of vertex normals.
+        )doc")
+        .def("compute_vertex_normals", &TriangleMesh::compute_vertex_normals, py::arg("mode") = 0, R"doc(
+        Compute vertex normals with specific mode (0: unweighted average, 1: angle-weighted pseudonormals).
+
+        Args:
+            mode (int, optional): Normal computation mode. Defaults to 0.
         )doc")
         .def_property_readonly("vertex_colors", &TriangleMesh::get_vertex_colors, R"doc(
         Vertex colors.
@@ -902,6 +1028,36 @@ void bind_ds_triangle_mesh(py::module_ &m)
 
         Returns:
             torch.Tensor - Shape (M, 3) float32 tensor of triangle normals.
+        )doc")
+        .def_property_readonly("edge_normals", &TriangleMesh::get_edge_normals, R"doc(
+        Normals of each directed edge slot (3 per triangle) for sign queries.
+
+        Returns:
+            torch.Tensor - Shape (3*M, 3) float32 tensor of edge normals.
+        )doc")
+        .def_property_readonly("edge_normal", &TriangleMesh::get_edge_normal, R"doc(
+        Alias for edge_normals.
+
+        Returns:
+            torch.Tensor - Shape (3*M, 3) float32 tensor of edge normals.
+        )doc")
+        .def("get_edge_normals", &TriangleMesh::get_edge_normals, R"doc(
+        Get edge normals for pseudonormal sign queries.
+
+        Returns:
+            torch.Tensor - Shape (3*M, 3) float32 tensor of edge normals.
+        )doc")
+        .def("get_edge_normal", &TriangleMesh::get_edge_normal, R"doc(
+        Alias for get_edge_normals.
+
+        Returns:
+            torch.Tensor - Shape (3*M, 3) float32 tensor of edge normals.
+        )doc")
+        .def("compute_edge_normals", &TriangleMesh::compute_edge_normals, R"doc(
+        Compute edge normals for pseudonormal sign queries.
+        )doc")
+        .def("compute_edge_normal", &TriangleMesh::compute_edge_normal, R"doc(
+        Alias for compute_edge_normals.
         )doc")
         .def_property_readonly("surface_area", &TriangleMesh::get_surface_area, R"doc(
         Total surface area of the mesh.
@@ -960,6 +1116,27 @@ void bind_ds_triangle_mesh(py::module_ &m)
         Returns:
             MeshBVH: The constructed BVH object.
         )doc")
+        .def("build_flood_fill_data", &TriangleMesh::build_flood_fill_data, py::arg("grid_min") = py::none(), py::arg("grid_max") = py::none(), py::arg("res") = py::none(), py::arg("connectivity") = 6, R"doc(
+        Builds volumetric flood fill mask for sign_mode=3.
+
+        Args:
+            grid_min (list, optional): Bounding grid minimum coordinates [x, y, z].
+            grid_max (list, optional): Bounding grid maximum coordinates [x, y, z].
+            res (list, optional): Grid vertex resolutions [rx, ry, rz].
+            connectivity (int, optional): Voxel connectivity (6, 18, or 26). Defaults to 6.
+        )doc")
+        .def_property_readonly("flood_fill_mask", &TriangleMesh::get_flood_fill_mask, R"doc(
+        The pre-computed flood fill int32 mask tensor.
+        )doc")
+        .def_property_readonly("flood_grid_min", &TriangleMesh::get_flood_grid_min, R"doc(
+        The flood grid bounding box min coordinates.
+        )doc")
+        .def_property_readonly("flood_grid_max", &TriangleMesh::get_flood_grid_max, R"doc(
+        The flood grid bounding box max coordinates.
+        )doc")
+        .def_property_readonly("flood_grid_res", &TriangleMesh::get_flood_grid_res, R"doc(
+        The flood grid vertex resolution.
+        )doc")
         .def("get_self_intersection", &TriangleMesh::get_self_intersection, R"doc(
         Finds all self-intersecting triangle pairs in the mesh.
 
@@ -999,7 +1176,7 @@ void bind_ds_triangle_mesh(py::module_ &m)
             query_pts (torch.Tensor): Shape (Q, 3) float32 tensor of query points.
             return_sdf (bool, optional): Whether to return Signed Distance Field values. Defaults to False.
             return_prj_pts (bool, optional): Whether to return projected points on the mesh. Defaults to True.
-            sign_mode (int, optional): The method for computing signs. Defaults to 0.
+            sign_mode (int, optional): The method for computing signs (0: ray casting parity, 1: fast winding number, 2: angle-weighted pseudonormals, 3: volumetric flood fill + pseudonormal hybrid, 4: hybrid WN + pseudonormals). Defaults to 0.
             distance_mode (int, optional): Distance computation mode. Defaults to 0.
 
         Returns:
