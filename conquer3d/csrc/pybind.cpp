@@ -22,6 +22,7 @@ void bind_creation_triangle_creation(py::module_& m);
 void bind_ops_mc(py::module_& m);
 void bind_ops_mtg(py::module_& m);
 void bind_ops_chamfer(py::module_& m);
+void bind_ops_flood_fill(py::module_& m);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.doc() = "Geocutool Python bindings";
@@ -45,4 +46,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     bind_ops_mc(m);
     bind_ops_mtg(m);
     bind_ops_chamfer(m);
+    bind_ops_flood_fill(m);
 }
