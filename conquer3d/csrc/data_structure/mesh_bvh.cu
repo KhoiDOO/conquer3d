@@ -1,6 +1,9 @@
 #include "mesh_bvh.h"
 #include "../primitive/triangle.h"
+#include "../primitive/edge.h"
 #include <thrust/device_vector.h>
+#include <thrust/sort.h>
+#include <thrust/execution_policy.h>
 
 namespace mesh_bvh
 {
@@ -290,6 +293,75 @@ namespace mesh_bvh
         return total_omega * 0.07957747154f; // 1.0f / (4.0f * PI)
     }
 
+    __device__ __forceinline__ float compute_pseudonormal_sign(
+        const float3 &p,
+        const float3 &best_pt,
+        const int best_tri_id,
+        const float3 *vertices,
+        const int3 *triangles,
+        const float3 *pseudonormal_vertices,
+        const float3 *pseudonormal_edges,
+        const float3 *pseudonormal_faces)
+    {
+        int3 tri = triangles[best_tri_id];
+        float3 v0 = vertices[tri.x];
+        float3 v1 = vertices[tri.y];
+        float3 v2 = vertices[tri.z];
+        
+        float3 N = pseudonormal_faces[best_tri_id];
+        bool found = false;
+        const float eps_sq = 1e-10f;
+        
+        // 1. Check vertices
+        if (maths::dot2(best_pt - v0) <= eps_sq) {
+            N = pseudonormal_vertices[tri.x];
+            found = true;
+        } else if (maths::dot2(best_pt - v1) <= eps_sq) {
+            N = pseudonormal_vertices[tri.y];
+            found = true;
+        } else if (maths::dot2(best_pt - v2) <= eps_sq) {
+            N = pseudonormal_vertices[tri.z];
+            found = true;
+        }
+        
+        // 2. Check edges
+        if (!found) {
+            float3 u0 = v1 - v0;
+            float len2_0 = maths::dot2(u0);
+            if (len2_0 > 1e-10f) {
+                float t0 = fminf(fmaxf(maths::dot(best_pt - v0, u0) / len2_0, 0.0f), 1.0f);
+                if (maths::dot2(v0 + t0 * u0 - best_pt) <= eps_sq) {
+                    N = pseudonormal_edges[3 * best_tri_id + 0];
+                    found = true;
+                }
+            }
+        }
+        if (!found) {
+            float3 u1 = v2 - v1;
+            float len2_1 = maths::dot2(u1);
+            if (len2_1 > 1e-10f) {
+                float t1 = fminf(fmaxf(maths::dot(best_pt - v1, u1) / len2_1, 0.0f), 1.0f);
+                if (maths::dot2(v1 + t1 * u1 - best_pt) <= eps_sq) {
+                    N = pseudonormal_edges[3 * best_tri_id + 1];
+                    found = true;
+                }
+            }
+        }
+        if (!found) {
+            float3 u2 = v0 - v2;
+            float len2_2 = maths::dot2(u2);
+            if (len2_2 > 1e-10f) {
+                float t2 = fminf(fmaxf(maths::dot(best_pt - v2, u2) / len2_2, 0.0f), 1.0f);
+                if (maths::dot2(v2 + t2 * u2 - best_pt) <= eps_sq) {
+                    N = pseudonormal_edges[3 * best_tri_id + 2];
+                    found = true;
+                }
+            }
+        }
+        
+        return (maths::dot(p - best_pt, N) >= 0.0f) ? 1.0f : -1.0f;
+    }
+
     __global__ void query_point_mesh_bvh_kernel(
         const int num_queries,
         const int num_objects,
@@ -301,13 +373,20 @@ namespace mesh_bvh
         const int2 *__restrict__ bvh_children,
         const int *__restrict__ object_ids,
         const WindingData *__restrict__ winding_data,
+        const float3 *__restrict__ pseudonormal_vertices,
+        const float3 *__restrict__ pseudonormal_edges,
+        const float3 *__restrict__ pseudonormal_faces,
         int64_t *__restrict__ out_query_ids,
         int64_t *__restrict__ out_object_ids,
         float3 *__restrict__ out_projected_pts,
         float *__restrict__ out_distances,
         bool return_sdf,
         bool return_prj_pts,
-        int sign_mode)
+        int sign_mode,
+        const int *__restrict__ flood_mask,
+        float3 flood_min,
+        float3 flood_spacing,
+        int3 flood_dims)
     {
         int q_idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (q_idx >= num_queries)
@@ -360,13 +439,13 @@ namespace mesh_bvh
 
                     if (dist_l > dist_r)
                     {
-                        stack[++stack_ptr] = children.x;
-                        stack[++stack_ptr] = children.y;
+                        if (dist_l <= best_dist_sq) stack[++stack_ptr] = children.x;
+                        if (dist_r <= best_dist_sq) stack[++stack_ptr] = children.y;
                     }
                     else
                     {
-                        stack[++stack_ptr] = children.y;
-                        stack[++stack_ptr] = children.x;
+                        if (dist_r <= best_dist_sq) stack[++stack_ptr] = children.y;
+                        if (dist_l <= best_dist_sq) stack[++stack_ptr] = children.x;
                     }
                 }
             }
@@ -374,13 +453,45 @@ namespace mesh_bvh
 
         float dist = sqrtf(best_dist_sq);
 
-        if (return_sdf)
+        if (return_sdf && best_tri_id >= 0)
         {
             if (sign_mode == 0) {
                 dist *= compute_sign_ray_parity(p, best_tri_id, bvh_aabb_mins, bvh_aabb_maxs, bvh_children, object_ids, vertices, triangles, num_objects);
             } else if (sign_mode == 1) {
                 float wn = compute_fast_winding_number(p, bvh_aabb_mins, bvh_aabb_maxs, bvh_children, object_ids, vertices, triangles, winding_data, num_objects, 2.0f);
                 dist *= (wn >= 0.5f) ? -1.0f : 1.0f;
+            } else if (sign_mode == 2) {
+                dist *= compute_pseudonormal_sign(p, best_pt, best_tri_id, vertices, triangles, pseudonormal_vertices, pseudonormal_edges, pseudonormal_faces);
+            } else if (sign_mode == 3) {
+                int i = floorf((p.x - flood_min.x) / flood_spacing.x);
+                int j = floorf((p.y - flood_min.y) / flood_spacing.y);
+                int k = floorf((p.z - flood_min.z) / flood_spacing.z);
+                if (i >= 0 && i < flood_dims.x && j >= 0 && j < flood_dims.y && k >= 0 && k < flood_dims.z && flood_mask != nullptr) {
+                    int idx = i * (flood_dims.y * flood_dims.z) + j * flood_dims.z + k;
+                    int val = flood_mask[idx];
+                    if (val == 2) {
+                        // Water (open exterior sea) -> dist stays positive
+                    } else if (val == -2) {
+                        // Dry (interior cavity / submerged components) -> strictly negative
+                        dist = -dist;
+                    } else {
+                        // Transition zone (Dam or Collision) -> sub-voxel pseudonormal consensus
+                        dist *= compute_pseudonormal_sign(p, best_pt, best_tri_id, vertices, triangles, pseudonormal_vertices, pseudonormal_edges, pseudonormal_faces);
+                    }
+                } else {
+                    // Out of bounds of flood volume -> exterior (+1)
+                }
+            } else if (sign_mode == 4) {
+                float wn = compute_fast_winding_number(p, bvh_aabb_mins, bvh_aabb_maxs, bvh_children, object_ids, vertices, triangles, winding_data, num_objects, 2.0f);
+                if (wn <= 0.25f) {
+                    // Strictly exterior (far outside) -> dist stays positive
+                } else if (wn >= 0.75f) {
+                    // Strictly interior (inside solid volume or overlapping components) -> strictly negative
+                    dist = -dist;
+                } else {
+                    // Transition surface interface (0.25 < wn < 0.75) -> sub-voxel precision pseudonormal consensus
+                    dist *= compute_pseudonormal_sign(p, best_pt, best_tri_id, vertices, triangles, pseudonormal_vertices, pseudonormal_edges, pseudonormal_faces);
+                }
             }
         }
 
@@ -403,13 +514,20 @@ namespace mesh_bvh
         const int2 *bvh_children,
         const int *object_ids,
         const WindingData *winding_data,
+        const float3 *pseudonormal_vertices,
+        const float3 *pseudonormal_edges,
+        const float3 *pseudonormal_faces,
         int64_t *out_query_ids,
         int64_t *out_object_ids,
         float3 *out_projected_pts,
         float *out_distances,
         bool return_sdf,
         bool return_prj_pts,
-        int sign_mode)
+        int sign_mode,
+        const int *flood_mask,
+        float3 flood_min,
+        float3 flood_spacing,
+        int3 flood_dims)
     {
         int threads = NTHREADS;
         int blocks = (num_queries + threads - 1) / threads;
@@ -425,13 +543,20 @@ namespace mesh_bvh
             bvh_children,
             object_ids,
             winding_data,
+            pseudonormal_vertices,
+            pseudonormal_edges,
+            pseudonormal_faces,
             out_query_ids,
             out_object_ids,
             out_projected_pts,
             out_distances,
             return_sdf,
             return_prj_pts,
-            sign_mode);
+            sign_mode,
+            flood_mask,
+            flood_min,
+            flood_spacing,
+            flood_dims);
     }
 
     __global__ void bottom_up_winding_data_kernel(
