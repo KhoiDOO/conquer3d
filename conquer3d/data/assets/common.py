@@ -9,14 +9,15 @@ class Common3D:
     Downloads the specific .obj model directly via the Raw GitHub URL
     and loads its vertices, faces, and optional colors.
     """
-    def __init__(self, filename, download_dir="~/.conquer3d"):
+    def __init__(self, filename, download_dir="~/.conquer3d", verbose=False):
         self.filename = filename
         self.url = f"https://raw.githubusercontent.com/KhoiDOO/common-3d-test-models/master/data/{self.filename}"
         self.download_dir = os.path.expanduser(download_dir)
         self.vertices = None
         self.faces = None
         self.colors = None
-        
+        self.verbose = verbose
+
         self._load()
 
     def _load(self):
@@ -24,13 +25,16 @@ class Common3D:
         obj_path = os.path.join(self.download_dir, self.filename)
         
         if not os.path.exists(obj_path):
-            print(f"Downloading {self.filename} from {self.url}...")
+            if self.verbose:
+                print(f"Downloading {self.filename} from {self.url}...")
             req = urllib.request.Request(self.url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req) as response, open(obj_path, 'wb') as out_file:
                 out_file.write(response.read())
-            print("Download complete.")
+            if self.verbose:
+                print("Download complete.")
             
-        print(f"Reading {self.filename}...")
+        if self.verbose:
+            print(f"Reading {self.filename}...")
         self.vertices, self.faces, self.colors = read_obj(obj_path)
 
     def get(self):
