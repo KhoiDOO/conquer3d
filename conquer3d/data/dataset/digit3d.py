@@ -1,9 +1,7 @@
 import os
 import zipfile
 import torch
-import conquer3d as c3d
-import meshlib.mrmeshpy as mr
-import meshlib.mrmeshnumpy as mrnp
+import trimesh
 
 from .base_mesh import BaseMeshDataset
 
@@ -83,54 +81,6 @@ class Digit3D(BaseMeshDataset):
             
         return vertices_t, faces_t, label
 
-
-class SparseDigit3D(Digit3D):
-    """
-    Digit3D Dataset that constructs a sparse SDF voxel grid from the mesh on-the-fly.
-    """
-    def __init__(self, root: str = "~/.conquer3d/", train: bool = True, transform=None, download: bool = False, 
-                 grid_res: int = 32, grid_bound: float = 1.2, cached: bool = False):
-        super().__init__(root, train, transform, download, cached=cached)
-        self.grid_res = grid_res
-        self.grid_bound = grid_bound
-        
-    def __getitem__(self, idx: int):
-        # 1. Obtain vertices, faces, and label from Digit3D
-        vertices, faces, label = super().__getitem__(idx)
-        
-        # 2. Construct voxel grid in CPU
-        grid_vertices, voxels, idx_grids = c3d.data_structure.create_voxel_grid(
-            grid_min=[-self.grid_bound] * 3, 
-            grid_max=[self.grid_bound] * 3, 
-            res=[self.grid_res] * 3, 
-            device="cpu"
-        )
-        
-        # Construct the mesh using meshlib's numpy interface
-        mesh_mr = mrnp.meshFromFacesVerts(faces.numpy(), vertices.numpy())
-        
-        # Construct point cloud from grid vertices for vectorized distance computation
-        pc = mrnp.pointCloudFromPoints(grid_vertices.numpy())
-        
-        # Compute the signed distance for all grid vertices at once
-        dist_scalars = mr.findSignedDistances(mesh_mr, pc.points)
-        
-        # Convert to tensor
-        sdf = torch.tensor(list(dist_scalars), dtype=torch.float32, device="cpu")
-        
-        # 4. Compute active voxels
-        active_voxel_indices = c3d.data_structure.compute_active_voxels(voxels, sdf, iso=0.0)
-        
-        # 5. Extract purely Voxel-Centric representations using voxel2sparse
-        sparse_coords, sparse_sdfs = c3d.conversion.grid.voxel2sparse(
-            active_voxel_indices, voxels, idx_grids, sdf=sdf, batch_idx=0
-        )
-        
-        # We only need the x, y, z for the dataset (collate_fn handles batch_idx)
-        sparse_idx_grids = sparse_coords[:, 1:]
-        
-        return sparse_idx_grids, sparse_sdfs, label
-
 class PointDigit3D(Digit3D):
     """
     Digit3D Dataset that constructs a point cloud by sampling on the mesh.
@@ -143,8 +93,7 @@ class PointDigit3D(Digit3D):
     def __getitem__(self, idx: int):
         # 1. Obtain vertices, faces, and label from Digit3D
         vertices, faces, label = super().__getitem__(idx)
-        
-        import trimesh
+
         # 2. Construct trimesh object (CPU safe for DataLoader workers)
         mesh = trimesh.Trimesh(vertices=vertices.numpy(), faces=faces.numpy(), process=False)
         
