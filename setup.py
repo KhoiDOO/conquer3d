@@ -50,9 +50,14 @@ def get_extensions():
             cuda_lib = os.path.join(conda_prefix, "lib", "libcudart.so")
             if os.path.isfile(cuda_include) or os.path.isfile(cuda_lib):
                 cuda_home = conda_prefix
+                os.environ["CUDA_HOME"] = cuda_home
+                torch.utils.cpp_extension.CUDA_HOME = cuda_home
                 print(f"Found CUDA in conda environment: {cuda_home}")
     
     if (cuda_available and cuda_home is not None) or os.getenv("FORCE_CUDA", "0") == "1":
+        if cuda_home and not os.getenv("CUDA_HOME"):
+            os.environ["CUDA_HOME"] = cuda_home
+            torch.utils.cpp_extension.CUDA_HOME = cuda_home
         extension = CUDAExtension
         sources += source_cuda
         define_macros += [("WITH_CUDA", None)]
@@ -69,6 +74,7 @@ def get_extensions():
         
         # Suppress harmless nvcc warnings (like conda's compiler-bindir redefinition)
         nvcc_flags.append("-w")
+        nvcc_flags.append("-allow-unsupported-compiler")
         
         extra_compile_args = {
             "cxx": ["-O3", "-Wno-attributes"],
