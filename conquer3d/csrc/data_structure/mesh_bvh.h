@@ -50,7 +50,14 @@ public:
         const torch::Tensor &triangles,
         bool return_sdf = false,
         bool return_prj_pts = true,
-        int sign_mode = 0);
+        int sign_mode = 0,
+        std::optional<torch::Tensor> triangle_normals = std::nullopt,
+        std::optional<torch::Tensor> vertex_normals = std::nullopt,
+        std::optional<torch::Tensor> edge_normals = std::nullopt,
+        std::optional<torch::Tensor> flood_fill_mask = std::nullopt,
+        std::optional<std::vector<float>> flood_grid_min = std::nullopt,
+        std::optional<std::vector<float>> flood_grid_max = std::nullopt,
+        std::optional<std::vector<int64_t>> flood_grid_res = std::nullopt);
 
     torch::Tensor query_voxel(
         const torch::Tensor &query_mins,
@@ -104,13 +111,20 @@ namespace mesh_bvh
         const int2 *bvh_children,
         const int *object_ids,
         const WindingData *winding_data,
+        const float3 *pseudonormal_vertices,
+        const float3 *pseudonormal_edges,
+        const float3 *pseudonormal_faces,
         int64_t *out_query_ids,
         int64_t *out_object_ids,
         float3 *out_projected_pts,
         float *out_distances,
         bool return_sdf,
         bool return_prj_pts,
-        int sign_mode);
+        int sign_mode,
+        const int *flood_mask = nullptr,
+        float3 flood_min = make_float3(0.0f, 0.0f, 0.0f),
+        float3 flood_spacing = make_float3(1.0f, 1.0f, 1.0f),
+        int3 flood_dims = make_int3(0, 0, 0));
     
     __host__ void bottom_up_winding_data(
         const int num_objects,
@@ -120,7 +134,6 @@ namespace mesh_bvh
         const int *bvh_parents,
         const int2 *bvh_children,
         WindingData *winding_data);
-
     __host__ void query_voxel_mesh_bvh(
         const int num_queries,
         const int num_objects,
