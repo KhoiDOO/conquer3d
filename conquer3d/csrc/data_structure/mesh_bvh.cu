@@ -463,20 +463,15 @@ namespace mesh_bvh
             } else if (sign_mode == 2) {
                 dist *= compute_pseudonormal_sign(p, best_pt, best_tri_id, vertices, triangles, pseudonormal_vertices, pseudonormal_edges, pseudonormal_faces);
             } else if (sign_mode == 3) {
-                int i = floorf((p.x - flood_min.x) / flood_spacing.x);
-                int j = floorf((p.y - flood_min.y) / flood_spacing.y);
-                int k = floorf((p.z - flood_min.z) / flood_spacing.z);
+                int i = roundf((p.x - flood_min.x) / flood_spacing.x);
+                int j = roundf((p.y - flood_min.y) / flood_spacing.y);
+                int k = roundf((p.z - flood_min.z) / flood_spacing.z);
                 if (i >= 0 && i < flood_dims.x && j >= 0 && j < flood_dims.y && k >= 0 && k < flood_dims.z && flood_mask != nullptr) {
                     int idx = i * (flood_dims.y * flood_dims.z) + j * flood_dims.z + k;
                     int val = flood_mask[idx];
-                    if (val == 2) {
-                        // Water (open exterior sea) -> dist stays positive
-                    } else if (val == -2) {
-                        // Dry (interior cavity / submerged components) -> strictly negative
+                    if (val != 2) {
+                        // Dry (-2 or unreached interior vertex) -> strictly negative
                         dist = -dist;
-                    } else {
-                        // Transition zone (Dam or Collision) -> sub-voxel pseudonormal consensus
-                        dist *= compute_pseudonormal_sign(p, best_pt, best_tri_id, vertices, triangles, pseudonormal_vertices, pseudonormal_edges, pseudonormal_faces);
                     }
                 } else {
                     // Out of bounds of flood volume -> exterior (+1)
