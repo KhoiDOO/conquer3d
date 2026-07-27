@@ -398,14 +398,18 @@ void TriangleMesh::build_flood_fill_data(
     } else {
         res_vals = {128, 128, 128};
     }
-    
-    auto active_voxel_ids = this->bvh.value().get_active_voxel_ids_from_grid(min_vals, max_vals, res_vals, this->vertices, this->triangles);
-    
-    int64_t vx = res_vals[0] - 1;
-    int64_t vy = res_vals[1] - 1;
-    int64_t vz = res_vals[2] - 1;
-    
-    this->flood_fill_mask = ops::compute_flood_fill(active_voxel_ids, vx, vy, vz, connectivity);
+    this->flood_fill_mask = ops::compute_flood_fill(
+        this->vertices,
+        this->triangles,
+        this->bvh.value().aabb_mins,
+        this->bvh.value().aabb_maxs,
+        this->bvh.value().bvh_children,
+        this->bvh.value().object_ids,
+        min_vals,
+        max_vals,
+        res_vals,
+        connectivity
+    );
     this->flood_grid_min = min_vals;
     this->flood_grid_max = max_vals;
     this->flood_grid_res = res_vals;
@@ -481,8 +485,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleM
             return_prj_pts,
             sign_mode,
             this->get_triangle_normals(),
-            (sign_mode == 2 || sign_mode == 3 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_vertex_normals(1)) : std::nullopt,
-            (sign_mode == 2 || sign_mode == 3 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_edge_normals()) : std::nullopt,
+            (sign_mode == 2 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_vertex_normals(1)) : std::nullopt,
+            (sign_mode == 2 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_edge_normals()) : std::nullopt,
             (sign_mode == 3) ? this->flood_fill_mask : std::nullopt,
             (sign_mode == 3) ? this->flood_grid_min : std::nullopt,
             (sign_mode == 3) ? this->flood_grid_max : std::nullopt,
