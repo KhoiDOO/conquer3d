@@ -155,7 +155,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     }
 
     torch::Tensor use_tri_normals, use_vert_normals, use_edge_normals;
-    if (sign_mode == 2 || sign_mode == 3 || sign_mode == 4)
+    if (sign_mode == 2 || sign_mode == 4)
     {
         if (triangle_normals.has_value() && triangle_normals->defined()) {
             use_tri_normals = *triangle_normals;
@@ -236,7 +236,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
         int64_t rx = flood_grid_res->at(0);
         int64_t ry = flood_grid_res->at(1);
         int64_t rz = flood_grid_res->at(2);
-        f_dims = make_int3(static_cast<int>(rx - 1), static_cast<int>(ry - 1), static_cast<int>(rz - 1));
+        f_dims = make_int3(static_cast<int>(rx), static_cast<int>(ry), static_cast<int>(rz));
         f_spacing = make_float3(
             (flood_grid_max->at(0) - flood_grid_min->at(0)) / (rx - 1),
             (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1),
@@ -255,9 +255,9 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
         (const int2 *)this->bvh_children.data_ptr<int>(),
         this->object_ids.data_ptr<int>(),
         this->has_winding_data ? (const WindingData *)this->winding_data.data_ptr() : nullptr,
-        (sign_mode == 2 || sign_mode == 3 || sign_mode == 4) ? (const float3 *)use_vert_normals.data_ptr<float>() : nullptr,
-        (sign_mode == 2 || sign_mode == 3 || sign_mode == 4) ? (const float3 *)use_edge_normals.data_ptr<float>() : nullptr,
-        (sign_mode == 2 || sign_mode == 3 || sign_mode == 4) ? (const float3 *)use_tri_normals.data_ptr<float>() : nullptr,
+        (sign_mode == 2 || sign_mode == 4) ? (const float3 *)use_vert_normals.data_ptr<float>() : nullptr,
+        (sign_mode == 2 || sign_mode == 4) ? (const float3 *)use_edge_normals.data_ptr<float>() : nullptr,
+        (sign_mode == 2 || sign_mode == 4) ? (const float3 *)use_tri_normals.data_ptr<float>() : nullptr,
         out_query_ids.data_ptr<int64_t>(),
         out_object_ids.data_ptr<int64_t>(),
         return_prj_pts ? (float3 *)out_projected_pts.data_ptr<float>() : nullptr,
