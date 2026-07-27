@@ -12,7 +12,7 @@
 
 class BVH
 {
-protected:
+public:
     uint32_t num_objects;
     uint32_t num_nodes; // Will always be 2N - 1
 
@@ -22,7 +22,6 @@ protected:
     torch::Tensor bvh_parents;  // Size: [2N - 1] -> index of parent node
     torch::Tensor object_ids;   // Size: [N] -> Maps the sorted leaf index back to the original Gaussian index
 
-public:
     BVH(const torch::Tensor &in_aabb_mins, const torch::Tensor &in_aabb_maxs);
 
     std::tuple<torch::Tensor, torch::Tensor> query(
