@@ -23,7 +23,7 @@ def tmesh2voxel(tm, res, grid_min=None, grid_max=None, chunk_size=5000000, devic
     
     if sign_mode == 3:
         tm.build_flood_fill_data(grid_min, grid_max, res_list)
-    if sign_mode in [2, 3, 4]:
+    if sign_mode in [2, 4]:
         tm.compute_triangle_normals()
         tm.compute_vertex_normals(1)
         tm.compute_edge_normals()
@@ -70,7 +70,7 @@ def tmesh2sparse(tm, res, grid_min=None, grid_max=None, chunk_size=5000000, iso=
     
     if sign_mode == 3:
         tm.build_flood_fill_data(grid_min, grid_max, res_list)
-    if sign_mode in [2, 3, 4]:
+    if sign_mode in [2, 4]:
         tm.compute_triangle_normals()
         tm.compute_vertex_normals(1)
         tm.compute_edge_normals()
