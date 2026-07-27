@@ -7,10 +7,15 @@
 
 namespace ops {
     torch::Tensor compute_flood_fill(
-        const torch::Tensor& active_voxel_ids,
-        int64_t vx,
-        int64_t vy,
-        int64_t vz,
+        const torch::Tensor& vertices,
+        const torch::Tensor& triangles,
+        const torch::Tensor& aabb_mins,
+        const torch::Tensor& aabb_maxs,
+        const torch::Tensor& bvh_children,
+        const torch::Tensor& object_ids,
+        std::vector<float> grid_min,
+        std::vector<float> grid_max,
+        std::vector<int64_t> grid_res,
         int connectivity = 6
     );
 }
