@@ -220,7 +220,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     }
     torch::Tensor out_distances = torch::empty({num_queries}, options_f32);
 
-    const int *p_flood_mask = nullptr;
+    const int8_t *p_flood_mask = nullptr;
     float3 f_min = make_float3(0.0f, 0.0f, 0.0f);
     float3 f_spacing = make_float3(1.0f, 1.0f, 1.0f);
     int3 f_dims = make_int3(0, 0, 0);
@@ -231,7 +231,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
         {
             throw std::runtime_error("For sign_mode == 3 (flood fill), flood fill data must be provided or built beforehand.");
         }
-        p_flood_mask = flood_fill_mask->data_ptr<int>();
+        p_flood_mask = flood_fill_mask->data_ptr<int8_t>();
         f_min = make_float3(flood_grid_min->at(0), flood_grid_min->at(1), flood_grid_min->at(2));
         int64_t rx = flood_grid_res->at(0);
         int64_t ry = flood_grid_res->at(1);
