@@ -121,7 +121,7 @@ namespace mesh_bvh
         bool return_sdf,
         bool return_prj_pts,
         int sign_mode,
-        const int *flood_mask = nullptr,
+        const int8_t *flood_mask = nullptr,
         float3 flood_min = make_float3(0.0f, 0.0f, 0.0f),
         float3 flood_spacing = make_float3(1.0f, 1.0f, 1.0f),
         int3 flood_dims = make_int3(0, 0, 0));
