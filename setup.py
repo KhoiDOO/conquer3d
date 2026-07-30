@@ -87,6 +87,14 @@ def get_extensions():
     sources = [s for s in sources]
     include_dirs = [os.path.join("conquer3d", "csrc")]
     
+    if cuda_available and cuda_home is not None:
+        target_inc = os.path.join(cuda_home, "targets", "x86_64-linux", "include")
+        if os.path.isdir(target_inc):
+            include_dirs.append(target_inc)
+        conda_inc = os.path.join(cuda_home, "include")
+        if os.path.isdir(conda_inc) and conda_inc not in include_dirs:
+            include_dirs.append(conda_inc)
+    
     # Ensure torch libraries are in the RPATH
     torch_lib_path = os.path.join(os.path.dirname(torch.__file__), "lib")
     library_dirs = [torch_lib_path]
