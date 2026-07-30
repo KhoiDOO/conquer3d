@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import scipy.spatial
 
 def find_near_duplicates_sort(points, epsilon=1e-7):
     """
@@ -42,8 +43,6 @@ def reorient_tetrahedra(vertices, tets):
     to_flip = inside_oriented_triangles.all(dim=1)
     tets[to_flip] = tets[to_flip][:, [0, 2, 1, 3]]
     return tets
-
-import scipy.spatial
 
 @torch.no_grad()
 def delaunay_simplices_tetgen(points):
