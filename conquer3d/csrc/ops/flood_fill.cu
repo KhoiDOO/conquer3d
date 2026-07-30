@@ -8,6 +8,23 @@
 
 namespace ops {
 
+    __device__ int8_t atomicCAS_int8(int8_t* address, int8_t compare, int8_t val) {
+        int32_t* address_as_int = (int32_t*)((uintptr_t)address & ~3);
+        int shift = (((uintptr_t)address & 3) * 8);
+        int32_t old = *address_as_int;
+        int32_t assumed;
+        do {
+            assumed = old;
+            int8_t current_val = (int8_t)((assumed >> shift) & 0xff);
+            if (current_val != compare) {
+                break;
+            }
+            int32_t new_val = (assumed & ~(0xff << shift)) | ((int32_t)(uint8_t)val << shift);
+            old = atomicCAS(address_as_int, assumed, new_val);
+        } while (assumed != old);
+        return (int8_t)((old >> shift) & 0xff);
+    }
+
     __device__ __forceinline__ bool test_segment_intersect_bvh(
         const float3& p0, const float3& p1,
         const float3* __restrict__ bvh_aabb_mins,
@@ -86,7 +103,7 @@ namespace ops {
     }
 
     __global__ void init_perimeter_kernel(
-        int* __restrict__ mask,
+        int8_t* __restrict__ mask,
         int* __restrict__ frontier,
         int* __restrict__ frontier_size,
         int RX, int RY, int RZ)
@@ -112,7 +129,7 @@ namespace ops {
     }
 
     __global__ void flood_fill_step_kernel(
-        int* __restrict__ mask,
+        int8_t* __restrict__ mask,
         const int* __restrict__ current_frontier,
         int frontier_size,
         int* __restrict__ next_frontier,
@@ -173,7 +190,7 @@ namespace ops {
                         
                         if (!test_segment_intersect_bvh(pA, pB, bvh_aabb_mins, bvh_aabb_maxs, bvh_children, object_ids, vertices, triangles, num_objects))
                         {
-                            int old_val = atomicCAS(&mask[n_idx], -2, 2);
+                            int8_t old_val = atomicCAS_int8(&mask[n_idx], -2, 2);
                             if (old_val == -2)
                             {
                                 int pos = atomicAdd(next_frontier_size, 1);
@@ -204,7 +221,7 @@ namespace ops {
         int64_t num_vertices = rx * ry * rz;
         auto options = torch::TensorOptions().device(vertices.device()).dtype(torch::kInt32);
 
-        auto mask = torch::full({num_vertices}, -2, options);
+        auto mask = torch::full({num_vertices}, -2, options.dtype(torch::kInt8));
 
         auto current_frontier = torch::empty({num_vertices}, options);
         auto next_frontier = torch::empty({num_vertices}, options);
@@ -215,7 +232,7 @@ namespace ops {
         int blocks = (num_vertices + threads - 1) / threads;
 
         init_perimeter_kernel<<<blocks, threads>>>(
-            mask.data_ptr<int>(),
+            mask.data_ptr<int8_t>(),
             current_frontier.data_ptr<int>(),
             frontier_size.data_ptr<int>(),
             static_cast<int>(rx),
@@ -238,7 +255,7 @@ namespace ops {
             int step_blocks = (curr_size + threads - 1) / threads;
 
             flood_fill_step_kernel<<<step_blocks, threads>>>(
-                mask.data_ptr<int>(),
+                mask.data_ptr<int8_t>(),
                 current_frontier.data_ptr<int>(),
                 curr_size,
                 next_frontier.data_ptr<int>(),
