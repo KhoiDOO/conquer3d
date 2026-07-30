@@ -54,11 +54,12 @@ def marching_tetrahedra(vertices, tets, sdfs, colors=None, return_tet_idx=False)
 
     Returns:
         tuple: 
-            - verts (torch.Tensor): The extracted surface vertices of shape (V, 3). If `colors` was provided, 
-              the shape will be (V, 3 + C) where the interpolated colors are concatenated to the coordinates.
+            - verts (torch.Tensor): The extracted surface vertices of shape (V, 3). 
             - faces (torch.Tensor): The triangular faces of the extracted surface of shape (F, 3).
             - tet_idx (torch.Tensor, optional): The original tetrahedron index corresponding to each face.
               Returned only if `return_tet_idx` is True.
+            - verts_colors (torch.Tensor, optional): The interpolated colors at the surface vertices of shape (V, C).
+              Returned only if `colors` is provided.
     """
     device = vertices.device
     with torch.no_grad():
