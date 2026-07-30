@@ -383,7 +383,7 @@ namespace mesh_bvh
         bool return_sdf,
         bool return_prj_pts,
         int sign_mode,
-        const int *__restrict__ flood_mask,
+        const int8_t *__restrict__ flood_mask,
         float3 flood_min,
         float3 flood_spacing,
         int3 flood_dims)
@@ -519,7 +519,7 @@ namespace mesh_bvh
         bool return_sdf,
         bool return_prj_pts,
         int sign_mode,
-        const int *flood_mask,
+        const int8_t *flood_mask,
         float3 flood_min,
         float3 flood_spacing,
         int3 flood_dims)
