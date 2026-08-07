@@ -2,6 +2,11 @@ import glob
 import os
 import subprocess
 import sys
+import multiprocessing
+
+# Limit the number of CPUs used for building to half of the available CPUs
+num_cpus = multiprocessing.cpu_count()
+os.environ["MAX_JOBS"] = str(max(1, num_cpus // 2))
 
 import torch
 from setuptools import find_packages, setup
