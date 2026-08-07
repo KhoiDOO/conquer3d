@@ -66,6 +66,7 @@ static __inline__ __host__ __device__ float4 operator* (const float4& a, const f
     );
 }
 
+// [4, 4] x [4, 1] = [4, 1]
 static __inline__ __host__ __device__ float4 operator* (const float4x4& m, const float4& a)
 {
     return make_float4(
