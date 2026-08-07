@@ -7,6 +7,7 @@ from .marching_tetrahedra_grid import marching_tetrahedra_grid
 from .diff_marching_tetrahedra_grid import diff_marching_tetrahedra_grid
 
 from .distance import one_sided_chamfer_distance, chamfer_distance, one_sided_hausdorff_distance, hausdorff_distance
+from .volint import single_view_volume_integral
 
 __all__ = [
     "marching_cubes",
@@ -19,5 +20,6 @@ __all__ = [
     "get_edges",
     "marching_tetrahedra",
     "marching_tetrahedra_grid",
-    "diff_marching_tetrahedra_grid"
+    "diff_marching_tetrahedra_grid",
+    "single_view_volume_integral"
 ]
