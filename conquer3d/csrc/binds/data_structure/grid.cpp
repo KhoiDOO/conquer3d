@@ -6,14 +6,17 @@
 #include <vector>
 #include "../../data_structure/mesh_bvh.h"
 #include "../../data_structure/triangle_mesh.h"
+#include "../../data_structure/grid.h"
+#include <cuda_runtime.h>
 
 namespace py = pybind11;
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> create_voxel_grid(
+std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> create_voxel_grid(
     std::vector<float> grid_min,
     std::vector<float> grid_max,
     std::vector<int64_t> res,
-    std::string device_str
+    std::string device_str,
+    bool return_idx_grids
 ) {
     TORCH_CHECK(grid_min.size() == 3, "grid_min must have 3 elements.");
     TORCH_CHECK(grid_max.size() == 3, "grid_max must have 3 elements.");
@@ -59,13 +62,16 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> create_voxel_grid(
 
     auto voxels = torch::stack({v0, v1, v2, v3, v4, v5, v6, v7}, -1).view({-1, 8}).contiguous().to(torch::kInt32);
 
-    auto i_v = torch::arange(rx, options_int);
-    auto j_v = torch::arange(ry, options_int);
-    auto k_v = torch::arange(rz, options_int);
-    auto idx_grids_v = torch::meshgrid({i_v, j_v, k_v}, "ij");
-    auto out_idx_grids = torch::stack({idx_grids_v[0].flatten(), idx_grids_v[1].flatten(), idx_grids_v[2].flatten()}, -1).contiguous();
+    std::optional<torch::Tensor> opt_idx_grids = std::nullopt;
+    if (return_idx_grids) {
+        auto i_v = torch::arange(rx, options_int);
+        auto j_v = torch::arange(ry, options_int);
+        auto k_v = torch::arange(rz, options_int);
+        auto idx_grids_v = torch::meshgrid({i_v, j_v, k_v}, "ij");
+        opt_idx_grids = torch::stack({idx_grids_v[0].flatten(), idx_grids_v[1].flatten(), idx_grids_v[2].flatten()}, -1).contiguous();
+    }
 
-    return std::make_tuple(grid_vertices, voxels, out_idx_grids);
+    return std::make_tuple(grid_vertices, voxels, opt_idx_grids);
 }
 
 torch::Tensor compute_grid_normal(torch::Tensor sdf, torch::Tensor grid_vertices, torch::Tensor idx_grids, std::vector<int64_t> res) {
@@ -141,11 +147,12 @@ torch::Tensor compute_active_voxels(torch::Tensor voxels, torch::Tensor sdf, flo
     return active_indices;
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> create_voxel_grid_from_tmesh(
+std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> create_voxel_grid_from_tmesh(
     std::vector<float> grid_min,
     std::vector<float> grid_max,
     std::vector<int64_t> res,
-    TriangleMesh &tmesh
+    TriangleMesh &tmesh,
+    bool return_unique_vert_ids = true
 ) {
     TORCH_CHECK(grid_min.size() == 3, "grid_min must have 3 elements.");
     TORCH_CHECK(grid_max.size() == 3, "grid_max must have 3 elements.");
@@ -165,7 +172,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> create_voxel_grid_from_t
         return std::make_tuple(
             torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device())),
             torch::empty({0, 8}, torch::TensorOptions().dtype(torch::kInt32).device(vertices.device())),
-            torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(vertices.device()))
+            return_unique_vert_ids ? std::make_optional(torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(vertices.device()))) : std::nullopt
         );
     }
 
@@ -205,16 +212,144 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> create_voxel_grid_from_t
 
     auto sparse_grid_vertices = torch::stack({x, y, z}, 1).contiguous();
 
-    return std::make_tuple(sparse_grid_vertices, remapped_voxels, unique_vert_ids);
+    return std::make_tuple(sparse_grid_vertices, remapped_voxels, return_unique_vert_ids ? std::make_optional(unique_vert_ids) : std::nullopt);
+}
+
+torch::Tensor get_active_voxel_ids_from_depth_py(
+    torch::Tensor depth_image,
+    torch::Tensor c2w_tensor,
+    torch::Tensor intrinsics_inv_tensor,
+    std::vector<float> grid_min,
+    std::vector<float> grid_max,
+    std::vector<int64_t> res,
+    bool activate_neighbor = false,
+    float trunc_margin = 0.0f
+) {
+    TORCH_CHECK(depth_image.is_cuda(), "depth_image must be a CUDA tensor");
+    TORCH_CHECK(depth_image.dim() == 2, "depth_image must be 2D (H, W)");
+    
+    int image_height = depth_image.size(0);
+    int image_width = depth_image.size(1);
+    int num_pixels = image_height * image_width;
+    
+    float4x4 c2w;
+    auto c2w_cpu = c2w_tensor.to(torch::kFloat32).cpu().contiguous();
+    auto c2w_a = c2w_cpu.accessor<float, 2>();
+    for(int r=0; r<4; ++r) for(int c=0; c<4; ++c) c2w.m[r][c] = c2w_a[r][c];
+    
+    float3x3 intrinsics_inv;
+    auto int_cpu = intrinsics_inv_tensor.to(torch::kFloat32).cpu().contiguous();
+    auto int_a = int_cpu.accessor<float, 2>();
+    for(int r=0; r<3; ++r) for(int c=0; c<3; ++c) intrinsics_inv.m[r][c] = int_a[r][c];
+    
+    float3 g_min; g_min.x = grid_min[0]; g_min.y = grid_min[1]; g_min.z = grid_min[2];
+    float3 g_max; g_max.x = grid_max[0]; g_max.y = grid_max[1]; g_max.z = grid_max[2];
+    int3 g_res; g_res.x = res[0]; g_res.y = res[1]; g_res.z = res[2];
+    
+    int max_pad_x = std::ceil(trunc_margin / ((grid_max[0] - grid_min[0]) / (res[0] - 1)));
+    int max_pad_y = std::ceil(trunc_margin / ((grid_max[1] - grid_min[1]) / (res[1] - 1)));
+    int max_pad_z = std::ceil(trunc_margin / ((grid_max[2] - grid_min[2]) / (res[2] - 1)));
+    int max_neighbors = activate_neighbor ? ((2 * max_pad_x + 1) * (2 * max_pad_y + 1) * (2 * max_pad_z + 1)) : 1;
+    
+    int64_t max_voxels = (int64_t)num_pixels * max_neighbors;
+    auto options = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kInt64);
+    auto out_voxel_ids = torch::empty({max_voxels}, options);
+    
+    auto valid_counter_tensor = torch::zeros({1}, options);
+
+    grid::get_active_voxel_ids_from_depth(
+        num_pixels,
+        depth_image.data_ptr<float>(),
+        c2w,
+        intrinsics_inv,
+        image_width,
+        image_height,
+        g_min,
+        g_max,
+        g_res,
+        out_voxel_ids.data_ptr<int64_t>(),
+        reinterpret_cast<unsigned long long*>(valid_counter_tensor.data_ptr<int64_t>()),
+        activate_neighbor,
+        trunc_margin
+    );
+    
+    int64_t valid_count = valid_counter_tensor.item<int64_t>();
+    return out_voxel_ids.slice(0, 0, valid_count);
+}
+
+std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> build_sparse_grid_from_active_voxels(
+    torch::Tensor active_voxel_ids,
+    std::vector<float> grid_min,
+    std::vector<float> grid_max,
+    std::vector<int64_t> res,
+    bool return_unique_vert_ids = true
+) {
+    TORCH_CHECK(grid_min.size() == 3, "grid_min must have 3 elements.");
+    TORCH_CHECK(grid_max.size() == 3, "grid_max must have 3 elements.");
+    TORCH_CHECK(res.size() == 3, "res must have 3 elements.");
+
+    int64_t rx = res[0];
+    int64_t ry = res[1];
+    int64_t rz = res[2];
+
+    if (active_voxel_ids.size(0) == 0) {
+        return std::make_tuple(
+            torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(active_voxel_ids.device())),
+            torch::empty({0, 8}, torch::TensorOptions().dtype(torch::kInt32).device(active_voxel_ids.device())),
+            return_unique_vert_ids ? std::make_optional(torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(active_voxel_ids.device()))) : std::nullopt
+        );
+    }
+
+    auto vi = active_voxel_ids.div((ry - 1) * (rz - 1), "trunc");
+    auto rem = active_voxel_ids.remainder((ry - 1) * (rz - 1));
+    auto vj = rem.div(rz - 1, "trunc");
+    auto vk = rem.remainder(rz - 1);
+
+    auto v0 = vi * ry * rz + vj * rz + vk;
+    auto v1 = (vi + 1) * ry * rz + vj * rz + vk;
+    auto v2 = (vi + 1) * ry * rz + (vj + 1) * rz + vk;
+    auto v3 = vi * ry * rz + (vj + 1) * rz + vk;
+    auto v4 = vi * ry * rz + vj * rz + (vk + 1);
+    auto v5 = (vi + 1) * ry * rz + vj * rz + (vk + 1);
+    auto v6 = (vi + 1) * ry * rz + (vj + 1) * rz + (vk + 1);
+    auto v7 = vi * ry * rz + (vj + 1) * rz + (vk + 1);
+
+    auto active_voxels = torch::stack({v0, v1, v2, v3, v4, v5, v6, v7}, -1);
+
+    torch::Tensor unique_vert_ids, inverse_indices, counts;
+    std::tie(unique_vert_ids, inverse_indices, counts) = torch::_unique2(active_voxels.flatten(), true, true, false);
+
+    auto remapped_voxels = inverse_indices.view({-1, 8}).to(torch::kInt32);
+
+    auto u_i = unique_vert_ids.div(ry * rz, "trunc");
+    auto u_rem = unique_vert_ids.remainder(ry * rz);
+    auto u_j = u_rem.div(rz, "trunc");
+    auto u_k = u_rem.remainder(rz);
+
+    float spacing_x = (grid_max[0] - grid_min[0]) / (rx - 1);
+    float spacing_y = (grid_max[1] - grid_min[1]) / (ry - 1);
+    float spacing_z = (grid_max[2] - grid_min[2]) / (rz - 1);
+
+    auto x = grid_min[0] + u_i.to(torch::kFloat32) * spacing_x;
+    auto y = grid_min[1] + u_j.to(torch::kFloat32) * spacing_y;
+    auto z = grid_min[2] + u_k.to(torch::kFloat32) * spacing_z;
+
+    auto sparse_grid_vertices = torch::stack({x, y, z}, 1).contiguous();
+
+    return std::make_tuple(sparse_grid_vertices, remapped_voxels, return_unique_vert_ids ? std::make_optional(unique_vert_ids) : std::nullopt);
 }
 
 void bind_ds_grid(py::module_& m) {
     m.def("create_voxel_grid", &create_voxel_grid, "Creates a structured 3D voxel grid.",
-          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("device_str") = "cuda");
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("device_str") = "cuda", py::arg("return_idx_grids") = true);
     m.def("create_voxel_grid_from_tmesh", &create_voxel_grid_from_tmesh, "Creates a sparse 3D voxel grid strictly around the surface.",
-          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"));
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"), py::arg("return_unique_vert_ids") = true);
     m.def("compute_grid_normal", &compute_grid_normal, "Computes surface normals for a grid.",
           py::arg("sdf"), py::arg("grid_vertices"), py::arg("idx_grids"), py::arg("res"));
     m.def("compute_active_voxels", &compute_active_voxels, "Computes active voxels intersecting the surface",
           py::arg("voxels"), py::arg("sdf"), py::arg("iso"));
+    m.def("get_active_voxel_ids_from_depth", &get_active_voxel_ids_from_depth_py, "Extracts active voxel IDs from a single depth map.",
+          py::arg("depth_image"), py::arg("c2w_tensor"), py::arg("intrinsics_inv_tensor"), py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("activate_neighbor") = false, py::arg("trunc_margin") = 0.0f);
+    m.def("build_sparse_grid_from_active_voxels", &build_sparse_grid_from_active_voxels, "Builds sparse grid from unique voxel IDs.",
+          py::arg("active_voxel_ids"), py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("return_unique_vert_ids") = true);
 }
