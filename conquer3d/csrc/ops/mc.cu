@@ -11,6 +11,8 @@
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/tuple.h>
 #include <thrust/copy.h>
+#include <ATen/cuda/ThrustAllocator.h>
+#include <thrust/execution_policy.h>
 
 namespace mc
 {
@@ -282,14 +284,17 @@ namespace mc
         uint8_t *voxel_codes,
         uint32_t &num_active_voxels)
     {
+        at::cuda::ThrustAllocator allocator;
+        auto policy = thrust::cuda::par(allocator);
+
         thrust::device_ptr<uint8_t> d_codes(voxel_codes);
         auto active_flag_iter = thrust::make_transform_iterator(d_codes, is_active_voxel());
 
-        uint32_t *__restrict__ temp_buffer;
-        CHECK_CUDA_INTERNAL(cudaMalloc((void **)&temp_buffer, num_voxels * sizeof(uint32_t)));
+        auto temp_buffer_t = torch::empty({(int64_t)num_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        uint32_t *__restrict__ temp_buffer = (uint32_t*)temp_buffer_t.data_ptr<int32_t>();
         thrust::device_ptr<uint32_t> d_prefix_sum(temp_buffer);
 
-        thrust::exclusive_scan(active_flag_iter, active_flag_iter + num_voxels, d_prefix_sum);
+        thrust::exclusive_scan(policy, active_flag_iter, active_flag_iter + num_voxels, d_prefix_sum);
 
         uint8_t last_flag;
         uint32_t last_prefix_sum;
@@ -297,8 +302,7 @@ namespace mc
         CHECK_CUDA_INTERNAL(cudaMemcpy(&last_prefix_sum, temp_buffer + num_voxels - 1, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
         num_active_voxels = last_prefix_sum + ((last_flag > 0 && last_flag < 255) ? 1 : 0);
-        CHECK_CUDA_INTERNAL(cudaFree(temp_buffer));
-    }
+            }
 
     void compact_active_voxels(
         const uint32_t num_voxels,
@@ -306,6 +310,9 @@ namespace mc
         uint32_t *used_voxel_index,
         uint8_t *used_voxel_code)
     {
+        at::cuda::ThrustAllocator allocator;
+        auto policy = thrust::cuda::par(allocator);
+
         thrust::device_ptr<const uint8_t> d_codes(voxel_codes);
         auto counting_iter = thrust::make_counting_iterator<uint32_t>(0);
 
@@ -316,6 +323,7 @@ namespace mc
         auto zip_out = thrust::make_zip_iterator(thrust::make_tuple(d_out_idx, d_out_code));
 
         thrust::copy_if(
+            policy,
             zip_in,
             zip_in + num_voxels,
             d_codes, // stencil
@@ -323,31 +331,34 @@ namespace mc
             is_active_voxel());
     }
 
-    Edge* compute_unique_active_edges(
+    torch::Tensor compute_unique_active_edges(
         const uint32_t num_active_voxels,
         Edge *active_edges,
         uint32_t &num_unique_edges)
     {
+        at::cuda::ThrustAllocator allocator;
+        auto policy = thrust::cuda::par(allocator);
+
         thrust::device_ptr<Edge> d_active_edges(active_edges);
-        thrust::sort(d_active_edges, d_active_edges + (num_active_voxels * 12));
+        thrust::sort(policy, d_active_edges, d_active_edges + (num_active_voxels * 12));
 
         // Since 0xFFFFFFFF is the maximum value, the dummy edges are sorted to the END of the array.
         Edge empty_edge = Edge(0xFFFFFFFF, 0xFFFFFFFF);
 
         // Find the first dummy edge. Everything before this is valid!
-        auto valid_end = thrust::lower_bound(d_active_edges, d_active_edges + (num_active_voxels * 12), empty_edge);
+        auto valid_end = thrust::lower_bound(policy, d_active_edges, d_active_edges + (num_active_voxels * 12), empty_edge);
 
         // Deduplicate the valid edges in place
-        auto unique_end = thrust::unique(d_active_edges, valid_end);
+        auto unique_end = thrust::unique(policy, d_active_edges, valid_end);
 
         num_unique_edges = thrust::distance(d_active_edges, unique_end);
 
-        Edge *__restrict__ unique_edges;
-        CHECK_CUDA_INTERNAL(cudaMalloc((void **)&unique_edges, num_unique_edges * sizeof(Edge)));
+        auto unique_edges_t = torch::empty({(int64_t)(num_unique_edges * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        Edge *__restrict__ unique_edges = (Edge*)unique_edges_t.data_ptr<uint8_t>();
 
         thrust::device_ptr<Edge> d_unique_edges(unique_edges);
-        thrust::copy(d_active_edges, unique_end, d_unique_edges);
-        return unique_edges;
+        thrust::copy(policy, d_active_edges, unique_end, d_unique_edges);
+        return unique_edges_t;
     }
 
     void build_edge_map(
@@ -392,13 +403,16 @@ namespace mc
         uint32_t &num_triangles,
         uint32_t *voxel_triangle_prefix_sums)
     {
+        at::cuda::ThrustAllocator allocator;
+        auto policy = thrust::cuda::par(allocator);
+
         thrust::device_ptr<const uint8_t> d_codes(used_voxel_codes);
         auto num_tris_iter = thrust::make_transform_iterator(d_codes, num_triangles_functor());
 
         thrust::device_ptr<uint32_t> d_prefix_sum(voxel_triangle_prefix_sums);
         
-        num_triangles = thrust::reduce(num_tris_iter, num_tris_iter + num_active_voxels);
-        thrust::exclusive_scan(num_tris_iter, num_tris_iter + num_active_voxels, d_prefix_sum);
+        num_triangles = thrust::reduce(policy, num_tris_iter, num_tris_iter + num_active_voxels);
+        thrust::exclusive_scan(policy, num_tris_iter, num_tris_iter + num_active_voxels, d_prefix_sum);
     }
 
     __global__ void assemble_triangles_kernel(
@@ -465,8 +479,8 @@ namespace mc
         bool return_unique_edges
     )
     {
-        uint8_t *__restrict__ voxel_codes;
-        CHECK_CUDA_INTERNAL(cudaMalloc((void **)&voxel_codes, num_voxels * sizeof(uint8_t)));
+        auto voxel_codes_t = torch::empty({(int64_t)num_voxels}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        uint8_t *__restrict__ voxel_codes = voxel_codes_t.data_ptr<uint8_t>();
         
         compute_active_voxels(num_voxels, voxels, voxel_values, iso, voxel_codes);
 
@@ -474,7 +488,6 @@ namespace mc
         compute_number_active_voxels(num_voxels, voxel_codes, num_active_voxels);
 
         if (num_active_voxels == 0) {
-            CHECK_CUDA_INTERNAL(cudaFree(voxel_codes));
             std::optional<torch::Tensor> out_n = std::nullopt;
             std::optional<torch::Tensor> out_c = std::nullopt;
             if (grid_normals != nullptr) out_n = torch::empty({0, 3}, vert_options);
@@ -484,34 +497,36 @@ namespace mc
                 torch::empty({0, 3}, tri_options),
                 out_n,
                 out_c,
-                std::nullopt
+                std::optional<torch::Tensor>(std::nullopt)
             );
         }
 
-        uint32_t *__restrict__ used_voxel_index;
-        uint8_t *__restrict__ used_voxel_codes;
-        CHECK_CUDA_INTERNAL(cudaMalloc((void **)&used_voxel_index, num_active_voxels * sizeof(uint32_t)));
-        CHECK_CUDA_INTERNAL(cudaMalloc((void **)&used_voxel_codes, num_active_voxels * sizeof(uint8_t)));
+        auto used_voxel_index_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        uint32_t *__restrict__ used_voxel_index = (uint32_t*)used_voxel_index_t.data_ptr<int32_t>();
+        
+        auto used_voxel_codes_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        uint8_t *__restrict__ used_voxel_codes = used_voxel_codes_t.data_ptr<uint8_t>();
         compact_active_voxels(num_voxels, voxel_codes, used_voxel_index, used_voxel_codes);
 
-        Edge *__restrict__ active_edges;
-        CHECK_CUDA_INTERNAL(cudaMalloc((void **)&active_edges, num_active_voxels * 12 * sizeof(Edge)));
+        auto active_edges_t = torch::empty({(int64_t)(num_active_voxels * 12 * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        Edge *__restrict__ active_edges = (Edge*)active_edges_t.data_ptr<uint8_t>();
         compute_active_edges(num_active_voxels, voxels, used_voxel_index, used_voxel_codes, active_edges);
 
         uint32_t out_num_vertices;
-        Edge *__restrict__ unique_edges = compute_unique_active_edges(num_active_voxels, active_edges, out_num_vertices);
+        auto unique_edges_t = compute_unique_active_edges(num_active_voxels, active_edges, out_num_vertices);
+        Edge *__restrict__ unique_edges = (Edge*)unique_edges_t.data_ptr<uint8_t>();
 
-        uint32_t *__restrict__ voxel_edge_to_vert_idx;
-        CHECK_CUDA_INTERNAL(cudaMalloc((void **)&voxel_edge_to_vert_idx, num_active_voxels * 12 * sizeof(uint32_t)));
+        auto voxel_edge_to_vert_idx_t = torch::empty({(int64_t)(num_active_voxels * 12)}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        uint32_t *__restrict__ voxel_edge_to_vert_idx = (uint32_t*)voxel_edge_to_vert_idx_t.data_ptr<int32_t>();
         build_edge_map(num_active_voxels, out_num_vertices, voxels, used_voxel_index, used_voxel_codes, unique_edges, voxel_edge_to_vert_idx);
 
-        torch::Tensor out_vertices = torch::empty({out_num_vertices, 3}, vert_options);
+        torch::Tensor out_vertices = torch::empty({(int64_t)out_num_vertices, 3}, vert_options);
         float3* __restrict__ p_out_vertices = (float3*)out_vertices.data_ptr<float>();
 
         std::optional<torch::Tensor> out_normals_opt = std::nullopt;
         float3* __restrict__ p_out_normals = nullptr;
         if (grid_normals != nullptr) {
-            torch::Tensor out_normals = torch::empty({out_num_vertices, 3}, vert_options);
+            torch::Tensor out_normals = torch::empty({(int64_t)out_num_vertices, 3}, vert_options);
             p_out_normals = (float3*)out_normals.data_ptr<float>();
             out_normals_opt = out_normals;
         }
@@ -519,7 +534,7 @@ namespace mc
         std::optional<torch::Tensor> out_colors_opt = std::nullopt;
         float3* __restrict__ p_out_colors = nullptr;
         if (grid_colors != nullptr) {
-            torch::Tensor out_colors = torch::empty({out_num_vertices, 3}, vert_options);
+            torch::Tensor out_colors = torch::empty({(int64_t)out_num_vertices, 3}, vert_options);
             p_out_colors = (float3*)out_colors.data_ptr<float>();
             out_colors_opt = out_colors;
         }
@@ -527,30 +542,21 @@ namespace mc
         interpolate_vertices(out_num_vertices, unique_edges, grid_vertices, voxel_values, grid_normals, grid_colors, iso, p_out_vertices, p_out_normals, p_out_colors);
 
         uint32_t out_num_triangles;
-        uint32_t *__restrict__ voxel_triangle_prefix_sums;
-        CHECK_CUDA_INTERNAL(cudaMalloc((void **)&voxel_triangle_prefix_sums, num_active_voxels * sizeof(uint32_t)));
+        auto voxel_triangle_prefix_sums_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        uint32_t *__restrict__ voxel_triangle_prefix_sums = (uint32_t*)voxel_triangle_prefix_sums_t.data_ptr<int32_t>();
         compute_number_triangles(num_active_voxels, used_voxel_codes, out_num_triangles, voxel_triangle_prefix_sums);
 
-        torch::Tensor out_triangles = torch::empty({out_num_triangles, 3}, tri_options);
+        torch::Tensor out_triangles = torch::empty({(int64_t)out_num_triangles, 3}, tri_options);
         uint32_t* __restrict__ p_out_triangles = (uint32_t*)out_triangles.data_ptr<int32_t>();
 
         assemble_triangles(num_active_voxels, used_voxel_codes, voxel_edge_to_vert_idx, voxel_triangle_prefix_sums, p_out_triangles);
 
         std::optional<torch::Tensor> out_unique_edges_opt = std::nullopt;
         if (return_unique_edges) {
-            torch::Tensor out_unique_edges = torch::empty({out_num_vertices, 2}, torch::dtype(torch::kInt32).device(vert_options.device()));
+            torch::Tensor out_unique_edges = torch::empty({(int64_t)out_num_vertices, 2}, torch::dtype(torch::kInt32).device(vert_options.device()));
             CHECK_CUDA_INTERNAL(cudaMemcpy(out_unique_edges.data_ptr(), unique_edges, out_num_vertices * sizeof(Edge), cudaMemcpyDeviceToDevice));
             out_unique_edges_opt = out_unique_edges;
         }
-
-        // Cleanup
-        CHECK_CUDA_INTERNAL(cudaFree(voxel_codes));
-        CHECK_CUDA_INTERNAL(cudaFree(used_voxel_index));
-        CHECK_CUDA_INTERNAL(cudaFree(used_voxel_codes));
-        CHECK_CUDA_INTERNAL(cudaFree(active_edges));
-        CHECK_CUDA_INTERNAL(cudaFree(unique_edges));
-        CHECK_CUDA_INTERNAL(cudaFree(voxel_edge_to_vert_idx));
-        CHECK_CUDA_INTERNAL(cudaFree(voxel_triangle_prefix_sums));
 
         return std::make_tuple(out_vertices, out_triangles, out_normals_opt, out_colors_opt, out_unique_edges_opt);
     }
