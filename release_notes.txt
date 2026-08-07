@@ -1,16 +1,13 @@
 ### Features
-- Introduced fully Differentiable Marching Tetrahedra (`marching_tetrahedra.py`) algorithm natively within `conquer3d.ops`.
-- Added robust Delaunay background grid generation utilizing `scipy.spatial` with detached gradient tracking.
-- Added 23 new native Stanford 3D repository asset classes (Bunny, Dragon, Armadillo, etc.) under `conquer3d.data.assets` that automatically stream geometry from reliable GitHub raw proxies.
-- Added `read_off` and `read_obj` parsers in `conquer3d.io` with support for vertex RGB extraction.
-- Optimized core CUDA routines for Marching Cubes (`mc.cu`, `mc.h`).
+- Enhanced Delaunay triangulation wrappers.
+- Updated marching tetrahedra operations.
 
 ### Refactors & Build
-- Updated `pyproject.toml` and `setup.py` dependencies (including `tetgen` compatibility).
-- Added `test_data/` to `.gitignore` to prevent scratch downloads from polluting git history.
-- Expanded `MANIFEST.in` to properly track new Python packages.
+- Refactored flood fill kernel to use memory-optimized `int8_t` masks and `atomicCAS_int8`, significantly cutting volumetric memory overhead.
+- Updated `mesh_bvh` bindings, C++ headers, and CUDA kernels to correctly extract and cast `int8_t` flood fill mask pointers.
+- Dynamically injected Conda CUDA target include paths in `setup.py` to prevent missing `vector_types.h` compiler errors.
+- Updated project metadata and build dependencies.
+- Added acknowledgements and comprehensive installation instructions to README.
 
 ### Examples
-- Added `diff_marching_tetrahedra.ipynb` notebook implementing advanced TetWeave features: dynamic point optimization, SDF regularization, topological tracking, and interactive `plotly` wireframe renderings.
-- Added `diff_color_marching_tetrahedra.ipynb` demonstrating simultaneous geometry and rainbow color-gradient optimization.
-- Updated baseline Marching Cubes notebooks to mirror new visualization logic.
+- Verified `int8_t` flood fill tensor pipeline stability in downstream `simple_contouring` metrics scripts.
