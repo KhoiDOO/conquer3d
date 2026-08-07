@@ -6,8 +6,9 @@ def create_voxel_grid(
     grid_min: Union[List[float], Tuple[float, float, float]],
     grid_max: Union[List[float], Tuple[float, float, float]],
     res: Union[List[int], Tuple[int, int, int]],
-    device: str = "cuda"
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    device: str = "cuda",
+    return_idx_grids: bool = True
+) -> Tuple[torch.Tensor, torch.Tensor, Union[torch.Tensor, None]]:
     """
     Creates a structured 3D voxel grid efficiently.
     
@@ -16,26 +17,60 @@ def create_voxel_grid(
         grid_max (List[float] | Tuple[float, float, float]): The maximum (x, y, z) bounding box coordinates.
         res (List[int] | Tuple[int, int, int]): The number of vertices along each axis (rx, ry, rz).
         device (str, optional): Target device for the tensors (e.g., "cuda" or "cpu"). Defaults to "cuda".
+        return_idx_grids (bool, optional): If True, returns the 3D coordinate indices. Defaults to True.
         
     Returns:
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        Tuple[torch.Tensor, torch.Tensor, Union[torch.Tensor, None]]:
             - grid_vertices (torch.Tensor): A float32 tensor of shape (N, 3) containing all grid coordinates.
             - voxels (torch.Tensor): An int32 tensor of shape (V, 8) containing corner indices 
                                      for each voxel, mapped identically to the Marching Cubes convention.
-            - idx_grids (torch.Tensor): An int64 tensor of shape (N, 3) containing the (i, j, k) 3D coordinate indices for each vertex.
+            - idx_grids (torch.Tensor | None): An int64 tensor of shape (N, 3) containing the (i, j, k) 3D coordinate indices for each vertex (or None).
     """
-    return _C.create_voxel_grid(list(grid_min), list(grid_max), list(res), device)
+    return _C.create_voxel_grid(list(grid_min), list(grid_max), list(res), device, return_idx_grids)
 
 def create_voxel_grid_from_tmesh(
     grid_min: Union[List[float], Tuple[float, float, float]],
     grid_max: Union[List[float], Tuple[float, float, float]],
     res: Union[List[int], Tuple[int, int, int]],
-    tmesh: '_C.TriangleMesh'
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    tmesh: '_C.TriangleMesh',
+    return_unique_vert_ids: bool = True
+) -> Tuple[torch.Tensor, torch.Tensor, Union[torch.Tensor, None]]:
     """
     Creates a sparse 3D voxel grid strictly around the surface.
     """
-    return _C.create_voxel_grid_from_tmesh(list(grid_min), list(grid_max), list(res), tmesh)
+    return _C.create_voxel_grid_from_tmesh(list(grid_min), list(grid_max), list(res), tmesh, return_unique_vert_ids)
+
+def get_active_voxel_ids_from_depth(
+    depth_image: torch.Tensor,
+    c2w: torch.Tensor,
+    intrinsics_inv: torch.Tensor,
+    grid_min: Union[List[float], Tuple[float, float, float]],
+    grid_max: Union[List[float], Tuple[float, float, float]],
+    res: Union[List[int], Tuple[int, int, int]],
+    activate_neighbor: bool = False,
+    trunc_margin: float = 0.0
+) -> torch.Tensor:
+    """
+    Extracts active voxel IDs from a single depth map.
+    """
+    return _C.get_active_voxel_ids_from_depth(
+        depth_image.contiguous(), c2w.contiguous(), intrinsics_inv.contiguous(), 
+        list(grid_min), list(grid_max), list(res), activate_neighbor, trunc_margin
+    )
+
+def build_sparse_grid_from_active_voxels(
+    active_voxel_ids: torch.Tensor,
+    grid_min: Union[List[float], Tuple[float, float, float]],
+    grid_max: Union[List[float], Tuple[float, float, float]],
+    res: Union[List[int], Tuple[int, int, int]],
+    return_unique_vert_ids: bool = True
+) -> Tuple[torch.Tensor, torch.Tensor, Union[torch.Tensor, None]]:
+    """
+    Builds a sparse 3D voxel grid from unique active voxel IDs.
+    """
+    return _C.build_sparse_grid_from_active_voxels(
+        active_voxel_ids.contiguous(), list(grid_min), list(grid_max), list(res), return_unique_vert_ids
+    )
 
 def compute_grid_normal(
     sdf: torch.Tensor,
