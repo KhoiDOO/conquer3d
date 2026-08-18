@@ -46,7 +46,7 @@ pip install -e . --no-build-isolation
 ```
 
 ## Features
-- **Isosurface Extraction**: Differentiable Marching Cubes, Marching Cubes Asymptotic (MCA), Marching Tetrahedra (MT), and **Dual Contouring (DC)** with GPU Jacobi SVD Quadratic Error Function (QEF) solver for sharp feature preservation and pure quad extraction (`quad_split=False`).
+- **Isosurface Extraction**: Differentiable Marching Cubes, Marching Cubes Asymptotic (MCA), Marching Tetrahedra (MT), **Dual Contouring (DC)** with GPU QEF solver, and **Dual Marching Cubes (DMC)** for multi-sheet manifold topological resolution with pure quad / Delaunay triangle extraction.
 - **Spatial Acceleration Structures**: GPU Bounding Volume Hierarchies (Mesh BVH, GS BVH, PGS BVH), KD-Trees, Morton Z-Curve sorting, and 3D Sparse Voxel Grids.
 - **Differentiable Ray Tracing & Radiance Fields**: Fast 3D Gaussian Splatting (3DGS) and Periodic Gaussian Splatting (PGS) query kernels.
 - **Geometric Metrics & Integrals**: Exact one-sided & symmetric Chamfer / Hausdorff distances and single-view volume integrals.
