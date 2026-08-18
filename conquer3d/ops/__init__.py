@@ -1,6 +1,7 @@
 from .marching_cubes import marching_cubes
 from .marching_cubes_asymptotic import marching_cubes_asymptotic, mca
 from .dual_contouring import dual_contouring, dc
+from .dual_marching_cubes import dual_marching_cubes, dmc
 from .diff_marching_cubes import diff_marching_cubes
 
 from .delaunay_triangulation import tetrahedralize, get_edges
@@ -17,6 +18,8 @@ __all__ = [
     "mca",
     "dual_contouring",
     "dc",
+    "dual_marching_cubes",
+    "dmc",
     "diff_marching_cubes",
     "one_sided_chamfer_distance",
     "chamfer_distance",
