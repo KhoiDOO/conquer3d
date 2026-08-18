@@ -152,7 +152,8 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> create_vo
     std::vector<float> grid_max,
     std::vector<int64_t> res,
     TriangleMesh &tmesh,
-    bool return_unique_vert_ids = true
+    bool return_unique_vert_ids = true,
+    int pad = 0
 ) {
     TORCH_CHECK(grid_min.size() == 3, "grid_min must have 3 elements.");
     TORCH_CHECK(grid_max.size() == 3, "grid_max must have 3 elements.");
@@ -174,6 +175,36 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> create_vo
             torch::empty({0, 8}, torch::TensorOptions().dtype(torch::kInt32).device(vertices.device())),
             return_unique_vert_ids ? std::make_optional(torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(vertices.device()))) : std::nullopt
         );
+    }
+
+    if (pad > 0) {
+        int64_t nrx = rx - 1;
+        int64_t nry = ry - 1;
+        int64_t nrz = rz - 1;
+
+        auto vi = active_voxel_ids.div(nry * nrz, "trunc");
+        auto rem = active_voxel_ids.remainder(nry * nrz);
+        auto vj = rem.div(nrz, "trunc");
+        auto vk = rem.remainder(nrz);
+
+        std::vector<torch::Tensor> dilated_list;
+        for (int dx = -pad; dx <= pad; ++dx) {
+            for (int dy = -pad; dy <= pad; ++dy) {
+                for (int dz = -pad; dz <= pad; ++dz) {
+                    auto n_vi = vi + dx;
+                    auto n_vj = vj + dy;
+                    auto n_vk = vk + dz;
+                    auto mask = (n_vi >= 0) & (n_vi < nrx) & (n_vj >= 0) & (n_vj < nry) & (n_vk >= 0) & (n_vk < nrz);
+                    auto valid_vi = n_vi.masked_select(mask);
+                    auto valid_vj = n_vj.masked_select(mask);
+                    auto valid_vk = n_vk.masked_select(mask);
+                    auto n_ids = valid_vi * (nry * nrz) + valid_vj * nrz + valid_vk;
+                    dilated_list.push_back(n_ids);
+                }
+            }
+        }
+        auto all_dilated = torch::cat(dilated_list);
+        active_voxel_ids = std::get<0>(torch::_unique2(all_dilated, true, false, false));
     }
 
     auto vi = active_voxel_ids.div((ry - 1) * (rz - 1), "trunc");
@@ -343,7 +374,7 @@ void bind_ds_grid(py::module_& m) {
     m.def("create_voxel_grid", &create_voxel_grid, "Creates a structured 3D voxel grid.",
           py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("device_str") = "cuda", py::arg("return_idx_grids") = true);
     m.def("create_voxel_grid_from_tmesh", &create_voxel_grid_from_tmesh, "Creates a sparse 3D voxel grid strictly around the surface.",
-          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"), py::arg("return_unique_vert_ids") = true);
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"), py::arg("return_unique_vert_ids") = true, py::arg("pad") = 0);
     m.def("compute_grid_normal", &compute_grid_normal, "Computes surface normals for a grid.",
           py::arg("sdf"), py::arg("grid_vertices"), py::arg("idx_grids"), py::arg("res"));
     m.def("compute_active_voxels", &compute_active_voxels, "Computes active voxels intersecting the surface",
