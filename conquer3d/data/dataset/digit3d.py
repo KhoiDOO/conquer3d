@@ -1,7 +1,10 @@
 import os
 import zipfile
+import io
 import torch
 import trimesh
+from PIL import Image
+import torchvision.transforms.functional as TF
 
 from .base_mesh import BaseMeshDataset
 
@@ -9,13 +12,14 @@ class Digit3D(BaseMeshDataset):
     """
     Digit3D Mesh Dataset containing 3D MNIST digits.
     """
-    def __init__(self, root: str = "~/.conquer3d/", train: bool = True, transform=None, download: bool = False, cached: bool = False):
+    def __init__(self, root: str = "~/.conquer3d/", train: bool = True, transform=None, download: bool = False, cached: bool = False, return_img: bool = False):
         root = os.path.expanduser(root)
         super().__init__(root, transform)
         self.train = train
         self.zip_path = os.path.join(root, "digit3d.zip")
         self.split_dir = "src/train" if train else "src/test"
         self.cached = cached
+        self.return_img = return_img
         self._cache = {}
         
         if download:
@@ -44,10 +48,17 @@ class Digit3D(BaseMeshDataset):
 
     def __getitem__(self, idx: int):
         if self.cached and idx in self._cache:
-            vertices_t, faces_t, label = self._cache[idx]
-            if self.transform:
-                vertices_t, faces_t = self.transform(vertices_t.clone(), faces_t.clone())
-            return vertices_t, faces_t, label
+            cached_data = self._cache[idx]
+            if self.return_img:
+                vertices_t, faces_t, label, img_t = cached_data
+                if self.transform:
+                    vertices_t, faces_t = self.transform(vertices_t.clone(), faces_t.clone())
+                return vertices_t, faces_t, label, img_t
+            else:
+                vertices_t, faces_t, label = cached_data[:3]
+                if self.transform:
+                    vertices_t, faces_t = self.transform(vertices_t.clone(), faces_t.clone())
+                return vertices_t, faces_t, label
             
         f_path = self.all_files[idx]
         basename = os.path.basename(f_path)
@@ -73,12 +84,28 @@ class Digit3D(BaseMeshDataset):
         vertices_t = torch.tensor(vertices, dtype=torch.float32)
         faces_t = torch.tensor(faces, dtype=torch.int32)
         
+        img_t = None
+        if self.return_img:
+            img_path = f_path.rsplit(".", 1)[0] + ".png"
+            try:
+                with self._zip.open(img_path, 'r') as f_img:
+                    img_bytes = f_img.read()
+                img_pil = Image.open(io.BytesIO(img_bytes))
+                img_t = TF.to_tensor(img_pil)
+            except KeyError:
+                raise FileNotFoundError(f"Image {img_path} not found in {self.zip_path}. Ensure the dataset archive contains PNG images.")
+        
         if self.cached:
-            self._cache[idx] = (vertices_t, faces_t, label)
+            if self.return_img:
+                self._cache[idx] = (vertices_t, faces_t, label, img_t)
+            else:
+                self._cache[idx] = (vertices_t, faces_t, label)
         
         if self.transform:
             vertices_t, faces_t = self.transform(vertices_t.clone(), faces_t.clone())
             
+        if self.return_img:
+            return vertices_t, faces_t, label, img_t
         return vertices_t, faces_t, label
 
 class PointDigit3D(Digit3D):
@@ -86,13 +113,16 @@ class PointDigit3D(Digit3D):
     Digit3D Dataset that constructs a point cloud by sampling on the mesh.
     """
     def __init__(self, root: str = "~/.conquer3d/", train: bool = True, transform=None, download: bool = False, 
-                 cached: bool = False, num_points: int = 512):
-        super().__init__(root, train, transform, download, cached=cached)
+                 cached: bool = False, num_points: int = 512, return_img: bool = False):
+        super().__init__(root, train, transform, download, cached=cached, return_img=return_img)
         self.num_points = num_points
         
     def __getitem__(self, idx: int):
-        # 1. Obtain vertices, faces, and label from Digit3D
-        vertices, faces, label = super().__getitem__(idx)
+        # 1. Obtain data from Digit3D
+        if self.return_img:
+            vertices, faces, label, img_t = super().__getitem__(idx)
+        else:
+            vertices, faces, label = super().__getitem__(idx)
 
         # 2. Construct trimesh object (CPU safe for DataLoader workers)
         mesh = trimesh.Trimesh(vertices=vertices.numpy(), faces=faces.numpy(), process=False)
@@ -107,4 +137,6 @@ class PointDigit3D(Digit3D):
         # 4. Combine into features
         features = torch.cat([points, normals], dim=-1)
         
+        if self.return_img:
+            return points, features, label, img_t
         return points, features, label
