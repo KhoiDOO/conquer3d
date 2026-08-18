@@ -21,6 +21,7 @@ void bind_creation_triangle_creation(py::module_& m);
 
 void bind_ops_mc(py::module_& m);
 void bind_ops_mca(py::module_& m);
+void bind_ops_dc(py::module_& m);
 void bind_ops_mt(py::module_& m);
 void bind_ops_mtg(py::module_& m);
 void bind_ops_chamfer(py::module_& m);
@@ -48,6 +49,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     
     bind_ops_mc(m);
     bind_ops_mca(m);
+    bind_ops_dc(m);
     bind_ops_mt(m);
     bind_ops_mtg(m);
     bind_ops_chamfer(m);

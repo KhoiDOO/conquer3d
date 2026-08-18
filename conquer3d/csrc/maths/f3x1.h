@@ -103,6 +103,14 @@ namespace maths
     static inline __host__ __device__ float3 max(float3 a, float3 b) {
         return make_float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z));
     }
+
+    static inline __host__ __device__ float3 clamp(float3 v, float3 min_val, float3 max_val) {
+        return make_float3(
+            fminf(fmaxf(v.x, min_val.x), max_val.x),
+            fminf(fmaxf(v.y, min_val.y), max_val.y),
+            fminf(fmaxf(v.z, min_val.z), max_val.z)
+        );
+    }
 }
 
 static inline __host__ __device__ float3 operator*(float3 a, float3 b) {

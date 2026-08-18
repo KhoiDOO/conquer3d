@@ -7,5 +7,6 @@
 #include "f4x1.h"
 #include "f4x4.h"
 #include "ops.h"
+#include "qef.h"
 
 #endif // MATHS_H
