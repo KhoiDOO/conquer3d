@@ -33,12 +33,18 @@ def create_voxel_grid_from_tmesh(
     grid_max: Union[List[float], Tuple[float, float, float]],
     res: Union[List[int], Tuple[int, int, int]],
     tmesh: '_C.TriangleMesh',
-    return_unique_vert_ids: bool = True
+    return_unique_vert_ids: bool = True,
+    pad: int = 0
 ) -> Tuple[torch.Tensor, torch.Tensor, Union[torch.Tensor, None]]:
     """
     Creates a sparse 3D voxel grid strictly around the surface.
+    
+    Args:
+        pad (int, optional): Number of voxel layers to dilate the sparse grid (default: 0).
+            Set pad=1 when performing Dual Contouring to guarantee all 4 incident voxels
+            are present for every sign-crossing edge.
     """
-    return _C.create_voxel_grid_from_tmesh(list(grid_min), list(grid_max), list(res), tmesh, return_unique_vert_ids)
+    return _C.create_voxel_grid_from_tmesh(list(grid_min), list(grid_max), list(res), tmesh, return_unique_vert_ids, pad)
 
 def get_active_voxel_ids_from_depth(
     depth_image: torch.Tensor,
