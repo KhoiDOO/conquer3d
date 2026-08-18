@@ -9,3 +9,4 @@ In this markdown file, I place the repositories that I have learnt from to build
 - [Open3D](https://www.open3d.org/)
 - [trimesh](https://github.com/mikedh/trimesh)
 - [TetWeave](https://github.com/AlexandreBinninger/TetWeave/tree/main)
+- [ManifoldDMC] (https://github.com/PhiliGuertler/ManifoldDMC)
