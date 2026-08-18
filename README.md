@@ -39,15 +39,21 @@ Install directly from GitHub without build isolation:
 pip install git+https://github.com/KhoiDOO/geocutool.git --no-build-isolation
 ```
 
-Or clone the repository for local development in editable mode:
 ```bash
 git clone https://github.com/KhoiDOO/geocutool.git
 cd geocutool
 pip install -e . --no-build-isolation
 ```
 
+## Features
+- **Isosurface Extraction**: Differentiable Marching Cubes, Marching Cubes Asymptotic (MCA), Marching Tetrahedra (MT), and **Dual Contouring (DC)** with GPU Jacobi SVD Quadratic Error Function (QEF) solver for sharp feature preservation and pure quad extraction (`quad_split=False`).
+- **Spatial Acceleration Structures**: GPU Bounding Volume Hierarchies (Mesh BVH, GS BVH, PGS BVH), KD-Trees, Morton Z-Curve sorting, and 3D Sparse Voxel Grids.
+- **Differentiable Ray Tracing & Radiance Fields**: Fast 3D Gaussian Splatting (3DGS) and Periodic Gaussian Splatting (PGS) query kernels.
+- **Geometric Metrics & Integrals**: Exact one-sided & symmetric Chamfer / Hausdorff distances and single-view volume integrals.
+
 # Acknowledgements & References
 For further theoretical background, GPU collision detection guides, and related open-source projects, please refer to:
 - **[Research Papers](acknowledgement/REFERENCE.md)**: Key computational geometry, differential topology, and acceleration structure literature.
 - **[Blog Posts](acknowledgement/BLOG_POST.md)**: Articles and guides on NVIDIA GPU spatial traversal and parallel construction.
 - **[Related Repositories](acknowledgement/REPOSITORY.md)**: Open-source libraries and frameworks supporting geometric deep learning and processing.
+- **[Books](acknowledgement/BOOK.md)**: Core theoretical books.
