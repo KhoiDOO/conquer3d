@@ -1,4 +1,5 @@
 from .marching_cubes import marching_cubes
+from .marching_cubes_asymptotic import marching_cubes_asymptotic, mca
 from .diff_marching_cubes import diff_marching_cubes
 
 from .delaunay_triangulation import tetrahedralize, get_edges
@@ -11,6 +12,8 @@ from .volint import single_view_volume_integral
 
 __all__ = [
     "marching_cubes",
+    "marching_cubes_asymptotic",
+    "mca",
     "diff_marching_cubes",
     "one_sided_chamfer_distance",
     "chamfer_distance",
