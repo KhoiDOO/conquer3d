@@ -1,3 +1,8 @@
+/**
+ * @file flood_fill.cu
+ * @brief CUDA kernel implementations for BVH segment intersection and 3D volumetric flood-fill occupancy.
+ */
+
 #include "flood_fill.h"
 #include "../constants.h"
 #include "../primitive/ray.h"
