@@ -1,3 +1,8 @@
+/**
+ * @file zcurve.cu
+ * @brief CUDA kernel implementations for 3D Morton space-filling Z-curve code computation.
+ */
+
 #include "zcurve.h"
 #include "../constants.h"
 #include <cuda_runtime.h>
