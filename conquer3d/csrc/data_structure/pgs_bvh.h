@@ -1,3 +1,8 @@
+/**
+ * @file pgs_bvh.h
+ * @brief High-performance Bounding Volume Hierarchy for Periodic Gaussian Splatting (PGS).
+ */
+
 #ifndef PGS_BVH_H
 #define PGS_BVH_H
 
@@ -5,15 +10,21 @@
 #include "../primitive/pgs.h"
 
 #include <variant>
+#include <tuple>
+#include <optional>
 
+/**
+ * @brief Bounding Volume Hierarchy specialized for Periodic Gaussians and directional radiance fields.
+ */
 class PGSBVH : public BVH
 {
 public:
-    // Inherit the base constructor (this automatically builds the tree!)
     using BVH::BVH;
     using BVH::query;
 
-    // Add Gaussian-specific queries
+    /**
+     * @brief Queries intersecting Periodic Gaussian-voxel pairs against voxel bounding boxes.
+     */
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>> query_voxel_pair(
         const torch::Tensor &vx_aabb_mins,
         const torch::Tensor &vx_aabb_maxs,
@@ -27,6 +38,9 @@ public:
         const bool return_centroid_densities,
         const int64_t max_capacity);
 
+    /**
+     * @brief Queries Periodic Gaussian intersections and directional densities along line segments.
+     */
     std::tuple<torch::Tensor, torch::Tensor> query_edge(
         const torch::Tensor &edge_starts,
         const torch::Tensor &edge_ends,
