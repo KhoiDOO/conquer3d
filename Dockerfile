@@ -39,7 +39,7 @@ RUN pip install kaolin==0.18.0 -f https://nvidia-kaolin.s3.us-east-2.amazonaws.c
 RUN pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation
 
 # Install visualization and meshing utilities
-RUN pip install pybind11-stubgen plotly open3d jupyter trimesh point-cloud-utils meshlib pymeshlab kiui rectified-flow-pytorch
+RUN pip install pybind11-stubgen plotly open3d jupyter trimesh point-cloud-utils pymeshlab kiui rectified-flow-pytorch
 
 # Others
 RUN pip install pytorch-fid
