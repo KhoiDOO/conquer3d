@@ -31,8 +31,31 @@ torch::Tensor compute_flood_fill_wrapper(
 }
 
 void bind_ops_flood_fill(py::module_& m) {
-    m.def("compute_flood_fill", &compute_flood_fill_wrapper, "Compute 3D Flood Fill on grid vertices using segment BVH intersection",
+    m.def("compute_flood_fill", &compute_flood_fill_wrapper,
           py::arg("vertices"), py::arg("triangles"), py::arg("aabb_mins"), py::arg("aabb_maxs"),
           py::arg("bvh_children"), py::arg("object_ids"), py::arg("grid_min"), py::arg("grid_max"),
-          py::arg("grid_res"), py::arg("connectivity") = 6);
+          py::arg("grid_res"), py::arg("connectivity") = 6,
+          R"pbdoc(
+          Computes a 3D volumetric flood-fill binary occupancy mask on GPU.
+
+          Args:
+              vertices (torch.Tensor): (V, 3) float32 mesh vertices on CUDA.
+              triangles (torch.Tensor): (F, 3) int32 triangle indices on CUDA.
+              aabb_mins (torch.Tensor): (2F-1, 3) float32 BVH node min corners.
+              aabb_maxs (torch.Tensor): (2F-1, 3) float32 BVH node max corners.
+              bvh_children (torch.Tensor): (2F-1, 2) int32 BVH child node indices.
+              object_ids (torch.Tensor): (F,) int32 leaf-to-triangle map.
+              grid_min (List[float]): Lower grid extents [x_min, y_min, z_min].
+              grid_max (List[float]): Upper grid extents [x_max, y_max, z_max].
+              grid_res (List[int]): Grid resolution [rx, ry, rz].
+              connectivity (int, optional): Connectivity neighborhood (6, 18, 26). Defaults to 6.
+
+          Returns:
+              torch.Tensor: (rx, ry, rz) int8 tensor (0: exterior, 1: surface, -1: interior).
+
+          Example:
+              >>> import torch
+              >>> from conquer3d._C import compute_flood_fill
+              >>> mask = compute_flood_fill(verts, tris, a_mins, a_maxs, children, obj_ids, [-1,-1,-1], [1,1,1], [64,64,64], 6)
+          )pbdoc");
 }
