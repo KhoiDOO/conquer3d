@@ -1,3 +1,8 @@
+/**
+ * @file check.h
+ * @brief CUDA error-checking utilities and PyTorch tensor assertion macros.
+ */
+
 #ifndef CHECK_H
 #define CHECK_H
 
@@ -5,16 +10,36 @@
 #include <stdio.h>
 #include <stdint.h>
 
-// Helper macros to check tensor properties
-// These require <torch/extension.h> or <ATen/ATen.h> to be included in the translation unit
+/**
+ * @def CHECK_CUDA(x)
+ * @brief Asserts that tensor `x` resides on a CUDA device.
+ */
 #define CHECK_CUDA(x) \
     TORCH_CHECK((x).device().is_cuda(), #x " must be a CUDA tensor")
+
+/**
+ * @def CHECK_CONTIGUOUS(x)
+ * @brief Asserts that tensor `x` has contiguous memory layout in global device memory.
+ */
 #define CHECK_CONTIGUOUS(x) \
     TORCH_CHECK((x).is_contiguous(), #x " must be contiguous")
+
+/**
+ * @def CHECK_INPUT(x)
+ * @brief Asserts that tensor `x` is both residing on CUDA and memory-contiguous.
+ */
 #define CHECK_INPUT(x) \
     CHECK_CUDA(x);     \
     CHECK_CONTIGUOUS(x)
 
+/**
+ * @brief Verifies the status code of a CUDA runtime call.
+ * 
+ * @param[in] code Return code from CUDA runtime function (`cudaError_t`).
+ * @param[in] file Calling source file name (`__FILE__`).
+ * @param[in] line Calling line number (`__LINE__`).
+ * @return bool True if successful, False if an error occurred.
+ */
 inline bool check_cuda_result(cudaError_t code, const char *file, int line)
 {
     if (code == cudaSuccess)
