@@ -228,68 +228,90 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> BVH::query_point(
     return std::make_tuple(out_query_ids, out_object_ids, out_distances);
 }
 
-void bind_ds_bvh(py::module_ &m)
-{
-    py::class_<BVH>(m, "BVH", R"doc(
-        A highly efficient Bounding Volume Hierarchy (LBVH) data structure natively backed by CUDA.
-        )doc")
+void bind_ds_bvh(py::module_ &m) {
+    py::class_<BVH>(m, "BVH", R"pbdoc(
+        GPU-accelerated Linear Bounding Volume Hierarchy (LBVH) built using Karras (2012) Radix LBVH algorithm.
+
+        Example:
+            >>> import torch
+            >>> from conquer3d._C import BVH
+            >>> bvh = BVH(aabb_mins, aabb_maxs)
+            >>> query_ids, obj_ids = bvh.query(query_mins, query_maxs)
+        )pbdoc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
-             py::arg("in_aabb_mins"),
-             py::arg("in_aabb_maxs"),
-             R"doc(
-        Construct and build the Karras LBVH from Gaussian AABBs.
+             py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
+             R"pbdoc(
+             Constructs and builds the GPU BVH from primitive AABBs.
 
-        Args:
-            in_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of AABB minimum coordinates.
-            in_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of AABB maximum coordinates.
-        )doc")
+             Args:
+                 in_aabb_mins (torch.Tensor): (N, 3) float32 lower bounds on CUDA.
+                 in_aabb_maxs (torch.Tensor): (N, 3) float32 upper bounds on CUDA.
 
+             Example:
+                 >>> bvh = BVH(aabb_mins, aabb_maxs)
+             )pbdoc")
         .def("query", &BVH::query,
-             py::arg("query_aabb_mins"),
-             py::arg("query_aabb_maxs"),
-             R"doc(
-        Query the BVH with bounding boxes or segments.
+             py::arg("query_aabb_mins"), py::arg("query_aabb_maxs"),
+             R"pbdoc(
+             Queries the BVH with bounding boxes for broad-phase collision.
 
-        Args:
-            query_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of query AABB minimum coordinates.
-            query_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of query AABB maximum coordinates.
+             Args:
+                 query_aabb_mins (torch.Tensor): (M, 3) float32 query minimums on CUDA.
+                 query_aabb_maxs (torch.Tensor): (M, 3) float32 query maximums on CUDA.
 
-        Returns:
-            tuple: (query_ids, object_ids)
-        )doc")
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor]:
+                     - query_ids (torch.Tensor): (K,) int64 indices of query boxes.
+                     - object_ids (torch.Tensor): (K,) int64 indices of intersecting BVH leaves.
 
+             Example:
+                 >>> q_ids, obj_ids = bvh.query(query_mins, query_maxs)
+             )pbdoc")
         .def("query_self", &BVH::query_self,
-             R"doc(
-        Query the BVH against itself.
+             R"pbdoc(
+             Performs broad-phase self-intersection test across all BVH leaf nodes.
 
-        Returns:
-            tuple: (query_ids, object_ids) representing unique overlapping pairs.
-        )doc")
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor]:
+                     - query_ids (torch.Tensor): (K,) int64 indices of first overlapping leaves.
+                     - object_ids (torch.Tensor): (K,) int64 indices of second overlapping leaves.
 
+             Example:
+                 >>> q_ids, obj_ids = bvh.query_self()
+             )pbdoc")
         .def("query_ray", &BVH::query_ray,
-             py::arg("ray_origins"),
-             py::arg("ray_dirs"),
-             py::arg("max_capacity") = BVH_MAX_CAPACITY,
-             R"doc(
-        Find all ray-AABB intersections.
+             py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("max_capacity") = BVH_MAX_CAPACITY,
+             R"pbdoc(
+             Finds all ray-AABB intersections using fast Kay-Kajiya slab testing.
 
-        Args:
-            ray_origins (torch.Tensor): Shape (M, 3) float32 tensor of ray origins.
-            ray_dirs (torch.Tensor): Shape (M, 3) float32 tensor of ray directions.
-            max_capacity (int): Maximum global capacity for recording intersections. Defaults to BVH_MAX_CAPACITY.
+             Args:
+                 ray_origins (torch.Tensor): (R, 3) float32 ray origins on CUDA.
+                 ray_dirs (torch.Tensor): (R, 3) float32 ray direction vectors on CUDA.
+                 max_capacity (int, optional): Maximum collision pairs buffer capacity. Defaults to 10000000.
 
-        Returns:
-            tuple: (ray_ids, object_ids)
-        )doc")
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor]:
+                     - ray_ids (torch.Tensor): (K,) int64 indices of intersecting rays.
+                     - object_ids (torch.Tensor): (K,) int64 indices of hit BVH leaves.
+
+             Example:
+                 >>> ray_ids, obj_ids = bvh.query_ray(origins, dirs)
+             )pbdoc")
         .def("query_point", &BVH::query_point,
              py::arg("query_points"),
-             R"doc(
-        Find the closest leaf AABB to each query point.
+             R"pbdoc(
+             Finds the closest leaf AABB and distance to each 3D query point.
 
-        Args:
-            query_points (torch.Tensor): Shape (M, 3) float32 tensor of query points.
+             Args:
+                 query_points (torch.Tensor): (Q, 3) float32 query coordinates on CUDA.
 
-        Returns:
-            tuple: (query_ids, object_ids, distances)
-        )doc");
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                     - query_ids (torch.Tensor): (Q,) int64 query point indices.
+                     - object_ids (torch.Tensor): (Q,) int64 closest leaf indices.
+                     - distances (torch.Tensor): (Q,) float32 Euclidean distances to closest AABBs.
+
+             Example:
+                 >>> q_ids, obj_ids, dists = bvh.query_point(query_pts)
+             )pbdoc");
 }
