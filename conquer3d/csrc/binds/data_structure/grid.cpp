@@ -147,13 +147,15 @@ torch::Tensor compute_active_voxels(torch::Tensor voxels, torch::Tensor sdf, flo
     return active_indices;
 }
 
-std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> create_voxel_grid_from_tmesh(
+std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>> create_voxel_grid_from_tmesh(
     std::vector<float> grid_min,
     std::vector<float> grid_max,
     std::vector<int64_t> res,
     TriangleMesh &tmesh,
     bool return_unique_vert_ids = true,
-    int pad = 0
+    int pad = 0,
+    bool return_normals = false,
+    int normal_mode = 0
 ) {
     TORCH_CHECK(grid_min.size() == 3, "grid_min must have 3 elements.");
     TORCH_CHECK(grid_max.size() == 3, "grid_max must have 3 elements.");
@@ -173,7 +175,8 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> create_vo
         return std::make_tuple(
             torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device())),
             torch::empty({0, 8}, torch::TensorOptions().dtype(torch::kInt32).device(vertices.device())),
-            return_unique_vert_ids ? std::make_optional(torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(vertices.device()))) : std::nullopt
+            return_unique_vert_ids ? std::make_optional(torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(vertices.device()))) : std::nullopt,
+            return_normals ? std::make_optional(torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device()))) : std::nullopt
         );
     }
 
@@ -243,7 +246,87 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> create_vo
 
     auto sparse_grid_vertices = torch::stack({x, y, z}, 1).contiguous();
 
-    return std::make_tuple(sparse_grid_vertices, remapped_voxels, return_unique_vert_ids ? std::make_optional(unique_vert_ids) : std::nullopt);
+    std::optional<torch::Tensor> grid_normals = std::nullopt;
+    if (return_normals) {
+        if (sparse_grid_vertices.size(0) > 0) {
+            if (normal_mode == 0) {
+                // Mode 0: Closest Triangle Face Normal (Exact for sharp CAD creases)
+                auto query_res = bvh.query_point(
+                    sparse_grid_vertices, vertices, triangles,
+                    false, false, 0
+                );
+                auto closest_tri_ids = std::get<1>(query_res);
+                auto tri_normals = tmesh.get_triangle_normals();
+                grid_normals = tri_normals.index_select(0, closest_tri_ids);
+            } else if (normal_mode == 1) {
+                // Mode 1: Barycentric Interpolated Vertex Normal (Smooth shading)
+                auto query_res = bvh.query_point(
+                    sparse_grid_vertices, vertices, triangles,
+                    false, true, 0
+                );
+                auto closest_tri_ids = std::get<1>(query_res);
+                auto prj_pts = std::get<2>(query_res);
+                auto vert_normals = tmesh.get_vertex_normals(1);
+
+                auto tri_indices = triangles.index_select(0, closest_tri_ids);
+                auto i0 = tri_indices.select(1, 0).to(torch::kInt64);
+                auto i1 = tri_indices.select(1, 1).to(torch::kInt64);
+                auto i2 = tri_indices.select(1, 2).to(torch::kInt64);
+
+                auto p0 = vertices.index_select(0, i0);
+                auto p1 = vertices.index_select(0, i1);
+                auto p2 = vertices.index_select(0, i2);
+
+                auto n0 = vert_normals.index_select(0, i0);
+                auto n1 = vert_normals.index_select(0, i1);
+                auto n2 = vert_normals.index_select(0, i2);
+
+                auto e0 = p1 - p0;
+                auto e1 = p2 - p0;
+                auto e2 = prj_pts - p0;
+
+                auto d00 = (e0 * e0).sum(-1, true);
+                auto d01 = (e0 * e1).sum(-1, true);
+                auto d11 = (e1 * e1).sum(-1, true);
+                auto d20 = (e2 * e0).sum(-1, true);
+                auto d21 = (e2 * e1).sum(-1, true);
+
+                auto denom = (d00 * d11 - d01 * d01).clamp_min(1e-8f);
+                auto v_coord = ((d11 * d20 - d01 * d21) / denom).clamp(0.0f, 1.0f);
+                auto w_coord = ((d00 * d21 - d01 * d20) / denom).clamp(0.0f, 1.0f);
+                auto u_coord = (1.0f - v_coord - w_coord).clamp(0.0f, 1.0f);
+                auto sum_coord = (u_coord + v_coord + w_coord).clamp_min(1e-8f);
+                u_coord = u_coord / sum_coord;
+                v_coord = v_coord / sum_coord;
+                w_coord = w_coord / sum_coord;
+
+                auto interp_n = u_coord * n0 + v_coord * n1 + w_coord * n2;
+                auto n_len = torch::norm(interp_n, 2, -1, true).clamp_min(1e-8f);
+                grid_normals = interp_n / n_len;
+            } else if (normal_mode == 2) {
+                // Mode 2: Normalized Displacement Vector (SDF Gradient)
+                auto query_res = bvh.query_point(
+                    sparse_grid_vertices, vertices, triangles,
+                    false, true, 0
+                );
+                auto prj_pts = std::get<2>(query_res);
+                auto diff = sparse_grid_vertices - prj_pts;
+                auto dist = torch::norm(diff, 2, -1, true).clamp_min(1e-8f);
+                grid_normals = diff / dist;
+            } else {
+                throw std::runtime_error("Unknown normal_mode. Supported modes are 0 (closest triangle face normal), 1 (interpolated vertex normal), 2 (displacement gradient vector).");
+            }
+        } else {
+            grid_normals = torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device()));
+        }
+    }
+
+    return std::make_tuple(
+        sparse_grid_vertices,
+        remapped_voxels,
+        return_unique_vert_ids ? std::make_optional(unique_vert_ids) : std::nullopt,
+        return_normals ? grid_normals : std::nullopt
+    );
 }
 
 torch::Tensor get_active_voxel_ids_from_depth_py(
@@ -374,7 +457,7 @@ void bind_ds_grid(py::module_& m) {
     m.def("create_voxel_grid", &create_voxel_grid, "Creates a structured 3D voxel grid.",
           py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("device_str") = "cuda", py::arg("return_idx_grids") = true);
     m.def("create_voxel_grid_from_tmesh", &create_voxel_grid_from_tmesh, "Creates a sparse 3D voxel grid strictly around the surface.",
-          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"), py::arg("return_unique_vert_ids") = true, py::arg("pad") = 0);
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"), py::arg("return_unique_vert_ids") = true, py::arg("pad") = 0, py::arg("return_normals") = false, py::arg("normal_mode") = 0);
     m.def("compute_grid_normal", &compute_grid_normal, "Computes surface normals for a grid.",
           py::arg("sdf"), py::arg("grid_vertices"), py::arg("idx_grids"), py::arg("res"));
     m.def("compute_active_voxels", &compute_active_voxels, "Computes active voxels intersecting the surface",
