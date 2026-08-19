@@ -1,3 +1,15 @@
+"""GPU-accelerated spatial indexing data structures and geometric representations.
+
+This package exposes:
+- KD-Tree for $O(\log N)$ nearest neighbor queries (`KDTree`).
+- Radix Linear Bounding Volume Hierarchy for fast spatial queries (`BVH`).
+- Triangle Mesh BVH with Fast Winding Number (FWN) and exact SDF (`MeshBVH`).
+- 3D Gaussian and Periodic Gaussian BVHs (`GSBVH`, `PGSBVH`).
+- Half-edge Discrete Differential Geometry Triangle Mesh container (`TriangleMesh`).
+- Voxel grid generators and active surface extractors (`create_voxel_grid`, etc.).
+- Morton space-filling Z-curve sorting (`z_curve_sort`).
+"""
+
 from .._C import (
     KDTree,
     BVH,
