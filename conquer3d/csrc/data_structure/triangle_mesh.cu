@@ -1,3 +1,8 @@
+/**
+ * @file triangle_mesh.cu
+ * @brief CUDA kernel implementations for Discrete Differential Geometry (DDG) operators and topological mesh analysis.
+ */
+
 #include "triangle_mesh.h"
 #include "../primitive/triangle.h"
 #include "../primitive/edge.h"
