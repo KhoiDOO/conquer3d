@@ -1,12 +1,19 @@
-import torch
-from typing import Tuple, Optional, Union
+"""3D Gaussian Splatting (3DGS) primitive mathematical operators.
 
-# Explicitly import the compiled CMake target
+This module provides GPU-accelerated covariance matrix inverse evaluation,
+k-nearest neighbor Mahalanobis radiometry solving, and oriented bounding
+ellipsoid AABB generation for 3D Gaussian radiance fields.
+"""
+
+from typing import Tuple, Optional, Union
+import torch
+
 from .._C import (
     compute_gs_covi_func,
     solve_gs_neighbor_mahalanobis_radius_func,
     compute_gs_aabb_func
 )
+
 
 def compute_gs_covi(
     means: torch.Tensor,
@@ -16,22 +23,25 @@ def compute_gs_covi(
     tol: float = 1. / 8.,
     rotnorm: bool = False
 ) -> torch.Tensor:
-    """
-    Computes the covariance matrices for 3D Gaussians in world space.
+    """Computes inverse covariance matrices $\\Sigma^{-1}$ for 3D Gaussians on CUDA.
+
+    Evaluates $\\Sigma^{-1} = (S^{-1} R^T)^T (S^{-1} R^T)$ with lower-bound voxel clamping.
 
     Args:
-        means (torch.Tensor): (N, 3) tensor of Gaussian center positions.
-        rotations (torch.Tensor): (N, 4) tensor of quaternions [w, x, y, z].
-        scales (torch.Tensor): (N, 3) tensor of scale factors (pre-activation).
-        level (int, optional): Octree subdivision level. Resolution will be at :math:`2^level`
-        tol (float, optional): Safety tolerance multiplier. Defaults to 0.125.
-        rotnorm (bool, optional): Set to True to force normalizing quaternions.
+        means (torch.Tensor): Float32 tensor of shape `(N, 3)` with Gaussian center positions.
+        rotations (torch.Tensor): Float32 tensor of shape `(N, 4)` with unit quaternions `[w, x, y, z]`.
+        scales (torch.Tensor): Float32 tensor of shape `(N, 3)` with scale parameters.
+        level (int): Octree subdivision level determining minimal voxel scale ($2^{-\\text{level}}$).
+        tol (float, optional): Minimal scale multiplier threshold. Defaults to 0.125.
+        rotnorm (bool, optional): If True, normalizes quaternions in CUDA kernel. Defaults to False.
 
     Returns:
-        covi: torch.Tensor: (N, 6) tensor of covariance inverses (flattened upper-triangular) for each Gaussian. 
-            The 6 values correspond to [Cxx, Cxy, Cxz, Cyy, Cyz, Czz] where C is the covariance matrix of the Gaussian.
+        torch.Tensor: Float32 tensor of shape `(N, 6)` storing flattened upper-triangular
+        inverse covariance entries $[C_{xx}, C_{xy}, C_{xz}, C_{yy}, Cyz, C_{zz}]$.
+
+    Raises:
+        ValueError: If input tensors are not on CUDA.
     """
-    
     if not all(t.is_cuda for t in [means, rotations, scales]):
         raise ValueError("All input tensors must be CUDA tensors.")
         
@@ -50,23 +60,25 @@ def compute_gs_covi(
 
     return covi
 
+
 def solve_gs_neighbor_mahalanobis_radius(
     means: torch.Tensor,
     covis: torch.Tensor,
     k: int
 ) -> torch.Tensor:
-    """
-    Computes the Mahalanobis radius for each Gaussian based on its k-nearest neighbors.
+    """Solves the adaptive Mahalanobis radius for each Gaussian from its k-NN neighbors.
 
     Args:
-        means (torch.Tensor): (N, 3) tensor of Gaussian center positions.
-        covis (torch.Tensor): (N, 6) tensor of covariance inverses (flattened upper-triangular).
-        k (int): Number of nearest neighbors to consider.
+        means (torch.Tensor): Float32 tensor of shape `(N, 3)` with Gaussian center coordinates.
+        covis (torch.Tensor): Float32 tensor of shape `(N, 6)` with inverse covariance entries.
+        k (int): Number of nearest neighbors to query via KD-Tree.
 
     Returns:
-        isos: torch.Tensor: (N,) tensor of Mahalanobis radii for each Gaussian.
+        torch.Tensor: Float32 tensor of shape `(N,)` with optimal Mahalanobis isosurface radii.
+
+    Raises:
+        ValueError: If input tensors are not on CUDA.
     """
-    
     if not all(t.is_cuda for t in [means, covis]):
         raise ValueError("All input tensors must be CUDA tensors.")
         
@@ -81,6 +93,7 @@ def solve_gs_neighbor_mahalanobis_radius(
 
     return isos
 
+
 def compute_gs_aabb(
     means: torch.Tensor,
     scales: torch.Tensor,
@@ -89,23 +102,26 @@ def compute_gs_aabb(
     iso: Union[float, torch.Tensor] = 11.345,
     tol: float = 1. / 8.
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Computes the Axis-Aligned Bounding Box (AABB) for 3D Gaussians in world space.
+    """Computes tight 3D Axis-Aligned Bounding Boxes (AABBs) for 3D Gaussians.
 
     Args:
-        means (torch.Tensor): (N, 3) tensor of Gaussian center positions.
-        scales (torch.Tensor): (N, 3) tensor of scale factors.
-        covis (torch.Tensor): (N, 6) tensor of covariance inverses (flattened upper-triangular).
-        level (int, optional): Octree subdivision level. Resolution will be at :math:`2^level`
-        iso (float, optional): The opacity cutoff threshold. Defaults to 11.345.
+        means (torch.Tensor): Float32 tensor of shape `(N, 3)` with Gaussian centers.
+        scales (torch.Tensor): Float32 tensor of shape `(N, 3)` with scales.
+        covis (torch.Tensor): Float32 tensor of shape `(N, 6)` with inverse covariance values.
+        level (int): Octree resolution level.
+        iso (Union[float, torch.Tensor], optional): Mahalanobis cutoff threshold $\\chi^2$.
+            Defaults to 11.345 ($3\\sigma$ confidence ellipsoid).
         tol (float, optional): Safety tolerance multiplier. Defaults to 0.125.
 
     Returns:
-        aabb_min: torch.Tensor: (N, 3) tensor of AABB minimum corners.
-        aabb_max: torch.Tensor: (N, 3) tensor of AABB maximum corners.
-        contact_points: torch.Tensor: (N, 9) tensor of contact points on the AABB surface.
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            - aabb_min (torch.Tensor): Float32 tensor of shape `(N, 3)` with lower box corners.
+            - aabb_max (torch.Tensor): Float32 tensor of shape `(N, 3)` with upper box corners.
+            - contact_points (torch.Tensor): Float32 tensor of shape `(N, 9)` with ellipsoid contact points.
+
+    Raises:
+        ValueError: If inputs are not on CUDA.
     """
-    
     if not all(t.is_cuda for t in [means, scales, covis]):
         raise ValueError("All input tensors must be CUDA tensors.")
         
@@ -114,19 +130,20 @@ def compute_gs_aabb(
     covis_c = covis.contiguous().to(torch.float32)
     
     if isinstance(iso, torch.Tensor):
-        if not iso.is_cuda: raise ValueError("iso tensor must be on CUDA")
+        if not iso.is_cuda:
+            raise ValueError("iso tensor must be on CUDA")
         isos = iso.contiguous().to(torch.float32)
-        iso = 0.0
+        iso_val = 0.0
     else:
         isos = None
-        iso = float(iso)
+        iso_val = float(iso)
 
     aabb_min, aabb_max, contact_points = compute_gs_aabb_func(
         means_c,
         scales_c,
         covis_c,
         isos,
-        iso,
+        iso_val,
         tol,
         level
     )
