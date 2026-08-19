@@ -61,26 +61,49 @@ std::tuple<torch::Tensor, std::optional<torch::Tensor>> marching_cubes_asymptoti
 }
 
 void bind_ops_mca(py::module &m) {
-    m.def(
-        "marching_cubes_asymptotic",
-        &marching_cubes_asymptotic_wrapper,
-        "Extract watertight isosurface using Marching Cubes with Asymptotic Decider (CUDA)",
-        py::arg("grid_vertices"),
-        py::arg("voxels"),
-        py::arg("sdf"),
-        py::arg("colors") = py::none(),
-        py::arg("iso") = 0.0f
-    );
-    m.def(
-        "marching_cubes_asymptotic_backward",
-        &marching_cubes_asymptotic_backward_wrapper,
-        "Backward gradient propagation for Marching Cubes with Asymptotic Decider (CUDA)",
-        py::arg("grad_vertices"),
-        py::arg("grad_colors"),
-        py::arg("grid_vertices"),
-        py::arg("unique_edges"),
-        py::arg("sdf"),
-        py::arg("colors"),
-        py::arg("iso") = 0.0f
-    );
+    m.def("marching_cubes_asymptotic", &marching_cubes_asymptotic_wrapper,
+          py::arg("grid_vertices"), py::arg("voxels"), py::arg("sdf"),
+          py::arg("colors") = py::none(), py::arg("iso") = 0.0f,
+          R"pbdoc(
+          Extracts a watertight 2-manifold surface using Marching Cubes with Asymptotic Deciders (Nielson & Hamann 1991).
+
+          Args:
+              grid_vertices (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+              voxels (torch.Tensor): (M, 8) int32 corner indices per voxel.
+              sdf (torch.Tensor): (N,) float32 scalar SDF values on CUDA.
+              colors (torch.Tensor, optional): (N, C) float32 vertex colors on CUDA. Defaults to None.
+              iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
+
+          Returns:
+              Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+                  - vertices (torch.Tensor): (V, 3) float32 extracted surface coordinates.
+                  - triangles (torch.Tensor): (F, 3) int32 triangle face indices.
+                  - [colors] (torch.Tensor, optional): (V, C) float32 interpolated features.
+
+          Example:
+              >>> import torch
+              >>> from conquer3d._C import marching_cubes_asymptotic
+              >>> verts, tris, colors = marching_cubes_asymptotic(grid_verts, voxels, sdf, colors, iso=0.0)
+          )pbdoc");
+    m.def("marching_cubes_asymptotic_backward", &marching_cubes_asymptotic_backward_wrapper,
+          py::arg("grad_vertices"), py::arg("grad_colors"), py::arg("grid_vertices"),
+          py::arg("unique_edges"), py::arg("sdf"), py::arg("colors"), py::arg("iso") = 0.0f,
+          R"pbdoc(
+          Analytical backward gradient propagation for Marching Cubes with Asymptotic Deciders on GPU.
+
+          Args:
+              grad_vertices (torch.Tensor): (V, 3) float32 upstream vertex gradients.
+              grad_colors (torch.Tensor, optional): (V, C) float32 upstream color gradients.
+              grid_vertices (torch.Tensor): (N, 3) float32 grid coordinates on CUDA.
+              unique_edges (torch.Tensor): (V, 2) int64 unique edge indices.
+              sdf (torch.Tensor): (N,) float32 scalar field values on CUDA.
+              colors (torch.Tensor, optional): (N, C) float32 colors on CUDA.
+              iso (float, optional): Isosurface threshold. Defaults to 0.0.
+
+          Returns:
+              Tuple[torch.Tensor, Optional[torch.Tensor]]: (grad_sdf, grad_colors)
+
+          Example:
+              >>> grad_sdf, grad_colors = marching_cubes_asymptotic_backward(g_verts, g_colors, grid_verts, u_edges, sdf, colors, 0.0)
+          )pbdoc");
 }
