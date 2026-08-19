@@ -221,74 +221,83 @@ std::tuple<torch::Tensor, torch::Tensor> PGSBVH::query_edge(
     return std::make_tuple(hit_mask, out_gaus_ids);
 }
 
-void bind_ds_pgs_bvh(py::module_ &m)
-{
-    py::class_<PGSBVH, BVH>(m, "PGSBVH", R"doc(
-    A specialized Bounding Volume Hierarchy for Planar Gaussian Splatting (PGS) operations.
-    Inherits from BVH.
-    )doc")
+void bind_ds_pgs_bvh(py::module_ &m) {
+    py::class_<PGSBVH, BVH>(m, "PGSBVH", R"pbdoc(
+        GPU-accelerated Bounding Volume Hierarchy specialized for Planar Gaussian Splatting (PGS).
+
+        Example:
+            >>> import torch
+            >>> from conquer3d._C import PGSBVH
+            >>> pgs_bvh = PGSBVH(pgs_aabb_mins, pgs_aabb_maxs)
+            >>> hit_mask, gaus_ids = pgs_bvh.query_edge(starts, ends, means, normals, opacities, covis)
+        )pbdoc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
-             py::arg("in_aabb_mins"),
-             py::arg("in_aabb_maxs"),
-             R"doc(
-        Construct and build the Karras LBVH for Planar Gaussians.
+             py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
+             R"pbdoc(
+             Constructs and builds PGSBVH from Planar Gaussian AABB bounds.
 
-        Args:
-            in_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of PGS AABB minimums.
-            in_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of PGS AABB maximums.
-        )doc")
+             Args:
+                 in_aabb_mins (torch.Tensor): (N, 3) float32 lower bounds on CUDA.
+                 in_aabb_maxs (torch.Tensor): (N, 3) float32 upper bounds on CUDA.
+
+             Example:
+                 >>> pgs_bvh = PGSBVH(pgs_aabb_mins, pgs_aabb_maxs)
+             )pbdoc")
         .def("query_voxel_pair", &PGSBVH::query_voxel_pair,
-             py::arg("vx_aabb_mins"),
-             py::arg("vx_aabb_maxs"),
-             py::arg("means"),
-             py::arg("normals"),
-             py::arg("covis"),
-             py::arg("gs_aabb_mins"),
-             py::arg("gs_aabb_maxs"),
-             py::arg("isos") = ISO,
-             py::arg("return_centroids") = false,
-             py::arg("return_centroid_densities") = false,
-             py::arg("max_capacity") = 10000000,
-             R"doc(
-            Perform exact Broad-to-Narrow phase intersection between Voxels and PGS.
+             py::arg("vx_aabb_mins"), py::arg("vx_aabb_maxs"),
+             py::arg("means"), py::arg("normals"), py::arg("covis"),
+             py::arg("gs_aabb_mins"), py::arg("gs_aabb_maxs"),
+             py::arg("isos") = ISO, py::arg("return_centroids") = false,
+             py::arg("return_centroid_densities") = false, py::arg("max_capacity") = 10000000,
+             R"pbdoc(
+             Performs exact broad-to-narrow phase intersection testing between 3D voxel boxes and Planar Gaussians.
 
-        Args:
-            vx_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB minimums.
-            vx_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB maximums.
-            means (torch.Tensor): Shape (N, 3) float32 tensor of PGS means.
-            normals (torch.Tensor): Shape (N, 3) float32 tensor of PGS normals.
-            covis (torch.Tensor): Shape (N, 3) float32 tensor of PGS inverse covariances.
-            gs_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of PGS AABB minimums.
-            gs_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of PGS AABB maximums.
-            isos (float | torch.Tensor): Iso-surface threshold. Can be a float or (N,) float32 tensor. Defaults to ISO.
-            return_centroids (bool): Whether to compute and return intersection centroids. Defaults to false.
-            return_centroid_densities (bool): Whether to return densities at centroids. Defaults to false.
-            max_capacity (int): Max global capacity for hits. Defaults to 10000000.
+             Args:
+                 vx_aabb_mins (torch.Tensor): (M, 3) float32 voxel lower bounds on CUDA.
+                 vx_aabb_maxs (torch.Tensor): (M, 3) float32 voxel upper bounds on CUDA.
+                 means (torch.Tensor): (N, 3) float32 Gaussian centroids on CUDA.
+                 normals (torch.Tensor): (N, 3) float32 planar normal vectors on CUDA.
+                 covis (torch.Tensor): (N, 6) float32 inverse covariance matrices on CUDA.
+                 gs_aabb_mins (torch.Tensor): (N, 3) float32 PGS AABB lower bounds.
+                 gs_aabb_maxs (torch.Tensor): (N, 3) float32 PGS AABB upper bounds.
+                 isos (float | torch.Tensor, optional): Contact threshold. Defaults to ISO.
+                 return_centroids (bool, optional): Compute intersection centroid positions. Defaults to False.
+                 return_centroid_densities (bool, optional): Evaluate densities at centroids. Defaults to False.
+                 max_capacity (int, optional): Maximum collision pairs buffer capacity. Defaults to 10000000.
 
-        Returns:
-            tuple: (hit_mask, voxel_ids, gaussian_ids, centroids, densities)
-        )doc")
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+                     - hit_mask (torch.Tensor): (M,) bool mask of intersected voxels.
+                     - out_voxel_ids (torch.Tensor): (K,) int64 intersected voxel indices.
+                     - out_gaus_ids (torch.Tensor): (K,) int64 intersected PGS indices.
+                     - centroids (torch.Tensor, optional): (K, 3) float32 intersection centroids.
+                     - densities (torch.Tensor, optional): (K,) float32 evaluated densities.
+
+             Example:
+                 >>> hits, v_ids, g_ids, _, _ = pgs_bvh.query_voxel_pair(vx_mins, vx_maxs, means, normals, covis, pgs_mins, pgs_maxs)
+             )pbdoc")
         .def("query_edge", &PGSBVH::query_edge,
-             py::arg("edge_starts"),
-             py::arg("edge_ends"),
-             py::arg("means"),
-             py::arg("normals"),
-             py::arg("opacities"),
-             py::arg("covis"),
+             py::arg("edge_starts"), py::arg("edge_ends"),
+             py::arg("means"), py::arg("normals"), py::arg("opacities"), py::arg("covis"),
              py::arg("isos") = ISO,
-             R"doc(
-        Find the single highest-density PGS intersected by each line segment.
+             R"pbdoc(
+             Finds the single highest-density Planar Gaussian pierced by each line segment.
 
-        Args:
-            edge_starts (torch.Tensor): Shape (E, 3) float32 tensor of edge start points.
-            edge_ends (torch.Tensor): Shape (E, 3) float32 tensor of edge end points.
-            means (torch.Tensor): Shape (N, 3) float32 tensor of PGS means.
-            normals (torch.Tensor): Shape (N, 3) float32 tensor of PGS normals.
-            opacities (torch.Tensor): Shape (N,) float32 tensor of PGS opacities.
-            covis (torch.Tensor): Shape (N, 3) float32 tensor of PGS inverse covariances.
-            isos (float | torch.Tensor): Iso-surface threshold. Defaults to ISO.
+             Args:
+                 edge_starts (torch.Tensor): (E, 3) float32 start coordinates on CUDA.
+                 edge_ends (torch.Tensor): (E, 3) float32 end coordinates on CUDA.
+                 means (torch.Tensor): (N, 3) float32 Gaussian centroids on CUDA.
+                 normals (torch.Tensor): (N, 3) float32 planar normals on CUDA.
+                 opacities (torch.Tensor): (N,) float32 opacity weights on CUDA.
+                 covis (torch.Tensor): (N, 6) float32 inverse covariances on CUDA.
+                 isos (float | torch.Tensor, optional): Tangency radius threshold. Defaults to ISO.
 
-        Returns:
-            tuple: (hit_mask, gaussian_ids)
-        )doc");
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor]:
+                     - hit_mask (torch.Tensor): (E,) bool mask indicating whether segment hit any PGS.
+                     - gaussian_ids (torch.Tensor): (E,) int64 indices of max-density hit PGS (-1 for misses).
+
+             Example:
+                 >>> hit_mask, g_ids = pgs_bvh.query_edge(starts, ends, means, normals, opacities, covis)
+             )pbdoc");
 }
