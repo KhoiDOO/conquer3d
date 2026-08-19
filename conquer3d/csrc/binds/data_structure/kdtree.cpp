@@ -73,32 +73,45 @@ std::tuple<torch::Tensor, torch::Tensor> KDTree::query(const torch::Tensor &quer
     return std::make_tuple(out_dists, out_inds);
 }
 
-void bind_ds_kdtree(py::module_ &m)
-{
-    py::class_<KDTree>(m, "KDTree", R"doc(
-        A highly efficient KDTree data structure natively backed by CUDA.
-        )doc")
+void bind_ds_kdtree(py::module_ &m) {
+    py::class_<KDTree>(m, "KDTree", R"pbdoc(
+        GPU-accelerated complete balanced KD-Tree with non-recursive stack-based k-NN search.
+
+        Example:
+            >>> import torch
+            >>> from conquer3d._C import KDTree
+            >>> tree = KDTree(points)
+            >>> dists, inds = tree.query(query_pts, k=3)
+        )pbdoc")
         .def(py::init<const torch::Tensor &>(),
              py::arg("points"),
-             R"doc(
-        Initializes and builds the KDTree on the GPU.
+             R"pbdoc(
+             Builds a balanced KDTree on the GPU from 3D reference points.
 
-        Args:
-            points (torch.Tensor): Shape (N, 3) float32 tensor of points to build the KDTree.
-        )doc")
+             Args:
+                 points (torch.Tensor): (N, 3) float32 reference coordinates on CUDA.
+
+             Example:
+                 >>> tree = KDTree(points)
+             )pbdoc")
         .def("query", &KDTree::query,
              py::arg("query_points"),
              py::arg("k") = 1,
              py::arg("exclude_self") = false,
-             R"doc(
-        Queries the KDTree for the K nearest neighbors.
+             R"pbdoc(
+             Queries the KDTree for the K nearest neighbors.
 
-        Args:
-            query_points (torch.Tensor): Shape (M, 3) float32 tensor of query points.
-            k (int): Number of nearest neighbors to search for. Defaults to 1.
-            exclude_self (bool): Whether to exclude the exact query point (if it exists). Defaults to false.
+             Args:
+                 query_points (torch.Tensor): (M, 3) float32 query coordinates on CUDA.
+                 k (int, optional): Number of nearest neighbors to search for. Defaults to 1.
+                 exclude_self (bool, optional): If True, excludes the exact query point (k=0). Defaults to False.
 
-        Returns:
-            tuple: (distances, indices)
-        )doc");
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor]:
+                     - distances (torch.Tensor): (M, K) float32 squared Euclidean distances.
+                     - indices (torch.Tensor): (M, K) int64 indices of nearest neighbors in reference points.
+
+             Example:
+                 >>> dists, inds = tree.query(query_pts, k=4, exclude_self=True)
+             )pbdoc");
 }
