@@ -1,11 +1,19 @@
-import torch
-from typing import Tuple, Optional
+"""Differentiable Marching Tetrahedra Grid (DiffMTG) autograd operator.
 
-# Explicitly import the compiled CMake target
+This module provides end-to-end differentiable Marching Tetrahedra on structured
+cubic grids with analytical gradient backpropagation through extracted edge zero-crossings.
+"""
+
+from typing import Tuple, Optional
+import torch
+
 from .._C import marching_tetrahedra_grid as marching_tetrahedra_grid_func
 from .._C import marching_tetrahedra_grid_backward as marching_tetrahedra_grid_backward_func
 
+
 class DiffMarchingTetrahedraGrid(torch.autograd.Function):
+    """Differentiable Marching Tetrahedra Grid autograd Function."""
+
     @staticmethod
     def forward(
         ctx,
@@ -15,8 +23,25 @@ class DiffMarchingTetrahedraGrid(torch.autograd.Function):
         grid_normals: Optional[torch.Tensor] = None,
         grid_colors: Optional[torch.Tensor] = None,
         iso: float = 0.0
-    ):
-        # We need return_unique_edges = True for the backward pass
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+        """Forward pass of Differentiable Marching Tetrahedra Grid.
+
+        Args:
+            ctx: Autograd context.
+            grid_vertices (torch.Tensor): Global vertex coordinates `(V, 3)` on CUDA.
+            voxels (torch.Tensor): Voxel corner indices `(N, 8)` on CUDA.
+            voxel_values (torch.Tensor): Scalar values `(V,)` at each grid vertex on CUDA.
+            grid_normals (torch.Tensor, optional): Vertex normals `(V, 3)`. Defaults to None.
+            grid_colors (torch.Tensor, optional): Feature colors `(V, C)`. Defaults to None.
+            iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+                - out_vertices: (M, 3) float32 surface vertex positions.
+                - out_triangles: (T, 3) int32 triangle indices.
+                - out_normals: (M, 3) interpolated normals, or None.
+                - out_colors: (M, C) interpolated colors, or None.
+        """
         out_vertices, out_triangles, out_normals, out_colors, unique_edges = marching_tetrahedra_grid_func(
             grid_vertices,
             voxels,
@@ -30,7 +55,6 @@ class DiffMarchingTetrahedraGrid(torch.autograd.Function):
         ctx.iso = iso
         ctx.has_colors = grid_colors is not None
         
-        # Save tensors needed for the backward pass
         if ctx.has_colors:
             ctx.save_for_backward(unique_edges, grid_vertices, voxel_values, grid_colors)
         else:
@@ -40,6 +64,7 @@ class DiffMarchingTetrahedraGrid(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_out_vertices, grad_out_triangles, grad_out_normals, grad_out_colors):
+        """Backward pass evaluating gradients w.r.t. scalar field values and colors."""
         if ctx.has_colors:
             unique_edges, grid_vertices, voxel_values, grid_colors = ctx.saved_tensors
         else:
@@ -47,15 +72,11 @@ class DiffMarchingTetrahedraGrid(torch.autograd.Function):
             grid_colors = None
             
         iso = ctx.iso
-        
-        # Initialize gradients for inputs
         grad_voxel_values = torch.zeros_like(voxel_values)
-        
         grad_grid_colors = None
         if ctx.has_colors:
             grad_grid_colors = torch.zeros_like(grid_colors)
             
-        # Call the backward C++ binding if we have valid output vertices
         if unique_edges is not None and unique_edges.shape[0] > 0 and grad_out_vertices is not None:
             grad_out_vertices = grad_out_vertices.contiguous()
             if grad_out_colors is not None:
@@ -73,8 +94,6 @@ class DiffMarchingTetrahedraGrid(torch.autograd.Function):
                 iso
             )
             
-        # Return gradients for all inputs in the same order as forward
-        # grid_vertices, voxels, voxel_values, grid_normals, grid_colors, iso
         return None, None, grad_voxel_values, None, grad_grid_colors, None
 
 
@@ -86,23 +105,22 @@ def diff_marching_tetrahedra_grid(
     grid_colors: Optional[torch.Tensor] = None,
     iso: float = 0.0
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-    """
-    Executes the Differentiable Marching Tetrahedra Grid algorithm to extract an isosurface from a voxel grid.
+    """Differentiable Marching Tetrahedra Grid surface extraction with PyTorch autograd integration.
 
     Args:
-        grid_vertices (torch.Tensor): (V, 3) tensor of global vertex positions.
-        voxels (torch.Tensor): (N, 8) tensor of voxel corner indices mapping to `grid_vertices`.
-        voxel_values (torch.Tensor): (V,) tensor of SDF/scalar values at each vertex. Requires grad.
-        grid_normals (torch.Tensor, optional): (V, 3) optional tensor of SDF normals at each vertex. Defaults to None.
-        grid_colors (torch.Tensor, optional): (V, 3) optional tensor of RGB colors at each vertex. Defaults to None. Requires grad.
-        iso (float, optional): The isosurface extraction threshold. Defaults to 0.0.
+        grid_vertices (torch.Tensor): Global vertex positions `(V, 3)` on CUDA.
+        voxels (torch.Tensor): Voxel corner indices `(N, 8)` mapping to `grid_vertices`.
+        voxel_values (torch.Tensor): Scalar values `(V,)` requiring gradient.
+        grid_normals (torch.Tensor, optional): Optional normals `(V, 3)`. Defaults to None.
+        grid_colors (torch.Tensor, optional): Optional color features `(V, C)` requiring gradient.
+        iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-            - vertices (torch.Tensor): (M, 3) tensor of extracted mesh vertices. Supports gradients.
-            - triangles (torch.Tensor): (T, 3) tensor of extracted mesh triangle indices.
-            - normals (torch.Tensor, optional): (M, 3) tensor of extracted mesh vertex normals, if `grid_normals` was provided.
-            - colors (torch.Tensor, optional): (M, 3) tensor of extracted mesh vertex colors, if `grid_colors` was provided. Supports gradients.
+            - vertices (torch.Tensor): Extracted surface vertices `(M, 3)`.
+            - triangles (torch.Tensor): Extracted triangle indices `(T, 3)`.
+            - normals (torch.Tensor | None): Interpolated normals `(M, 3)`, or None.
+            - colors (torch.Tensor | None): Interpolated colors `(M, C)`, or None.
     """
     if not all(t.is_cuda for t in [grid_vertices, voxels, voxel_values]):
         raise ValueError("All input tensors must be CUDA tensors.")
