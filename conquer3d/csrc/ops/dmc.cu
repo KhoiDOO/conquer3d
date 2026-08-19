@@ -1,3 +1,10 @@
+/**
+ * @file dmc.cu
+ * @brief CUDA kernel implementations for Differentiable Dual Marching Cubes (DMC).
+ * @details Extracts watertight 2-manifold surfaces with independent cell contour components
+ * and Newton-Raphson level-set projections.
+ */
+
 #include "dmc.h"
 #include "dmc_data.h"
 #include "../maths/maths.h"
