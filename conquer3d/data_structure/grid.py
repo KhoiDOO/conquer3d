@@ -34,17 +34,43 @@ def create_voxel_grid_from_tmesh(
     res: Union[List[int], Tuple[int, int, int]],
     tmesh: '_C.TriangleMesh',
     return_unique_vert_ids: bool = True,
-    pad: int = 0
-) -> Tuple[torch.Tensor, torch.Tensor, Union[torch.Tensor, None]]:
+    pad: int = 0,
+    return_normals: bool = False,
+    normal_mode: int = 0
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor, Union[torch.Tensor, None]],
+    Tuple[torch.Tensor, torch.Tensor, Union[torch.Tensor, None], torch.Tensor]
+]:
     """
-    Creates a sparse 3D voxel grid strictly around the surface.
+    Creates a sparse 3D voxel grid strictly around the surface with optional surface normals.
     
     Args:
+        grid_min (List[float] | Tuple[float, float, float]): Minimum (x, y, z) bounding box coordinates.
+        grid_max (List[float] | Tuple[float, float, float]): Maximum (x, y, z) bounding box coordinates.
+        res (List[int] | Tuple[int, int, int]): Number of vertices along each axis (rx, ry, rz).
+        tmesh (TriangleMesh): Input TriangleMesh data structure.
+        return_unique_vert_ids (bool, optional): If True, returns global 1D indices of active vertices (default: True).
         pad (int, optional): Number of voxel layers to dilate the sparse grid (default: 0).
-            Set pad=1 when performing Dual Contouring to guarantee all 4 incident voxels
+            Set pad=1 when performing Dual Contouring or DMC to guarantee all 4 incident voxels
             are present for every sign-crossing edge.
+        return_normals (bool, optional): If True, queries BVH to compute and return (N, 3) surface normals (default: False).
+        normal_mode (int, optional): Normal computation mode (default: 0).
+            - 0: Closest triangle face normal (preserves sharp CAD creases in Dual Contouring).
+            - 1: Barycentric interpolated vertex normal (smooth shading).
+            - 2: Normalized displacement vector (spatial SDF gradient).
+            
+    Returns:
+        If return_normals=False:
+            Tuple[grid_vertices, voxels, unique_vert_ids]
+        If return_normals=True:
+            Tuple[grid_vertices, voxels, unique_vert_ids, grid_normals]
     """
-    return _C.create_voxel_grid_from_tmesh(list(grid_min), list(grid_max), list(res), tmesh, return_unique_vert_ids, pad)
+    res_tuple = _C.create_voxel_grid_from_tmesh(
+        list(grid_min), list(grid_max), list(res), tmesh, return_unique_vert_ids, pad, return_normals, normal_mode
+    )
+    if return_normals:
+        return res_tuple[0], res_tuple[1], res_tuple[2], res_tuple[3]
+    return res_tuple[0], res_tuple[1], res_tuple[2]
 
 def get_active_voxel_ids_from_depth(
     depth_image: torch.Tensor,
