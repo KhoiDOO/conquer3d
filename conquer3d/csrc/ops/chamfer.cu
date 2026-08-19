@@ -1,3 +1,8 @@
+/**
+ * @file chamfer.cu
+ * @brief CUDA kernel implementations for GPU KD-Tree accelerated nearest neighbor Chamfer distance.
+ */
+
 #include "../data_structure/kdtree.h"
 
 #include <cstdint>
