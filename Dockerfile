@@ -19,15 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set working directory
 WORKDIR /workspace
 
-# Create the conda environment with compilers
-RUN conda create -c conda-forge -n geocutool python=3.10 gxx_linux-64=13 gcc_linux-64=13 -y
-
-# Make RUN commands use the new conda environment
-SHELL ["conda", "run", "-n", "geocutool", "/bin/bash", "-c"]
-
-# Install conda dependencies: sparsehash and cuda-toolkit
-RUN conda install -c conda-forge sparsehash -y && \
-    conda install nvidia::cuda-toolkit==12.8.2 -y
+# Create the conda environment with compilers and pip
+RUN conda create -c conda-forge -n conquer3d python=3.10 pip gxx_linux-64=13 gcc_linux-64=13 -y
+RUN conda install -n conquer3d -c conda-forge sparsehash -y
+RUN conda install -n conquer3d nvidia::cuda-toolkit==12.8.2 -y
+ENV PATH=/opt/conda/envs/conquer3d/bin:$PATH
+SHELL ["conda", "run", "-n", "conquer3d", "/bin/bash", "-c"]
 
 # Install PyTorch and build tools
 RUN pip install setuptools wheel ninja && \
@@ -48,10 +45,10 @@ RUN pip install pytorch-fid
 COPY setup.py pyproject.toml README.md /workspace/
 COPY conquer3d /workspace/conquer3d/
 
-# Install geocutool
+# Install conquer3d
 WORKDIR /workspace
 RUN pip install -e . --no-build-isolation
 
 # Set default command to bash with conda activated
-ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "geocutool"]
+ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "conquer3d"]
 CMD ["/bin/bash"]
