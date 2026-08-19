@@ -13,7 +13,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conquer3d"
-version = "0.5.8"
+version = "0.5.9"
 description = "Geometric Cuda Tool Box"
 readme = "README.md"
 license = "MIT"
@@ -28,8 +28,6 @@ dependencies = [
     "scipy",
     "trimesh",
     "tqdm",
-    "meshlib",
-    "meshio>=5.3.5",
     "gdown",
 ]
 
