@@ -1,42 +1,85 @@
+/**
+ * @file mesh_bvh.h
+ * @brief High-performance Triangle Mesh BVH with multi-mode SDF & Fast Winding Number queries.
+ */
+
 #ifndef MESH_BVH_H
 #define MESH_BVH_H
 
 #include "bvh.h"
 #include <torch/extension.h>
+#include <tuple>
+#include <optional>
+#include <vector>
 
+/**
+ * @brief Hierarchical dipole node representation for Fast Winding Number (FWN) evaluation.
+ */
 struct WindingData {
-    float3 n;          // Area-weighted normal (unnormalized)
-    float3 area_p;     // Area-weighted centroid
-    float area;        // Total area
-    float3 average_p;  // Final centroid (area_p / area)
-    float max_p_dist2; // Reserved for query thresholding
+    float3 n;          ///< Area-weighted unnormalized normal vector.
+    float3 area_p;     ///< Area-weighted centroid position.
+    float area;        ///< Total surface area of subtree.
+    float3 average_p;  ///< Average centroid (area_p / area).
+    float max_p_dist2; ///< Maximum squared distance from centroid to primitive boundary.
 };
 
+/**
+ * @brief Triangle Mesh BVH subclass supporting exact Ray-Mesh, Mesh-Mesh, and SDF sign evaluation.
+ */
 class MeshBVH : public BVH
 {
 public:
-    torch::Tensor winding_data; // Size: [2N - 1] * sizeof(WindingData)
+    torch::Tensor winding_data; ///< Size: [2N - 1] * sizeof(WindingData) on device.
     bool has_winding_data = false;
 
     using BVH::BVH;
     using BVH::query;
     using BVH::query_self;
-
     using BVH::query_ray;
 
+    /**
+     * @brief Builds hierarchical dipole winding data for Fast Winding Number queries.
+     * 
+     * @param[in] vertices  (V, 3) float32 mesh vertex tensor on CUDA.
+     * @param[in] triangles (F, 3) int32 triangle index tensor on CUDA.
+     */
     void build_winding_data(
         const torch::Tensor &vertices,
         const torch::Tensor &triangles);
 
-    // Returns a [N, 2] tensor of intersecting triangle index pairs
+    /**
+     * @brief Discovers all colliding triangle index pairs in the mesh.
+     * 
+     * @param[in] vertices  (V, 3) float32 mesh vertex tensor.
+     * @param[in] triangles (F, 3) int32 triangle index tensor.
+     * @return (N, 2) int64 tensor of intersecting triangle index pairs.
+     */
     torch::Tensor get_self_intersection(
         const torch::Tensor &vertices,
         const torch::Tensor &triangles);
 
+    /**
+     * @brief Checks if the triangle mesh contains any self-intersecting faces.
+     * 
+     * @param[in] vertices  (V, 3) float32 mesh vertex tensor.
+     * @param[in] triangles (F, 3) int32 triangle index tensor.
+     * @return True if self-intersections exist, False otherwise.
+     */
     bool is_self_intersection(
         const torch::Tensor &vertices,
         const torch::Tensor &triangles);
 
+    /**
+     * @brief Performs accelerated ray-triangle intersection queries (Möller-Trumbore).
+     * 
+     * @param[in] ray_origins     (R, 3) float32 ray origins.
+     * @param[in] ray_dirs        (R, 3) float32 ray unit directions.
+     * @param[in] vertices        (V, 3) float32 mesh vertices.
+     * @param[in] triangles       (F, 3) int32 triangle indices.
+     * @param[in] return_distance If true, computes and returns exact ray hit distances.
+     * 
+     * @return Tuple of (ray_ids, triangle_ids, intersect_points, distances).
+     */
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> get_ray_intersection(
         const torch::Tensor &ray_origins,
         const torch::Tensor &ray_dirs,
@@ -44,6 +87,29 @@ public:
         const torch::Tensor &triangles,
         bool return_distance = false);
 
+    /**
+     * @brief Queries closest triangle projections and Signed Distance Fields (SDF) for points.
+     * 
+     * @param[in] query_points      (P, 3) float32 query coordinates on CUDA.
+     * @param[in] vertices          (V, 3) float32 mesh vertices.
+     * @param[in] triangles         (F, 3) int32 triangle indices.
+     * @param[in] return_sdf        If true, computes signed distance.
+     * @param[in] return_prj_pts    If true, computes closest projected points on surface.
+     * @param[in] sign_mode         Sign evaluation mode:
+     *                              - 0: Ray parity casting.
+     *                              - 1: Fast Winding Number (FWN).
+     *                              - 2: Angle-weighted pseudonormals.
+     *                              - 3: Volumetric 3D flood fill mask.
+     * @param[in] triangle_normals  Optional (F, 3) triangle face normals.
+     * @param[in] vertex_normals    Optional (V, 3) vertex pseudonormals.
+     * @param[in] edge_normals      Optional (3*F, 3) edge pseudonormals.
+     * @param[in] flood_fill_mask   Optional 3D grid flood fill mask.
+     * @param[in] flood_grid_min    Optional flood grid min bounds.
+     * @param[in] flood_grid_max    Optional flood grid max bounds.
+     * @param[in] flood_grid_res    Optional flood grid resolution.
+     * 
+     * @return Tuple of (query_ids, closest_triangle_ids, projected_points, signed_distances).
+     */
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> query_point(
         const torch::Tensor &query_points,
         const torch::Tensor &vertices,
@@ -59,12 +125,18 @@ public:
         std::optional<std::vector<float>> flood_grid_max = std::nullopt,
         std::optional<std::vector<int64_t>> flood_grid_res = std::nullopt);
 
+    /**
+     * @brief Performs triangle-box intersection tests against voxel cells.
+     */
     torch::Tensor query_voxel(
         const torch::Tensor &query_mins,
         const torch::Tensor &query_maxs,
         const torch::Tensor &vertices,
         const torch::Tensor &triangles);
 
+    /**
+     * @brief Extracts linear IDs of active surface-intersecting voxels in a 3D grid.
+     */
     torch::Tensor get_active_voxel_ids_from_grid(
         std::vector<float> grid_min,
         std::vector<float> grid_max,
@@ -134,6 +206,7 @@ namespace mesh_bvh
         const int *bvh_parents,
         const int2 *bvh_children,
         WindingData *winding_data);
+
     __host__ void query_voxel_mesh_bvh(
         const int num_queries,
         const int num_objects,
