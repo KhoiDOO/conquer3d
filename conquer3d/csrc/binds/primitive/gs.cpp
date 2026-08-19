@@ -132,25 +132,64 @@ torch::Tensor solve_gs_neighbor_mahalanobis_radius_wrapper(
     return isos;
 }
 
-void bind_primitive_gs(py::module_ &m)
-{
-    m.def("compute_gs_covi_func", &compute_gs_covi_wrapper, "Compute covariance matrices for 3D Gaussians",
-          py::arg("means"),
-          py::arg("rotations"),
-          py::arg("scales"),
-          py::arg("rotnorm"),
-          py::arg("tol"),
-          py::arg("level"));
-    m.def("solve_gs_neighbor_mahalanobis_radius_func", &solve_gs_neighbor_mahalanobis_radius_wrapper, "Solve Gaussian Neighbor Mahalanobis Radius",
-          py::arg("means"),
-          py::arg("covis"),
-          py::arg("k"));
-    m.def("compute_gs_aabb_func", &compute_gs_aabb_wrapper, "Compute AABB for 3D Gaussians",
-          py::arg("means"),
-          py::arg("scales"),
-          py::arg("covis"),
-          py::arg("isos"),
-          py::arg("iso"),
-          py::arg("tol"),
-          py::arg("level"));
+void bind_primitive_gs(py::module_ &m) {
+    m.def("compute_gs_covi_func", &compute_gs_covi_wrapper,
+          py::arg("means"), py::arg("rotations"), py::arg("scales"),
+          py::arg("rotnorm"), py::arg("tol"), py::arg("level"),
+          R"pbdoc(
+          Computes upper-triangular inverse covariance matrix entries for 3D Gaussians (CUDA).
+
+          Args:
+              means (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+              rotations (torch.Tensor): (N, 4) float32 quaternion orientations (w, x, y, z) on CUDA.
+              scales (torch.Tensor): (N, 3) float32 scaling components on CUDA.
+              rotnorm (bool): Whether to normalize quaternions.
+              tol (float): Numerical tolerance epsilon.
+              level (int): Optimization unroll level.
+
+          Returns:
+              torch.Tensor: (N, 6) float32 inverse covariance entries (xx, xy, xz, yy, yz, zz).
+
+          Example:
+              >>> import torch
+              >>> from conquer3d._C import compute_gs_covi_func
+              >>> covis = compute_gs_covi_func(means, rotations, scales, True, 1e-6, 0)
+          )pbdoc");
+    m.def("solve_gs_neighbor_mahalanobis_radius_func", &solve_gs_neighbor_mahalanobis_radius_wrapper,
+          py::arg("means"), py::arg("covis"), py::arg("k"),
+          R"pbdoc(
+          Computes optimal Mahalanobis isosurface radii for 3D Gaussians from k-NN neighbors (CUDA).
+
+          Args:
+              means (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+              covis (torch.Tensor): (N, 6) float32 inverse covariances on CUDA.
+              k (int): Number of nearest neighbors.
+
+          Returns:
+              torch.Tensor: (N,) float32 optimal Mahalanobis radii $r_i$.
+
+          Example:
+              >>> radii = solve_gs_neighbor_mahalanobis_radius_func(means, covis, 16)
+          )pbdoc");
+    m.def("compute_gs_aabb_func", &compute_gs_aabb_wrapper,
+          py::arg("means"), py::arg("scales"), py::arg("covis"),
+          py::arg("isos"), py::arg("iso"), py::arg("tol"), py::arg("level"),
+          R"pbdoc(
+          Computes tight Axis-Aligned Bounding Boxes (AABBs) for 3D Gaussians (CUDA).
+
+          Args:
+              means (torch.Tensor): (N, 3) float32 Gaussian centroids on CUDA.
+              scales (torch.Tensor): (N, 3) float32 scaling components on CUDA.
+              covis (torch.Tensor): (N, 6) float32 inverse covariance entries on CUDA.
+              isos (torch.Tensor, optional): (N,) float32 per-Gaussian isosurface thresholds.
+              iso (float): Global fallback isosurface threshold.
+              tol (float): Numerical tolerance.
+              level (int): Optimization unroll level.
+
+          Returns:
+              Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: (aabb_mins, aabb_maxs, contact_points)
+
+          Example:
+              >>> mins, maxs, contacts = compute_gs_aabb_func(means, scales, covis, isos, 3.0, 1e-6, 0)
+          )pbdoc");
 }
