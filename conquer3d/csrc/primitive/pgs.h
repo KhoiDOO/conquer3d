@@ -1,3 +1,8 @@
+/**
+ * @file pgs.h
+ * @brief GPU mathematical kernels and BVH dispatchers for Periodic Gaussian Splatting (PGS).
+ */
+
 #ifndef PGS_H
 #define PGS_H
 
@@ -7,9 +12,13 @@
 #include "gs_math.cuh"
 #include "aabb.h"
 #include <cuda_runtime.h>
+#include <cstdint>
 
 namespace pgs
 {
+    /**
+     * @brief Evaluates tangency contact radii for Periodic Gaussians from k-NN clusters on GPU.
+     */
     __host__ void solve_pgs_cluster_tangency_radius(
         const uint32_t num_gaussians,
         const float3 *__restrict__ means,
@@ -23,6 +32,9 @@ namespace pgs
 
 namespace pgs_aabb
 {
+    /**
+     * @brief BVH-accelerated Periodic Gaussian-voxel pair intersection queries on GPU.
+     */
     __host__ void query_pgs_voxel_pair_intersection_bvh(
         const uint32_t num_voxels,
         const uint32_t num_gaussians,
@@ -49,6 +61,9 @@ namespace pgs_aabb
         int64_t *__restrict__ global_counter,
         const int64_t max_capacity);
     
+    /**
+     * @brief BVH-accelerated Periodic Gaussian-edge intersection and density queries.
+     */
     __host__ void query_pgs_edge_intersection_bvh(
         const uint32_t num_edges,
         const uint32_t num_gaussians,
