@@ -1,3 +1,10 @@
+/**
+ * @file dc.cu
+ * @brief CUDA kernel implementations for GPU-accelerated Dual Contouring with Jacobi QEF solvers.
+ * @details Extracts sharp features and corner geometry using Quadratic Error Function (QEF)
+ * minimization with 3x3 cyclic Jacobi SVD diagonalization on registers.
+ */
+
 #include "dc.h"
 #include "dc_data.h"
 #include "../maths/maths.h"

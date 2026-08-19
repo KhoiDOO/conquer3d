@@ -1,10 +1,33 @@
+"""Batch collation utilities for 3D triangle mesh datasets.
+
+This module provides custom `collate_fn` implementations for PyTorch DataLoader,
+packing variable-sized mesh vertices and faces into `BTriangleMesh` containers.
+"""
+
+from typing import List, Tuple, Any
 import torch
 from conquer3d.data_structure.bmesh import BTriangleMesh
 
-def bmesh_collate_fn(batch):
-    """
-    Collate function for a dataset returning (vertices, faces, label).
-    Returns a BTriangleMesh and a batched label tensor.
+
+def bmesh_collate_fn(batch: List[Tuple[torch.Tensor, torch.Tensor, Any]]) -> Tuple[BTriangleMesh, torch.Tensor]:
+    """Collates a list of `(vertices, faces, label)` tuples into a `BTriangleMesh`.
+
+    Concatenates variable-sized vertices and faces along the 0-th dimension,
+    creating batch ID mapping tensors (`vertbids`, `facebids`) to track sample ownership.
+
+    Args:
+        batch (List[Tuple[torch.Tensor, torch.Tensor, Any]]): List of samples from a mesh dataset,
+            where each item is a tuple `(vertices, faces, label)`.
+
+    Returns:
+        Tuple[BTriangleMesh, torch.Tensor]:
+            - bmesh (BTriangleMesh): Batched mesh container holding concatenated geometry and batch index maps.
+            - batched_labels (torch.Tensor): Int64 tensor of labels of shape `(B,)`.
+
+    Example:
+        >>> from torch.utils.data import DataLoader
+        >>> from conquer3d.data.collate import bmesh_collate_fn
+        >>> loader = DataLoader(dataset, batch_size=4, collate_fn=bmesh_collate_fn)
     """
     all_vertices = []
     all_faces = []

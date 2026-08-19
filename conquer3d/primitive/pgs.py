@@ -1,9 +1,16 @@
-import torch
+"""Periodic Gaussian Splatting (PGS) primitive mathematical operators.
+
+This module provides pairwise tangency radius solving for Periodic Gaussian
+Splatting representations and directional radiance structures.
+"""
+
 from typing import Tuple
+import torch
 
 from .._C import (
     solve_pgs_cluster_tangency_radius_func
 )
+
 
 def solve_pgs_cluster_tangency_radius(
     means: torch.Tensor,
@@ -11,18 +18,22 @@ def solve_pgs_cluster_tangency_radius(
     covis: torch.Tensor,
     k: int = 16
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Computes the tangency radius for each Gaussian cluster based on its k-nearest neighbors.
+    """Computes optimal tangency contact radii for Periodic Gaussians from k-NN clusters.
 
     Args:
-        means (torch.Tensor): (N, 3) tensor of Gaussian center positions.
-        normals (torch.Tensor): (N, 3) tensor of Gaussian principal axes.
-        covis (torch.Tensor): (N, 6) tensor of covariance inverses.
-        k (int, optional): Number of nearest neighbors to consider. Defaults to 16.
+        means (torch.Tensor): Float32 tensor of shape `(N, 3)` with Gaussian centers on CUDA.
+        normals (torch.Tensor): Float32 tensor of shape `(N, 3)` with surface normals / principal axes.
+        covis (torch.Tensor): Float32 tensor of shape `(N, 6)` with inverse covariance upper-triangles.
+        k (int, optional): Number of nearest neighbors to query. Defaults to 16.
 
     Returns:
-        isos: (N,) tensor of computed tangency radii for each Gaussian.
-        invalid_mask: (N,) boolean tensor indicating which Gaussians had invalid computations.
+        Tuple[torch.Tensor, torch.Tensor]:
+            - isos (torch.Tensor): Float32 tensor of shape `(N,)` with computed tangency radii.
+            - invalid_mask (torch.Tensor): Bool tensor of shape `(N,)` marking points where
+              tangency could not be analytically solved.
+
+    Raises:
+        ValueError: If input tensors are not on CUDA.
     """
     if not all(t.is_cuda for t in [means, normals, covis]):
         raise ValueError("All input tensors must be CUDA tensors.")
@@ -31,6 +42,7 @@ def solve_pgs_cluster_tangency_radius(
         means.contiguous().to(torch.float32),
         normals.contiguous().to(torch.float32),
         covis.contiguous().to(torch.float32),
-        k)
+        k
+    )
     
     return isos, invalid_mask

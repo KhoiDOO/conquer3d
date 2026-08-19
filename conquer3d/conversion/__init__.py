@@ -1,3 +1,11 @@
+"""Geometric format and volumetric conversion pipelines.
+
+This module provides bidirectional conversions between:
+- Dense voxel grids and sparse COO coordinates (`voxel2sparse`, `sparse2voxel`).
+- Dense occupancy grids and sparse COO indices (`dense_occ2sparse_coo`, `sparse_coo2dense_occ`).
+- Triangle meshes and dense/sparse voxel signed distance fields (`tmesh2voxel`, `tmesh2sparse`).
+"""
+
 from .grid import (
     voxel2sparse,
     sparse2voxel,

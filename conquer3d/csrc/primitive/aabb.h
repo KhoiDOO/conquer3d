@@ -1,12 +1,19 @@
+/**
+ * @file aabb.h
+ * @brief CUDA device primitives for 3D Axis-Aligned Bounding Box (AABB) operations.
+ */
+
 #ifndef AABB_H
 #define AABB_H
 
 #include "../maths/maths.h"
-
 #include <cuda_runtime.h>
 
 namespace aabb
 {
+    /**
+     * @brief Computes the center position of an AABB.
+     */
     __device__ __forceinline__ void compute_aabb_centroid(
         const float3 &aabb_min,
         const float3 &aabb_max,
@@ -18,6 +25,9 @@ namespace aabb
             (aabb_min.z + aabb_max.z) * 0.5f);
     }
 
+    /**
+     * @brief Computes the intersection (overlap) box of two AABBs.
+     */
     __device__ __forceinline__ void compute_aabb_overlap(
         const float3 &query_aabb_min,
         const float3 &query_aabb_max,
@@ -37,6 +47,9 @@ namespace aabb
             fminf(query_aabb_max.z, target_aabb_max.z));
     }
 
+    /**
+     * @brief Computes the union bounding box enclosing two AABBs.
+     */
     __device__ __forceinline__ void compute_aabb_union(
         const float3 &query_aabb_min,
         const float3 &query_aabb_max,
@@ -56,6 +69,9 @@ namespace aabb
             fmaxf(query_aabb_max.z, target_aabb_max.z));
     }
 
+    /**
+     * @brief Computes clamped dimension extents of an AABB.
+     */
     __device__ __forceinline__ void compute_aabb_extent(
         const float3 &aabb_min,
         const float3 &aabb_max,
@@ -67,6 +83,9 @@ namespace aabb
             fmaxf(1e-6f, aabb_max.z - aabb_min.z));
     }
 
+    /**
+     * @brief Computes positive dimension lengths of an AABB.
+     */
     __device__ __forceinline__ void compute_aabb_dim_size(
         const float3 &aabb_min,
         const float3 &aabb_max,
@@ -78,6 +97,9 @@ namespace aabb
             fmaxf(0.0f, aabb_max.z - aabb_min.z));
     }
 
+    /**
+     * @brief Computes volume of an AABB.
+     */
     __device__ __forceinline__ void compute_aabb_volume(
         const float3 &aabb_min,
         const float3 &aabb_max,
@@ -88,6 +110,9 @@ namespace aabb
         out_volume = dim_size.x * dim_size.y * dim_size.z;
     }
 
+    /**
+     * @brief Computes surface area of an AABB.
+     */
     __device__ __forceinline__ void compute_aabb_surface_area(
         const float3 &aabb_min,
         const float3 &aabb_max,
@@ -98,6 +123,9 @@ namespace aabb
         out_surface_area = 2.0f * (dim_size.x * dim_size.y + dim_size.x * dim_size.z + dim_size.y * dim_size.z);
     }
 
+    /**
+     * @brief Computes volume directly from dimensions.
+     */
     __device__ __forceinline__ void compute_aabb_volume_from_dims(
         const float3 &dim_size,
         float &out_volume)
@@ -105,6 +133,9 @@ namespace aabb
         out_volume = dim_size.x * dim_size.y * dim_size.z;
     }
 
+    /**
+     * @brief Computes surface area directly from dimensions.
+     */
     __device__ __forceinline__ void compute_aabb_surface_area_from_dims(
         const float3 &dim_size,
         float &out_surface_area)
@@ -112,6 +143,9 @@ namespace aabb
         out_surface_area = 2.0f * (dim_size.x * dim_size.y + dim_size.x * dim_size.z + dim_size.y * dim_size.z);
     }
 
+    /**
+     * @brief Computes squared Euclidean distance from point to closest point on AABB.
+     */
     __device__ __forceinline__ float compute_squared_distance(
         const float3 &p,
         const float3 &aabb_min,
@@ -130,6 +164,9 @@ namespace aabb
         return d2;
     }
 
+    /**
+     * @brief Tests if two AABBs overlap.
+     */
     __host__ __device__ __forceinline__ bool test_aabb_overlap(
         const float3 &query_aabb_min,
         const float3 &query_aabb_max,
@@ -152,6 +189,9 @@ namespace aabb
         return true;
     }
 
+    /**
+     * @brief Tests if query AABB is completely enclosed inside target AABB.
+     */
     __device__ __forceinline__ bool test_aabb_inside(
         const float3 &query_aabb_min,
         const float3 &query_aabb_max,
@@ -168,6 +208,9 @@ namespace aabb
             (target_aabb_max.z) >= query_aabb_max.z);
     }
 
+    /**
+     * @brief Tests if 3D point is inside an AABB.
+     */
     __device__ __forceinline__ bool test_point_inside_aabb(
         const float3 &point,
         const float3 &aabb_min,

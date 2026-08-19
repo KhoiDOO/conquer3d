@@ -1,8 +1,15 @@
-import torch
-from typing import Tuple, Optional
+"""Marching Tetrahedra Grid (MTG) algorithm for 3D isosurface extraction.
 
-# Explicitly import the compiled CMake target
+This module provides GPU-accelerated Marching Tetrahedra on structured cubic voxel grids,
+internally subdividing each cubic voxel cell into 6 tetrahedra to guarantee watertight
+topological consistency without ambiguous face saddle points.
+"""
+
+from typing import Tuple, Optional
+import torch
+
 from .._C import marching_tetrahedra_grid as marching_tetrahedra_grid_func
+
 
 def marching_tetrahedra_grid(
     grid_vertices: torch.Tensor,
@@ -12,23 +19,34 @@ def marching_tetrahedra_grid(
     grid_colors: Optional[torch.Tensor] = None,
     iso: float = 0.0
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-    """
-    Executes the Marching Tetrahedra Grid algorithm to extract an isosurface from a voxel grid.
+    """Extracts a topological 2-manifold isosurface from a structured voxel grid using MTG.
+
+    Decomposes each cubic voxel into 6 tetrahedral sub-elements on GPU, eliminating
+    Marching Cubes ambiguous face configurations.
 
     Args:
-        grid_vertices (torch.Tensor): (V, 3) tensor of global vertex positions.
-        voxels (torch.Tensor): (N, 8) tensor of voxel corner indices mapping to `grid_vertices`.
-        voxel_values (torch.Tensor): (V,) tensor of SDF/scalar values at each vertex.
-        grid_normals (torch.Tensor, optional): (V, 3) optional tensor of SDF normals at each vertex. Defaults to None.
-        grid_colors (torch.Tensor, optional): (V, 3) optional tensor of RGB colors at each vertex. Defaults to None.
-        iso (float, optional): The isosurface extraction threshold. Defaults to 0.0.
+        grid_vertices (torch.Tensor): Global vertex coordinates `(V, 3)` with dtype
+            `torch.float32` on CUDA.
+        voxels (torch.Tensor): Voxel corner indices `(N, 8)` mapping to `grid_vertices`
+            with dtype `torch.int32` on CUDA.
+        voxel_values (torch.Tensor): Scalar or SDF values `(V,)` at each grid vertex on CUDA.
+        grid_normals (torch.Tensor, optional): Surface normals `(V, 3)` on CUDA. Defaults to None.
+        grid_colors (torch.Tensor, optional): RGB/feature colors `(V, C)` on CUDA. Defaults to None.
+        iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-            - vertices (torch.Tensor): (M, 3) tensor of extracted mesh vertices.
-            - triangles (torch.Tensor): (T, 3) tensor of extracted mesh triangle indices.
-            - normals (torch.Tensor, optional): (M, 3) tensor of extracted mesh vertex normals, if `grid_normals` was provided.
-            - colors (torch.Tensor, optional): (M, 3) tensor of extracted mesh vertex colors, if `grid_colors` was provided.
+            - vertices (torch.Tensor): Extracted mesh surface vertices `(M, 3)`.
+            - triangles (torch.Tensor): Extracted triangle face indices `(T, 3)`.
+            - normals (torch.Tensor | None): Interpolated vertex normals `(M, 3)`, or None if omitted.
+            - colors (torch.Tensor | None): Interpolated vertex colors `(M, C)`, or None if omitted.
+
+    Raises:
+        ValueError: If input tensors are not on CUDA.
+
+    Example:
+        >>> from conquer3d.ops import marching_tetrahedra_grid
+        >>> verts, faces, _, _ = marching_tetrahedra_grid(grid_vertices, voxels, sdfs, iso=0.0)
     """
     if not all(t.is_cuda for t in [grid_vertices, voxels, voxel_values]):
         raise ValueError("All input tensors must be CUDA tensors.")

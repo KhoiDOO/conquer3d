@@ -1,3 +1,8 @@
+/**
+ * @file gs_aabb.cu
+ * @brief CUDA kernel implementations for analytical Axis-Aligned Bounding Box (AABB) bounds of 3D Gaussians.
+ */
+
 #include "gs.h"
 
 #include <thrust/device_vector.h>

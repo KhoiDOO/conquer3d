@@ -1,3 +1,8 @@
+/**
+ * @file mtg.cu
+ * @brief CUDA kernel implementations for Marching Tetrahedra on structured cubic grids (6-tet decomposition).
+ */
+
 #include "mtg.h"
 #include "../maths/maths.h"
 #include <cuda_runtime.h>

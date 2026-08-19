@@ -1,3 +1,8 @@
+/**
+ * @file volint.cu
+ * @brief CUDA kernel implementations for real-time single-view TSDF volumetric depth/color integration.
+ */
+
 #include "volint.h"
 #include <stdio.h>
 #include <math.h>

@@ -454,16 +454,127 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> build_spa
 }
 
 void bind_ds_grid(py::module_& m) {
-    m.def("create_voxel_grid", &create_voxel_grid, "Creates a structured 3D voxel grid.",
-          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("device_str") = "cuda", py::arg("return_idx_grids") = true);
-    m.def("create_voxel_grid_from_tmesh", &create_voxel_grid_from_tmesh, "Creates a sparse 3D voxel grid strictly around the surface.",
-          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"), py::arg("return_unique_vert_ids") = true, py::arg("pad") = 0, py::arg("return_normals") = false, py::arg("normal_mode") = 0);
-    m.def("compute_grid_normal", &compute_grid_normal, "Computes surface normals for a grid.",
-          py::arg("sdf"), py::arg("grid_vertices"), py::arg("idx_grids"), py::arg("res"));
-    m.def("compute_active_voxels", &compute_active_voxels, "Computes active voxels intersecting the surface",
-          py::arg("voxels"), py::arg("sdf"), py::arg("iso"));
-    m.def("get_active_voxel_ids_from_depth", &get_active_voxel_ids_from_depth_py, "Extracts active voxel IDs from a single depth map.",
-          py::arg("depth_image"), py::arg("c2w_tensor"), py::arg("intrinsics_inv_tensor"), py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("activate_neighbor") = false, py::arg("trunc_margin") = 0.0f);
-    m.def("build_sparse_grid_from_active_voxels", &build_sparse_grid_from_active_voxels, "Builds sparse grid from unique voxel IDs.",
-          py::arg("active_voxel_ids"), py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("return_unique_vert_ids") = true);
+    m.def("create_voxel_grid", &create_voxel_grid,
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"),
+          py::arg("device_str") = "cuda", py::arg("return_idx_grids") = true,
+          R"pbdoc(
+          Creates a dense structured 3D voxel grid.
+
+          Args:
+              grid_min (List[float]): Lower bounding coordinates [x_min, y_min, z_min].
+              grid_max (List[float]): Upper bounding coordinates [x_max, y_max, z_max].
+              res (List[int]): Grid resolution [rx, ry, rz].
+              device_str (str, optional): Target compute device. Defaults to "cuda".
+              return_idx_grids (bool, optional): Return discrete 3D index grids. Defaults to True.
+
+          Returns:
+              Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+                  - grid_vertices (torch.Tensor): (rx*ry*rz, 3) float32 coordinates.
+                  - voxels (torch.Tensor): ((rx-1)*(ry-1)*(rz-1), 8) int64 corner index mapping.
+                  - [idx_grids] (torch.Tensor, optional): (3, rx, ry, rz) int64 index tensor.
+
+          Example:
+              >>> verts, voxels, idx_grids = create_voxel_grid([-1,-1,-1], [1,1,1], [64,64,64])
+          )pbdoc");
+    m.def("create_voxel_grid_from_tmesh", &create_voxel_grid_from_tmesh,
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"),
+          py::arg("return_unique_vert_ids") = true, py::arg("pad") = 0,
+          py::arg("return_normals") = false, py::arg("normal_mode") = 0,
+          R"pbdoc(
+          Creates a memory-efficient sparse 3D voxel grid strictly intersecting or bordering the input triangle mesh.
+
+          Args:
+              grid_min (List[float]): Lower bounding coordinates [x_min, y_min, z_min].
+              grid_max (List[float]): Upper bounding coordinates [x_max, y_max, z_max].
+              res (List[int]): Grid resolution [rx, ry, rz].
+              tmesh (TriangleMesh): Input TriangleMesh GPU structure.
+              return_unique_vert_ids (bool, optional): Return original linear vertex IDs. Defaults to True.
+              pad (int, optional): Voxel layer dilation radius. Defaults to 0.
+              return_normals (bool, optional): Return surface normals at sparse vertices. Defaults to False.
+              normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector). Defaults to 0.
+
+          Returns:
+              Tuple: Sparse grid vertices, remapped voxels, and optional vertex IDs/normals.
+
+          Example:
+              >>> sparse_verts, voxels, vert_ids = create_voxel_grid_from_tmesh([-1,-1,-1], [1,1,1], [128,128,128], tmesh)
+          )pbdoc");
+    m.def("compute_grid_normal", &compute_grid_normal,
+          py::arg("sdf"), py::arg("grid_vertices"), py::arg("idx_grids"), py::arg("res"),
+          R"pbdoc(
+          Computes surface normal vectors on a 3D scalar grid via central finite differences.
+
+          Args:
+              sdf (torch.Tensor): (N,) float32 scalar values on CUDA.
+              grid_vertices (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+              idx_grids (torch.Tensor): (3, rx, ry, rz) int64 index map.
+              res (List[int]): Grid resolution [rx, ry, rz].
+
+          Returns:
+              torch.Tensor: (N, 3) float32 normalized outward unit normal vectors.
+
+          Example:
+              >>> normals = compute_grid_normal(sdf, verts, idx_grids, [64, 64, 64])
+          )pbdoc");
+    m.def("compute_active_voxels", &compute_active_voxels,
+          py::arg("voxels"), py::arg("sdf"), py::arg("iso"),
+          R"pbdoc(
+          Computes boolean active mask for voxels intersecting the zero-crossing isosurface.
+
+          Args:
+              voxels (torch.Tensor): (M, 8) int32/int64 voxel corner indices.
+              sdf (torch.Tensor): (N,) float32 scalar field values.
+              iso (float): Isosurface extraction threshold.
+
+          Returns:
+              torch.Tensor: (M,) bool mask where True indicates voxel has sign changes.
+
+          Example:
+              >>> active_mask = compute_active_voxels(voxels, sdf, iso=0.0)
+          )pbdoc");
+    m.def("get_active_voxel_ids_from_depth", &get_active_voxel_ids_from_depth_py,
+          py::arg("depth_image"), py::arg("c2w_tensor"), py::arg("intrinsics_inv_tensor"),
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"),
+          py::arg("activate_neighbor") = false, py::arg("trunc_margin") = 0.0f,
+          R"pbdoc(
+          Extracts active voxel IDs by unprojecting an RGB-D depth map on GPU.
+
+          Args:
+              depth_image (torch.Tensor): (H, W) float32 depth map in meters on CUDA.
+              c2w_tensor (torch.Tensor): (4, 4) float32 Camera-to-World matrix.
+              intrinsics_inv_tensor (torch.Tensor): (3, 3) float32 inverse intrinsics matrix.
+              grid_min (List[float]): Lower grid extents [x_min, y_min, z_min].
+              grid_max (List[float]): Upper grid extents [x_max, y_max, z_max].
+              res (List[int]): Grid resolution [rx, ry, rz].
+              activate_neighbor (bool, optional): Dilation into adjacent voxel cells. Defaults to False.
+              trunc_margin (float, optional): Truncation band thickness in meters. Defaults to 0.0.
+
+          Returns:
+              torch.Tensor: (K,) int64 sorted unique active voxel IDs.
+
+          Example:
+              >>> active_vids = get_active_voxel_ids_from_depth(depth, c2w, k_inv, [-1,-1,-1], [1,1,1], [128,128,128])
+          )pbdoc");
+    m.def("build_sparse_grid_from_active_voxels", &build_sparse_grid_from_active_voxels,
+          py::arg("active_voxel_ids"), py::arg("grid_min"), py::arg("grid_max"), py::arg("res"),
+          py::arg("return_unique_vert_ids") = true,
+          R"pbdoc(
+          Reconstructs sparse grid vertices and re-indexed voxel connectivity from 1D active voxel IDs.
+
+          Args:
+              active_voxel_ids (torch.Tensor): (K,) int64 active voxel cell IDs.
+              grid_min (List[float]): Lower bounding coordinates [x_min, y_min, z_min].
+              grid_max (List[float]): Upper bounding coordinates [x_max, y_max, z_max].
+              res (List[int]): Grid resolution [rx, ry, rz].
+              return_unique_vert_ids (bool, optional): Return original linear vertex IDs. Defaults to True.
+
+          Returns:
+              Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+                  - sparse_grid_vertices (torch.Tensor): (V_sparse, 3) float32 coordinates.
+                  - remapped_voxels (torch.Tensor): (K, 8) int32 re-indexed voxel corners.
+                  - [unique_vert_ids] (torch.Tensor, optional): (V_sparse,) int64 original vertex IDs.
+
+          Example:
+              >>> s_verts, s_voxels, u_vids = build_sparse_grid_from_active_voxels(vids, [-1,-1,-1], [1,1,1], [128,128,128])
+          )pbdoc");
 }

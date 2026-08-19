@@ -1,19 +1,38 @@
+"""Batch collation utilities for sparse 3D tensor datasets.
+
+This module provides collation routines formatting discrete voxel coordinates
+into `(batch_idx, x, y, z)` 4D coordinates compatible with sparse convolution engines
+such as SpConv, TorchSparse, and MinkowskiEngine.
+"""
+
+from typing import List, Tuple, Any
 import torch
 
-def sparse_collate_fn(batch):
-    """
-    Collate function for sparse tensor dataloaders (e.g., MinkowskiEngine, spconv, torchsparse).
-    Takes a batch of samples where each sample is (idx_grids, features, ...).
-    Appends the batch index to the idx_grids to create (batch_idx, x, y, z).
+
+def sparse_collate_fn(
+    batch: List[Tuple[torch.Tensor, torch.Tensor, Any]]
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Collates variable-sized discrete grid coordinates and features into a unified sparse batch.
     
+    Prepends the batch sample index to each coordinate row to construct the 4D `(batch_idx, x, y, z)` layout.
+
     Args:
-        batch (list): A list of tuples (idx_grids, features, label)
+        batch (List[Tuple[torch.Tensor, torch.Tensor, Any]]): List of samples where each element
+            is a tuple `(idx_grids, features, label)`.
+            - `idx_grids`: Int tensor of shape `(N_i, 3)`.
+            - `features`: Feature tensor of shape `(N_i, C)`.
+            - `label`: Scalar or tensor label.
         
     Returns:
-        tuple: (batched_coords, batched_features, batched_labels)
-            batched_coords (torch.Tensor): Shape (Total_N, 4)
-            batched_features (torch.Tensor): Shape (Total_N, ...)
-            batched_labels (torch.Tensor): Shape (Batch_Size,)
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            - batched_coords (torch.Tensor): Int32 coordinate tensor of shape `(Total_N, 4)` in `(batch_idx, x, y, z)`.
+            - batched_features (torch.Tensor): Concatenated feature tensor of shape `(Total_N, C)`.
+            - batched_labels (torch.Tensor): Batched label tensor of shape `(Batch_Size,)`.
+
+    Example:
+        >>> from torch.utils.data import DataLoader
+        >>> from conquer3d.data.collate import sparse_collate_fn
+        >>> loader = DataLoader(dataset, batch_size=8, collate_fn=sparse_collate_fn)
     """
     batched_coords = []
     batched_features = []

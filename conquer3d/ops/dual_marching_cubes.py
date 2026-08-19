@@ -1,8 +1,33 @@
+"""GPU-accelerated Differentiable Dual Marching Cubes (DMC).
+
+Dual Marching Cubes (Schaefer & Warren, 2004) combines the sharp feature preservation
+and clean quad topology of Dual Contouring with the strict 2-manifold topological guarantees
+of Marching Cubes. Unlike standard Dual Contouring which generates at most 1 dual vertex
+per voxel cell (causing topological pinch points and self-intersections when multiple surface
+sheets intersect a cell), Dual Marching Cubes generates multiple dual vertices per cell—one
+for each independent MC contour—and projects them onto the exact trilinear zero-isosurface
+using Newton-Raphson level-set iterations.
+
+Example:
+    >>> import torch
+    >>> from conquer3d.ops import dual_marching_cubes
+    >>> # Extract strictly 2-manifold isosurface mesh
+    >>> verts, faces = dual_marching_cubes(grid_vertices, voxels, sdf, iso=0.0, project_iters=5)
+"""
+
+from typing import Tuple, Optional, Union
 import torch
-from typing import Tuple, Optional
 from .. import _C
 
+
 class DiffDualMarchingCubes(torch.autograd.Function):
+    """PyTorch autograd Function for Differentiable Dual Marching Cubes on CUDA.
+
+    Executes forward surface extraction with independent cell contours and Newton-Raphson
+    level-set projections, with analytical backward gradient propagation with respect to
+    input scalar SDF values and vertex colors.
+    """
+
     @staticmethod
     def forward(
         ctx,
@@ -14,7 +39,33 @@ class DiffDualMarchingCubes(torch.autograd.Function):
         quad_split: bool = True,
         project_iters: int = 5
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-        # Ensure inputs are CUDA and contiguous
+        """Forward pass extracting manifold dual vertices and faces.
+
+        Args:
+            ctx: PyTorch autograd context object.
+            grid_vertices (torch.Tensor): Float32 tensor of shape `(N, 3)` containing 3D grid
+                vertex coordinates on CUDA.
+            voxels (torch.Tensor): Int32 tensor of shape `(M, 8)` containing 8 corner vertex
+                indices per voxel cell in counter-clockwise convention on CUDA.
+            sdf (torch.Tensor): Float32 tensor of shape `(N,)` containing scalar SDF values on CUDA.
+            colors (torch.Tensor, optional): Float32 tensor of shape `(N, C)` containing vertex
+                colors or feature embeddings on CUDA. Defaults to None.
+            iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
+            quad_split (bool, optional): If True, splits dual quadrilaterals into 2 triangles
+                using optimal Delaunay angle criteria; if False, returns quads `(Q, 4)`.
+                Defaults to True.
+            project_iters (int, optional): Number of Newton-Raphson iterations to project dual
+                vertices onto the exact trilinear zero-isosurface. Defaults to 5.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+                - extracted_vertices: Float32 tensor of shape `(V, 3)` with surface vertex positions.
+                - extracted_faces: Int32 tensor of shape `(F, 3)` (triangles) or `(Q, 4)` (quads).
+                - extracted_colors: Float32 tensor of shape `(V, C)` or None if colors was None.
+
+        Raises:
+            RuntimeError: If `grid_vertices`, `voxels`, or `sdf` are not on CUDA.
+        """
         if not grid_vertices.is_cuda or not voxels.is_cuda or not sdf.is_cuda:
             raise RuntimeError("dual_marching_cubes requires CUDA tensors")
 
@@ -38,11 +89,22 @@ class DiffDualMarchingCubes(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_verts, grad_faces, grad_colors):
+        """Backward pass evaluating analytical adjoint gradients w.r.t. input SDF and colors.
+
+        Args:
+            ctx: PyTorch autograd context object containing saved forward tensors.
+            grad_verts (torch.Tensor): Float32 tensor of shape `(V, 3)` containing upstream vertex gradients.
+            grad_faces (torch.Tensor): Upstream face gradients (unused, non-differentiable discrete topology).
+            grad_colors (torch.Tensor, optional): Float32 tensor of shape `(V, C)` containing upstream color gradients.
+
+        Returns:
+            Tuple[None, None, torch.Tensor, Optional[torch.Tensor], None, None, None]:
+                Gradients corresponding to (grid_vertices, voxels, sdf, colors, iso, quad_split, project_iters).
+        """
         grid_vertices, voxels, sdf, colors = ctx.saved_tensors
         iso = ctx.iso
         project_iters = ctx.project_iters
 
-        # If no gradients needed
         if not sdf.requires_grad and (colors is None or not colors.requires_grad):
             return None, None, None, None, None, None, None
 
@@ -59,6 +121,7 @@ class DiffDualMarchingCubes(torch.autograd.Function):
 
         return None, None, grad_sdf, grad_colors_in, None, None, None
 
+
 def dual_marching_cubes(
     grid_vertices: torch.Tensor,
     voxels: torch.Tensor,
@@ -67,31 +130,46 @@ def dual_marching_cubes(
     iso: float = 0.0,
     quad_split: bool = True,
     project_iters: int = 5
-) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-    """
-    Extracts a 2-manifold surface mesh from a voxel grid and scalar field using
-    Differentiable Dual Marching Cubes (DMC).
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """Extracts a strictly 2-manifold surface mesh from a voxel grid using Differentiable Dual Marching Cubes.
 
-    Unlike standard Dual Contouring which produces at most 1 dual vertex per voxel cell,
-    Dual Marching Cubes extracts multiple dual vertices per cell (one per independent MC contour),
-    guaranteeing strictly 2-manifold surfaces without topological pinch points or self-intersections.
+    Unlike standard Dual Contouring which generates at most 1 dual vertex per voxel cell,
+    Dual Marching Cubes decomposes each voxel cell into independent contours using asymptotic
+    deciders and extracts multiple dual vertices per cell, eliminating topological pinch points
+    and guaranteeing manifold surfaces. Dual vertices are iteratively projected onto the exact
+    trilinear level set via Newton-Raphson optimization.
 
     Args:
-        grid_vertices (torch.Tensor): (N, 3) float32 corner coordinates.
-        voxels (torch.Tensor): (M, 8) int32 corner indices in CCW convention.
-        sdf (torch.Tensor): (N,) float32 scalar field.
-        colors (torch.Tensor, optional): (N, C) float32 vertex feature colors.
-        iso (float, optional): Isolevel threshold (default: 0.0).
-        quad_split (bool, optional): If True (default), splits each quadrilateral into 2
-            triangles with optimal Delaunay angle criterion; if False, returns (Q, 4) quad mesh.
-        project_iters (int, optional): Number of Newton-Raphson level-set projection iterations (default: 5).
+        grid_vertices (torch.Tensor): Float32 tensor of shape `(N, 3)` containing grid vertex
+            coordinates on CUDA. Must be contiguous.
+        voxels (torch.Tensor): Int32 tensor of shape `(M, 8)` containing 8 corner vertex indices
+            per voxel cell on CUDA.
+        sdf (torch.Tensor): Float32 tensor of shape `(N,)` containing scalar SDF values on CUDA.
+        colors (torch.Tensor, optional): Float32 tensor of shape `(N, C)` containing vertex feature
+            colors on CUDA. Defaults to None.
+        iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
+        quad_split (bool, optional): If True, splits dual quadrilaterals into 2 triangles using
+            the optimal Delaunay angle criterion; if False, returns quads of shape `(Q, 4)`.
+            Defaults to True.
+        project_iters (int, optional): Number of Newton-Raphson level-set projection iterations.
+            Defaults to 5.
 
     Returns:
-        Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-            - extracted_vertices (torch.Tensor): (V, 3) float32 surface vertex positions.
-            - extracted_faces (torch.Tensor): (F, 3) int32 triangles if quad_split=True,
-                                             or (Q, 4) int32 quads if quad_split=False.
-            - extracted_colors (torch.Tensor | None): (V, C) float32 interpolated colors.
+        Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+            - If `colors` is None: Returns `(vertices, faces)`.
+            - If `colors` is provided: Returns `(vertices, faces, colors)`.
+            - `vertices`: Float32 tensor of shape `(V, 3)` on CUDA.
+            - `faces`: Int32 tensor of shape `(F, 3)` for triangles or `(Q, 4)` for quads on CUDA.
+            - `colors`: Float32 tensor of shape `(V, C)` on CUDA.
+
+    Raises:
+        RuntimeError: If inputs are not on CUDA or not contiguous.
+
+    Example:
+        >>> import torch
+        >>> from conquer3d.ops import dual_marching_cubes
+        >>> # Extract strictly 2-manifold surface mesh
+        >>> verts, faces = dual_marching_cubes(grid_vertices, voxels, sdf, iso=0.0)
     """
     grid_vertices = grid_vertices.contiguous().float()
     voxels = voxels.contiguous().int()
@@ -112,6 +190,6 @@ def dual_marching_cubes(
         return verts, faces
     return verts, faces, out_colors
 
-# Alias
-dmc = dual_marching_cubes
 
+# Public alias
+dmc = dual_marching_cubes

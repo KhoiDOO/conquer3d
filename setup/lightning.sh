@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Setting up Lightning Studio default conda environment for geocutool..."
+echo "Setting up Lightning Studio default conda environment for conquer3d..."
 
 # 1. Install correct C++ compilers, CUDA toolkit, and Google sparsehash headers
 echo "Installing compilers, sparsehash, and CUDA toolkit..."
@@ -27,9 +27,9 @@ echo "Installing visualization and meshing utilities..."
 pip install plotly open3d jupyter trimesh point-cloud-utils pymeshlab kiui einops
 pip install rectified-flow-pytorch
 
-# 6. Install geocutool itself
-echo "Installing geocutool..."
+# 6. Install conquer3d itself
+echo "Installing conquer3d..."
 export FORCE_CUDA=1
-pip install git+https://github.com/KhoiDOO/geocutool.git --no-build-isolation
+pip install git+https://github.com/KhoiDOO/conquer3d.git --no-build-isolation
 
 echo "Lightning Studio setup complete! Environment is ready."

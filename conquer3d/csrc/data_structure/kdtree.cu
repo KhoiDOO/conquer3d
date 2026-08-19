@@ -1,3 +1,8 @@
+/**
+ * @file kdtree.cu
+ * @brief CUDA kernel implementations for complete balanced KD-Tree construction and non-recursive k-NN traversal.
+ */
+
 #include "kdtree.h"
 
 #include <thrust/device_vector.h>

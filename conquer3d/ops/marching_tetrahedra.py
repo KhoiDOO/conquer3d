@@ -1,5 +1,12 @@
-import torch
+"""Differentiable Marching Tetrahedra (MT) algorithm for 3D isosurface extraction.
+
+This module provides GPU CUDA-accelerated and pure PyTorch implementations of
+the Marching Tetrahedra algorithm for unstructured tetrahedral meshes, supporting
+analytical autograd backward gradients into SDFs and vertex color features.
+"""
+
 from typing import Tuple, Optional, Union
+import torch
 
 # Try to import compiled C++ / CUDA extension
 try:
@@ -32,8 +39,16 @@ num_triangles_table = torch.tensor([0, 1, 1, 2, 1, 2, 2, 1, 1, 2, 2, 1, 2, 1, 1,
 base_tet_edges = torch.tensor([0, 1, 0, 2, 0, 3, 1, 2, 1, 3, 2, 3], dtype=torch.long)
 v_id = torch.pow(2, torch.arange(4, dtype=torch.long))
 
-def _sort_edges(edges):
-    """sort last dimension of edges of shape (E, 2)"""
+
+def _sort_edges(edges: torch.Tensor) -> torch.Tensor:
+    """Sorts each row of edge index pairs `(E, 2)` so that `v_min <= v_max`.
+
+    Args:
+        edges (torch.Tensor): Int64 tensor of shape `(E, 2)` containing edge endpoint indices.
+
+    Returns:
+        torch.Tensor: Canonical sorted edge tensor of shape `(E, 2)`.
+    """
     with torch.no_grad():
         order = (edges[:, 0] > edges[:, 1]).long()
         order = order.unsqueeze(dim=1)
@@ -45,9 +60,8 @@ def _sort_edges(edges):
 
 
 class DiffMarchingTetrahedra(torch.autograd.Function):
-    """
-    Differentiable Marching Tetrahedra autograd Function with analytical CUDA backward pass.
-    """
+    """Differentiable Marching Tetrahedra autograd Function with analytical CUDA backward pass."""
+
     @staticmethod
     def forward(
         ctx,
@@ -56,7 +70,23 @@ class DiffMarchingTetrahedra(torch.autograd.Function):
         sdfs: torch.Tensor,
         colors: Optional[torch.Tensor] = None,
         iso: float = 0.0
-    ):
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        """Forward pass extracting isosurface mesh and tracking active edges for backward pass.
+
+        Args:
+            ctx: Autograd context.
+            vertices (torch.Tensor): Float32 tensor of shape `(N, 3)` with tetrahedron vertex coordinates.
+            tets (torch.Tensor): Int32 tensor of shape `(T, 4)` with tetrahedron corner indices.
+            sdfs (torch.Tensor): Float32 tensor of shape `(N,)` with scalar SDF values at vertices.
+            colors (torch.Tensor, optional): Float32 tensor of shape `(N, C)` with vertex features/colors.
+            iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+                - out_vertices (torch.Tensor): (V, 3) float32 extracted surface vertices.
+                - out_triangles (torch.Tensor): (F, 3) int32 triangle face indices.
+                - out_colors (torch.Tensor | None): (V, C) float32 interpolated vertex colors.
+        """
         vertices = vertices.contiguous()
         tets = tets.contiguous().to(torch.int32)
         sdfs = sdfs.contiguous()
@@ -85,6 +115,7 @@ class DiffMarchingTetrahedra(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_out_vertices, grad_out_triangles, grad_out_colors):
+        """Analytical backward pass evaluating $\\partial L / \\partial sdfs$ and $\\partial L / \\partial colors$."""
         if ctx.has_colors:
             unique_edges, vertices, sdfs, colors = ctx.saved_tensors
         else:
@@ -114,13 +145,19 @@ class DiffMarchingTetrahedra(torch.autograd.Function):
                 iso
             )
 
+        # Gradients matching forward args: vertices, tets, sdfs, colors, iso
         return None, None, grad_sdfs, grad_colors, None
 
 
-def _marching_tetrahedra_pure_torch(vertices, tets, sdfs, colors=None, return_tet_idx=False, iso=0.0):
-    """
-    Pure-PyTorch differentiable reference implementation of Marching Tetrahedra.
-    """
+def _marching_tetrahedra_pure_torch(
+    vertices: torch.Tensor,
+    tets: torch.Tensor,
+    sdfs: torch.Tensor,
+    colors: Optional[torch.Tensor] = None,
+    return_tet_idx: bool = False,
+    iso: float = 0.0
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """Pure-PyTorch reference implementation of Marching Tetrahedra."""
     device = vertices.device
     with torch.no_grad():
         occ_n = sdfs < iso
@@ -204,22 +241,29 @@ def marching_tetrahedra(
     iso: float = 0.0,
     use_cuda: Optional[bool] = None
 ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
-    """
-    Extracts a triangulated isosurface from an arbitrary tetrahedral mesh using Marching Tetrahedra.
+    """Extracts a triangulated isosurface from an arbitrary tetrahedral mesh using Marching Tetrahedra.
     
     Automatically leverages the high-performance CUDA backend when running on GPU tensors.
     
     Args:
-        vertices (torch.Tensor): (N, 3) tensor of 3D vertex positions.
-        tets (torch.Tensor): (T, 4) tensor of tetrahedron vertex indices.
-        sdfs (torch.Tensor): (N,) tensor of scalar/SDF values at each vertex.
-        colors (torch.Tensor, optional): (N, C) optional tensor of vertex features/colors. Defaults to None.
+        vertices (torch.Tensor): `(N, 3)` float32 tensor of 3D vertex positions.
+        tets (torch.Tensor): `(T, 4)` int32/int64 tensor of tetrahedron vertex indices.
+        sdfs (torch.Tensor): `(N,)` float32 tensor of scalar/SDF values at each vertex.
+        colors (torch.Tensor, optional): `(N, C)` float32 tensor of vertex features/colors. Defaults to None.
         return_tet_idx (bool, optional): If True, returns original tetrahedron indices for each triangle face.
+            Defaults to False.
         iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
         use_cuda (bool, optional): Force CUDA or pure PyTorch backend. Defaults to auto-detect.
 
     Returns:
-        tuple: (verts, faces) or (verts, faces, verts_colors)
+        Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+            - If `colors is None`: `(verts, faces)`
+            - If `colors is not None`: `(verts, faces, verts_colors)`
+            - If `return_tet_idx=True`: Includes `tet_idx` in the returned tuple.
+
+    Example:
+        >>> from conquer3d.ops import marching_tetrahedra
+        >>> verts, faces = marching_tetrahedra(vertices, tets, sdfs, iso=0.0)
     """
     should_use_cuda = (use_cuda if use_cuda is not None 
                        else (_CUDA_AVAILABLE and vertices.is_cuda and not return_tet_idx))

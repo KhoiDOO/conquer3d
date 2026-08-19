@@ -30,7 +30,7 @@ void bind_ops_flood_fill(py::module_& m);
 void bind_ops_volint(py::module_& m);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.doc() = "Geocutool Python bindings";
+    m.doc() = "Conquer3D Python bindings";
 
     bind_primitive_gs(m);
     bind_primitive_pgs(m);

@@ -1,3 +1,8 @@
+/**
+ * @file gs.h
+ * @brief GPU mathematical kernels and BVH intersection dispatchers for 3D Gaussian Splatting (3DGS).
+ */
+
 #ifndef GS_H
 #define GS_H
 
@@ -12,6 +17,9 @@
 
 namespace gs
 {
+    /**
+     * @brief Computes inverse covariance matrices for 3D Gaussians on GPU.
+     */
     __host__ void compute_gs_covi(
         const uint32_t num_gaussians,
         const float4 *__restrict__ rotations,
@@ -21,6 +29,9 @@ namespace gs
         const uint32_t level,
         float *__restrict__ covis);
 
+    /**
+     * @brief Evaluates Mahalanobis radii for 3D Gaussians using k-NN KD-Tree on GPU.
+     */
     __host__ void solve_gs_neighbor_mahalanobis_radius(
         const uint32_t num_gaussians,
         const float3 *__restrict__ means,
@@ -31,6 +42,9 @@ namespace gs
 
 namespace gs_aabb
 {
+    /**
+     * @brief Computes tight 3D bounding boxes for confidence ellipsoids of 3D Gaussians.
+     */
     __host__ void compute_gs_aabb(
         const uint32_t num_gaussians,
         const float3 *__restrict__ means,
@@ -44,6 +58,9 @@ namespace gs_aabb
         float3 *__restrict__ aabb_max,
         float3 *__restrict__ contact_points);
 
+    /**
+     * @brief BVH-accelerated Gaussian-voxel intersection queries on GPU.
+     */
     __host__ void query_gs_voxel_pair_intersection_bvh(
         const uint32_t num_voxels,
         const uint32_t num_gaussians,
@@ -72,6 +89,9 @@ namespace gs_aabb
         int64_t *__restrict__ global_counter,
         const int64_t max_capacity);
 
+    /**
+     * @brief BVH-accelerated Gaussian-edge segment pair intersection queries.
+     */
     __host__ void query_gs_edge_pair_intersection_bvh(
         const uint32_t num_edges,
         const uint32_t num_gaussians,
@@ -91,6 +111,9 @@ namespace gs_aabb
         int64_t *__restrict__ global_counter,
         const int64_t max_capacity);
 
+    /**
+     * @brief BVH-accelerated Gaussian-edge segment proximity and density queries.
+     */
     __host__ void query_gs_edge_intersection_bvh(
         const uint32_t num_edges,
         const uint32_t num_gaussians,

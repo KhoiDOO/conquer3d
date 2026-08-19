@@ -1,3 +1,9 @@
+/**
+ * @file pgs_math.cuh
+ * @brief High-performance CUDA device inline mathematical routines for Periodic Gaussian Splatting (PGS).
+ * @details Implements planar disc segment intersections and pairwise tangency contact radius solvers.
+ */
+
 #ifndef PGS_MATH_CUH
 #define PGS_MATH_CUH
 
@@ -8,6 +14,19 @@
 
 namespace pgs
 {
+    /**
+     * @brief Tests line segment intersection against a Periodic Gaussian disc in device register space.
+     * 
+     * @param[in]  mean          Gaussian centroid coordinate $\mu$.
+     * @param[in]  normal        Principal normal axis $n$ defining the tangent plane.
+     * @param[in]  covi          Upper-triangular packed inverse covariance array $\Sigma^{-1}$.
+     * @param[in]  iso           Mahalanobis radius squared threshold $r^2$.
+     * @param[in]  segment_start Segment start position $P_0$.
+     * @param[in]  segment_end   Segment end position $P_1$.
+     * @param[out] t_hit         Parametric hit location $t \in [0, 1]$ along segment.
+     * 
+     * @return bool True if the segment pierces the planar Gaussian disc within the Mahalanobis radius.
+     */
     __device__ __forceinline__ bool test_pgs_segment(
         const float3 &mean,
         const float3 &normal,
@@ -42,6 +61,21 @@ namespace pgs
         return false;
     }
 
+    /**
+     * @brief Solves the exact pairwise tangency contact radius between two adjacent planar Gaussians.
+     * 
+     * @details Finds the intersection line of two tangent planes $n_i, n_j$ and minimizes the
+     * Mahalanobis distance along the line to find the critical contact isosurface radius $r^2$.
+     * 
+     * @param[in]  mean            First Gaussian centroid $\mu_i$.
+     * @param[in]  normal          First Gaussian normal axis $n_i$.
+     * @param[in]  covi            First Gaussian inverse covariance $\Sigma_i^{-1}$.
+     * @param[in]  neighbor_mean   Second Gaussian centroid $\mu_j$.
+     * @param[in]  neighbor_normal Second Gaussian normal axis $n_j$.
+     * @param[out] out_iso         Computed tangency radius squared.
+     * 
+     * @return bool True if planes intersect non-parallelly and a valid tangency radius exists.
+     */
     __device__ __forceinline__ bool solve_pgs_pair_tangency_radius(
         const float3 &mean,
         const float3 &normal,

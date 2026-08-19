@@ -108,23 +108,53 @@ void marching_tetrahedra_backward_wrapper(
 }
 
 void bind_ops_mt(py::module_& m) {
-    m.def("marching_tetrahedra", &marching_tetrahedra_wrapper, "CUDA Marching Tetrahedra",
-          py::arg("grid_vertices"),
-          py::arg("tets"),
-          py::arg("vert_values"),
-          py::arg("grid_normals") = std::nullopt,
-          py::arg("grid_colors") = std::nullopt,
-          py::arg("iso") = 0.0f,
-          py::arg("return_unique_edges") = false);
+    m.def("marching_tetrahedra", &marching_tetrahedra_wrapper,
+          py::arg("grid_vertices"), py::arg("tets"), py::arg("vert_values"),
+          py::arg("grid_normals") = std::nullopt, py::arg("grid_colors") = std::nullopt,
+          py::arg("iso") = 0.0f, py::arg("return_unique_edges") = false,
+          R"pbdoc(
+          GPU-accelerated Marching Tetrahedra algorithm for unstructured tetrahedral meshes (Treece et al. 1999).
 
-    m.def("marching_tetrahedra_backward", &marching_tetrahedra_backward_wrapper, "CUDA Marching Tetrahedra Backward",
-          py::arg("unique_edges"),
-          py::arg("grid_vertices"),
-          py::arg("grid_colors"),
-          py::arg("values"),
-          py::arg("adj_verts"),
-          py::arg("adj_colors"),
-          py::arg("adj_values"),
-          py::arg("adj_grid_colors"),
-          py::arg("iso") = 0.0f);
+          Args:
+              grid_vertices (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+              tets (torch.Tensor): (T, 4) int32 tetrahedron corner indices on CUDA.
+              vert_values (torch.Tensor): (N,) float32 scalar SDF values on CUDA.
+              grid_normals (torch.Tensor, optional): (N, 3) float32 vertex normals on CUDA. Defaults to None.
+              grid_colors (torch.Tensor, optional): (N, 3) float32 vertex colors on CUDA. Defaults to None.
+              iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
+              return_unique_edges (bool, optional): Track unique edges for autograd. Defaults to False.
+
+          Returns:
+              Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
+                  - vertices (torch.Tensor): (V_out, 3) float32 extracted surface coordinates.
+                  - triangles (torch.Tensor): (F, 3) int32 triangle face indices.
+                  - [normals] (torch.Tensor, optional): (V_out, 3) float32 interpolated normals.
+                  - [colors] (torch.Tensor, optional): (V_out, 3) float32 interpolated colors.
+                  - [unique_edges] (torch.Tensor, optional): (V_out, 2) int64 unique tet edge indices.
+
+          Example:
+              >>> import torch
+              >>> from conquer3d._C import marching_tetrahedra
+              >>> verts, tris, _, _, _ = marching_tetrahedra(grid_verts, tets, sdf, iso=0.0)
+          )pbdoc");
+    m.def("marching_tetrahedra_backward", &marching_tetrahedra_backward_wrapper,
+          py::arg("unique_edges"), py::arg("grid_vertices"), py::arg("grid_colors"), py::arg("values"),
+          py::arg("adj_verts"), py::arg("adj_colors"), py::arg("adj_values"), py::arg("adj_grid_colors"), py::arg("iso") = 0.0f,
+          R"pbdoc(
+          Analytical backward gradient propagation for Marching Tetrahedra on GPU.
+
+          Args:
+              unique_edges (torch.Tensor): (V_out, 2) int64 unique edge indices.
+              grid_vertices (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+              grid_colors (torch.Tensor, optional): (N, 3) float32 colors on CUDA.
+              values (torch.Tensor): (N,) float32 scalar values on CUDA.
+              adj_verts (torch.Tensor): (V_out, 3) float32 upstream vertex gradients.
+              adj_colors (torch.Tensor, optional): (V_out, 3) float32 upstream color gradients.
+              adj_values (torch.Tensor): (N,) float32 scalar field gradient accumulator on CUDA.
+              adj_grid_colors (torch.Tensor, optional): (N, 3) float32 color gradient accumulator on CUDA.
+              iso (float, optional): Isosurface threshold. Defaults to 0.0.
+
+          Example:
+              >>> marching_tetrahedra_backward(u_edges, g_verts, g_colors, vals, adj_verts, adj_colors, adj_vals, adj_g_colors, 0.0)
+          )pbdoc");
 }

@@ -1,3 +1,10 @@
+"""Digit3D: 3D MNIST digit mesh dataset and point cloud generators.
+
+This module provides dataset loaders for 3D MNIST digit meshes, supporting
+on-the-fly zip extraction, surface point cloud sampling, and multi-modal image pairing.
+"""
+
+from typing import Tuple, Optional, Callable, Union, Any
 import os
 import zipfile
 import io
@@ -8,11 +15,40 @@ import torchvision.transforms.functional as TF
 
 from .base_mesh import BaseMeshDataset
 
+
 class Digit3D(BaseMeshDataset):
+    """Digit3D Mesh Dataset containing 3D MNIST digits.
+
+    Attributes:
+        root (str): Root cache directory path.
+        train (bool): If True, loads training split; if False, test split.
+        zip_path (str): File path to the zip archive.
+        cached (bool): If True, caches parsed OBJ files in memory.
+        return_img (bool): If True, also loads and returns the paired 2D digit image.
     """
-    Digit3D Mesh Dataset containing 3D MNIST digits.
-    """
-    def __init__(self, root: str = "~/.conquer3d/", train: bool = True, transform=None, download: bool = False, cached: bool = False, return_img: bool = False):
+
+    def __init__(
+        self,
+        root: str = "~/.conquer3d/",
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        download: bool = False,
+        cached: bool = False,
+        return_img: bool = False
+    ) -> None:
+        """Initializes the Digit3D dataset instance.
+
+        Args:
+            root (str, optional): Root folder for caching dataset archive. Defaults to `"~/.conquer3d/"`.
+            train (bool, optional): Whether to load train or test split. Defaults to True.
+            transform (Callable, optional): Geometric transform applied to (vertices, faces). Defaults to None.
+            download (bool, optional): Automatically download dataset if missing. Defaults to False.
+            cached (bool, optional): In-memory sample cache. Defaults to False.
+            return_img (bool, optional): Return paired 2D image tensor. Defaults to False.
+
+        Raises:
+            RuntimeError: If dataset archive is not found and `download=False`.
+        """
         root = os.path.expanduser(root)
         super().__init__(root, transform)
         self.train = train
@@ -21,6 +57,7 @@ class Digit3D(BaseMeshDataset):
         self.cached = cached
         self.return_img = return_img
         self._cache = {}
+        self._zip = None
         
         if download:
             self.download()
@@ -31,7 +68,8 @@ class Digit3D(BaseMeshDataset):
         with zipfile.ZipFile(self.zip_path, 'r') as z:
             self.all_files = [f for f in z.namelist() if f.startswith(self.split_dir) and f.endswith(".obj")]
 
-    def download(self):
+    def download(self) -> None:
+        """Downloads the Digit3D dataset archive via Google Drive if not cached locally."""
         if os.path.exists(self.zip_path):
             return
         os.makedirs(self.root, exist_ok=True)
@@ -44,9 +82,14 @@ class Digit3D(BaseMeshDataset):
         gdown.download(url, self.zip_path, quiet=False)
 
     def __len__(self) -> int:
+        """int: Total number of digit mesh samples."""
         return len(self.all_files)
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx: int) -> Union[Tuple[torch.Tensor, torch.Tensor, int], Tuple[torch.Tensor, torch.Tensor, int, torch.Tensor]]:
+        """Loads and returns 3D mesh vertices, faces, integer class label, and optional 2D image."""
+        if self._zip is None:
+            self._zip = zipfile.ZipFile(self.zip_path, 'r')
+
         if self.cached and idx in self._cache:
             cached_data = self._cache[idx]
             if self.return_img:
@@ -59,21 +102,17 @@ class Digit3D(BaseMeshDataset):
                 if self.transform:
                     vertices_t, faces_t = self.transform(vertices_t.clone(), faces_t.clone())
                 return vertices_t, faces_t, label
-            
-        f_path = self.all_files[idx]
-        basename = os.path.basename(f_path)
-        label = int(basename.split("_")[0])
-        
-        # Read directly from zip stream to avoid file descriptor and extraction I/O overhead
-        if getattr(self, '_zip', None) is None:
-            self._zip = zipfile.ZipFile(self.zip_path, 'r')
-            
-        with self._zip.open(f_path, 'r') as f:
-            content = f.read().decode('utf-8')
                 
+        f_path = self.all_files[idx]
+        label = int(os.path.basename(os.path.dirname(f_path)))
+        
+        with self._zip.open(f_path, 'r') as f_obj:
+            content = f_obj.read().decode('utf-8')
+            
         vertices = []
         faces = []
         for line in content.splitlines():
+            line = line.strip()
             if line.startswith("v "):
                 parts = line.split()
                 vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
@@ -108,33 +147,43 @@ class Digit3D(BaseMeshDataset):
             return vertices_t, faces_t, label, img_t
         return vertices_t, faces_t, label
 
+
 class PointDigit3D(Digit3D):
+    """Digit3D Dataset converting 3D digit meshes into surface-sampled point clouds.
+
+    Attributes:
+        num_points (int): Number of surface points to sample uniformly per mesh.
     """
-    Digit3D Dataset that constructs a point cloud by sampling on the mesh.
-    """
-    def __init__(self, root: str = "~/.conquer3d/", train: bool = True, transform=None, download: bool = False, 
-                 cached: bool = False, num_points: int = 512, return_img: bool = False):
+
+    def __init__(
+        self,
+        root: str = "~/.conquer3d/",
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        download: bool = False, 
+        cached: bool = False,
+        num_points: int = 512,
+        return_img: bool = False
+    ) -> None:
+        """Initializes the PointDigit3D dataset instance."""
         super().__init__(root, train, transform, download, cached=cached, return_img=return_img)
         self.num_points = num_points
         
-    def __getitem__(self, idx: int):
-        # 1. Obtain data from Digit3D
+    def __getitem__(self, idx: int) -> Union[Tuple[torch.Tensor, torch.Tensor, int], Tuple[torch.Tensor, torch.Tensor, int, torch.Tensor]]:
+        """Samples surface point clouds and returns (points, features, label, [image])."""
         if self.return_img:
             vertices, faces, label, img_t = super().__getitem__(idx)
         else:
             vertices, faces, label = super().__getitem__(idx)
 
-        # 2. Construct trimesh object (CPU safe for DataLoader workers)
         mesh = trimesh.Trimesh(vertices=vertices.numpy(), faces=faces.numpy(), process=False)
         
-        # 3. Sample points uniformly over the surface
         points_np, face_indices = trimesh.sample.sample_surface(mesh, self.num_points)
         normals_np = mesh.face_normals[face_indices]
         
         points = torch.tensor(points_np, dtype=torch.float32)
         normals = torch.tensor(normals_np, dtype=torch.float32)
         
-        # 4. Combine into features
         features = torch.cat([points, normals], dim=-1)
         
         if self.return_img:

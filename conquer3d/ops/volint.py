@@ -1,7 +1,14 @@
-import torch
+"""Single-view and stream-based TSDF volumetric integration operations.
+
+This module provides GPU-accelerated volumetric Truncated Signed Distance Function (TSDF)
+and running RGB feature integration for 3D camera reconstruction pipelines.
+"""
+
 from typing import Optional
+import torch
 
 from .._C import single_view_volume_integral as _single_view_volume_integral
+
 
 def single_view_volume_integral(
     grid_vertices: torch.Tensor,
@@ -15,23 +22,35 @@ def single_view_volume_integral(
     trunc_margin: float = 0.04,
     mode: int = 1
 ) -> None:
-    """
-    Executes TSDF Volume Integration for a single RGB-D view in-place.
+    """Executes volumetric TSDF and color integration for a single RGB-D view in-place on CUDA.
+
+    Projects every 3D voxel coordinate into the camera coordinate frame using `extrinsics`
+    and `intrinsics`, evaluates the signed distance along the camera ray against `depth_image`,
+    and updates the running weighted average `sdf`, `weight`, and `color` in-place.
 
     Args:
-        grid_vertices (torch.Tensor): (N, 3) tensor of global grid vertex positions (CUDA, Contiguous).
-        sdf (torch.Tensor): (N,) tensor of TSDF values to be updated in-place (CUDA, Contiguous).
-        weight (torch.Tensor): (N,) tensor of running average weights to be updated in-place (CUDA, Contiguous).
-        depth_image (torch.Tensor): (H, W) tensor of the depth image in meters (CUDA, Contiguous).
-        extrinsics (torch.Tensor): (4, 4) World-to-Camera (w2c) extrinsic matrix.
-        intrinsics (torch.Tensor): (3, 3) Camera intrinsic matrix.
-        color (torch.Tensor, optional): (N, 3) tensor of vertex colors to be updated in-place (CUDA, Contiguous). Defaults to None.
-        color_image (torch.Tensor, optional): (H, W, 3) tensor of the RGB image (CUDA, Contiguous). Defaults to None.
-        trunc_margin (float, optional): Truncation distance for the TSDF in meters. Defaults to 0.04.
-        mode (int, optional): 1 for True Euclidean SDF, 0 for Projective SDF shortcut. Defaults to 1.
+        grid_vertices (torch.Tensor): Float32 tensor of shape `(N, 3)` with 3D grid vertex positions on CUDA.
+        sdf (torch.Tensor): Float32 tensor of shape `(N,)` with running TSDF values updated in-place on CUDA.
+        weight (torch.Tensor): Float32 tensor of shape `(N,)` with running average weights updated in-place on CUDA.
+        depth_image (torch.Tensor): Float32 tensor of shape `(H, W)` with depth values in meters on CUDA.
+        extrinsics (torch.Tensor): Float32 tensor of shape `(4, 4)` with World-to-Camera (W2C) transformation.
+        intrinsics (torch.Tensor): Float32 tensor of shape `(3, 3)` with pinhole camera intrinsic matrix.
+        color (torch.Tensor, optional): Float32 tensor of shape `(N, 3)` with running vertex RGB colors on CUDA.
+            Defaults to None.
+        color_image (torch.Tensor, optional): Float32 tensor of shape `(H, W, 3)` with RGB image on CUDA.
+            Defaults to None.
+        trunc_margin (float, optional): Truncation distance $\\mu$ in meters. Defaults to 0.04.
+        mode (int, optional): Integration mode:
+            - 1: True Euclidean ray distance (default).
+            - 0: Projective z-depth distance.
+
+    Raises:
+        ValueError: If input tensors are not on CUDA or not contiguous.
+
+    Example:
+        >>> from conquer3d.ops import single_view_volume_integral
+        >>> single_view_volume_integral(grid_verts, sdf, weights, depth, w2c, K, trunc_margin=0.04)
     """
-    
-    # Ensure in-place tensors are properly formatted before passing to C++
     if not all(t.is_cuda and t.is_contiguous() for t in [grid_vertices, sdf, weight, depth_image]):
         raise ValueError("grid_vertices, sdf, weight, and depth_image must be contiguous CUDA tensors.")
         

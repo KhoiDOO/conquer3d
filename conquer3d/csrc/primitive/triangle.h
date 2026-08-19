@@ -1,3 +1,8 @@
+/**
+ * @file triangle.h
+ * @brief CUDA device primitives for 3D Triangle geometric tests (Ray-Triangle, Closest Point, Triangle-Triangle, Triangle-Box).
+ */
+
 #ifndef TRIANGLE_H
 #define TRIANGLE_H
 
@@ -6,6 +11,9 @@
 #include "ray.h"
 #include "aabb.h"
 
+/**
+ * @brief 3D Triangle geometric primitive structure with hardware-optimized device methods.
+ */
 struct Triangle {
     float3 v0, v1, v2;
 

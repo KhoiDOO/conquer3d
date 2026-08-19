@@ -25,8 +25,22 @@ torch::Tensor compute_zcurve_wrapper(torch::Tensor points)
     return codes;
 }
 
-void bind_ds_zcurve(py::module_ &m)
-{
-    m.def("compute_zcurve", &compute_zcurve_wrapper, "Compute Z-curve codes for a batch of points",
-          py::arg("points"));
+void bind_ds_zcurve(py::module_ &m) {
+    m.def("compute_zcurve", &compute_zcurve_wrapper,
+          py::arg("points"),
+          R"pbdoc(
+          Computes 30-bit 3D Morton space-filling Z-curve codes for points in normalized [0, 1]^3.
+
+          Args:
+              points (torch.Tensor): (..., 3) float32 coordinates on CUDA with values in [0, 1].
+
+          Returns:
+              torch.Tensor: (...) int64 Morton space-filling codes with interleaved bits.
+
+          Example:
+              >>> import torch
+              >>> from conquer3d._C import compute_zcurve
+              >>> pts = torch.rand(1000, 3, device='cuda')
+              >>> codes = compute_zcurve(pts)
+          )pbdoc");
 }

@@ -1,3 +1,8 @@
+/**
+ * @file gs.cu
+ * @brief CUDA kernel implementations for 3D Gaussian Splatting covariance matrices and k-NN Mahalanobis contact radii.
+ */
+
 #include "gs.h"
 
 #include <thrust/device_vector.h>

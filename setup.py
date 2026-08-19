@@ -147,8 +147,7 @@ class CustomBuildExt(BaseBuildExt):
             ], env=env, cwd=build_lib)
             print(f"Successfully generated conquer3d/_C.pyi in {build_lib}!")
         except Exception as e:
-            print(f"Error: Failed to generate .pyi stubs automatically: {e}")
-            raise
+            print(f"Warning: Failed to generate .pyi stubs automatically ({e}). Continuing build.")
         print("---------------------------------\n")
 
 setup(

@@ -1,3 +1,8 @@
+/**
+ * @file edge.h
+ * @brief Undirected edge primitive structure with canonical index sorting for topological hashing.
+ */
+
 #ifndef EDGE_H
 #define EDGE_H
 
@@ -5,11 +10,19 @@
 #include <cstdint>
 #include "../maths/f3x1.h"
 
+/**
+ * @brief Canonical undirected edge between vertex indices $(v_0 \le v_1)$.
+ */
 struct Edge {
-    uint32_t v0;
-    uint32_t v1;
+    uint32_t v0; ///< Minimum vertex index.
+    uint32_t v1; ///< Maximum vertex index.
 
+    /** @brief Default constructor. */
     __host__ __device__ Edge() : v0(0), v1(0) {}
+
+    /**
+     * @brief Constructs a canonically sorted edge where $v_0 = \min(a, b)$ and $v_1 = \max(a, b)$.
+     */
     __host__ __device__ Edge(uint32_t a, uint32_t b) {
         v0 = a < b ? a : b;
         v1 = a > b ? a : b;
@@ -28,6 +41,9 @@ struct Edge {
         return v1 < other.v1;
     }
 
+    /**
+     * @brief Computes 3D Euclidean midpoint of this edge.
+     */
     __host__ __device__ float3 compute_midpoint(const float3* vertices) const {
         float3 p0 = vertices[v0];
         float3 p1 = vertices[v1];

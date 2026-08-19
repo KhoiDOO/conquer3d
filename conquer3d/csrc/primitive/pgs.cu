@@ -1,3 +1,8 @@
+/**
+ * @file pgs.cu
+ * @brief CUDA kernel implementations for Periodic Gaussian Splatting (PGS) cluster tangency radius solving.
+ */
+
 #include "pgs.h"
 #include "pgs_math.cuh"
 

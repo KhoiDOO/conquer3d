@@ -1,3 +1,8 @@
+/**
+ * @file bvh.cu
+ * @brief CUDA kernel implementations for parallel Radix Linear Bounding Volume Hierarchy (LBVH) (Karras 2012).
+ */
+
 #include "bvh.h"
 #include "zcurve.h"
 #include "../primitive/ray.h"

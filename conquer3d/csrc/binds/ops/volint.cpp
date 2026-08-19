@@ -81,16 +81,28 @@ void single_view_volume_integral_bind(
 }
 
 void bind_ops_volint(py::module_& m) {
-    m.def("single_view_volume_integral", &single_view_volume_integral_bind, 
-          py::arg("grid_vertices"),
-          py::arg("sdf"),
-          py::arg("weight"),
-          py::arg("color"),
-          py::arg("depth_image"),
-          py::arg("color_image"),
-          py::arg("extrinsics"),
-          py::arg("intrinsics"),
-          py::arg("trunc_margin"),
-          py::arg("mode") = 1,
-          "Single view TSDF volume integration");
+    m.def("single_view_volume_integral", &single_view_volume_integral_bind,
+          py::arg("grid_vertices"), py::arg("sdf"), py::arg("weight"), py::arg("color"),
+          py::arg("depth_image"), py::arg("color_image"), py::arg("extrinsics"),
+          py::arg("intrinsics"), py::arg("trunc_margin"), py::arg("mode") = 1,
+          R"pbdoc(
+          Integrates a single depth map and optional RGB frame into a 3D volumetric TSDF grid in-place (CUDA).
+
+          Args:
+              grid_vertices (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+              sdf (torch.Tensor): (N,) float32 running TSDF field updated in-place on CUDA.
+              weight (torch.Tensor): (N,) float32 running sample weights updated in-place on CUDA.
+              color (torch.Tensor, optional): (N, 3) float32 running RGB colors updated in-place on CUDA.
+              depth_image (torch.Tensor): (H, W) float32 depth map in meters on CUDA.
+              color_image (torch.Tensor, optional): (H, W, 3) float32 RGB image on CUDA.
+              extrinsics (torch.Tensor): (4, 4) float32 World-to-Camera transformation matrix.
+              intrinsics (torch.Tensor): (3, 3) float32 camera intrinsic calibration matrix.
+              trunc_margin (float): TSDF truncation distance $\mu$ in meters.
+              mode (int, optional): Integration mode (1: Euclidean distance, 0: projective). Defaults to 1.
+
+          Example:
+              >>> import torch
+              >>> from conquer3d._C import single_view_volume_integral
+              >>> single_view_volume_integral(verts, sdf, weight, color, depth, rgb, c2w, k, trunc_margin=0.05, mode=1)
+          )pbdoc");
 }

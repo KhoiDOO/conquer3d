@@ -1,15 +1,29 @@
+"""Generic mesh directory datasets and multi-class folder loaders.
+
+This module provides PyTorch datasets for traversing directories and loading
+various mesh formats (.obj, .glb, .gltf, .off, .ply, .stl) into PyTorch tensors.
+"""
+
+from typing import Callable, Optional, List, Union, Tuple, Dict, Any
 import os
 import inspect
 import hashlib
 import torch
 import trimesh
 from multiprocessing import Pool
-from typing import Callable, Optional, List, Union
 from .base_mesh import BaseMeshDataset
 import conquer3d.data.assets.common as common_assets
 
 
 def _check_watertight(file_path: str) -> bool:
+    """Checks if a mesh file represents a watertight 2-manifold surface.
+
+    Args:
+        file_path (str): Absolute or relative filesystem path to the 3D file.
+
+    Returns:
+        bool: True if the mesh is watertight, False otherwise.
+    """
     try:
         mesh = trimesh.load(file_path, process=False, force='mesh', skip_materials=True)
         if isinstance(mesh, trimesh.Scene):
@@ -22,10 +36,19 @@ def _check_watertight(file_path: str) -> bool:
 
 
 class MeshDataset(BaseMeshDataset):
+    """Dataset that recursively queries all mesh files inside a root directory across all depths.
+
+    Supports arbitrary 3D file extensions (.obj, .glb, .gltf, .ply, .off, .stl, etc.).
+
+    Attributes:
+        root (str): Expanded root directory path.
+        types (set): Supported lowercase file extensions.
+        cached (bool): Whether samples are cached in host memory.
+        return_hash_id (bool): Whether to return a deterministic MD5 hash string per mesh.
+        watertight_only (bool): If True, filters out non-watertight meshes via multiprocessing.
+        all_files (List[str]): Sorted list of discovered valid mesh paths.
     """
-    Dataset that queries all mesh files inside a root directory across all subdirectory depth levels.
-    Supports file types such as obj, glb, gltf, etc.
-    """
+
     def __init__(
         self,
         root: str,
@@ -34,14 +57,23 @@ class MeshDataset(BaseMeshDataset):
         cached: bool = False,
         return_hash_id: bool = False,
         watertight_only: bool = False,
-    ):
+    ) -> None:
+        """Initializes the MeshDataset.
+
+        Args:
+            root (str): Filesystem path to root directory.
+            transform (Callable, optional): Geometric transform applied to (vertices, faces). Defaults to None.
+            types (List[str], optional): Allowed file extensions (e.g. `['obj', 'ply']`). Defaults to `['obj']`.
+            cached (bool, optional): Cache parsed meshes in memory. Defaults to False.
+            return_hash_id (bool, optional): Include MD5 hash string in return tuple. Defaults to False.
+            watertight_only (bool, optional): Filter out non-watertight models. Defaults to False.
+        """
         root = os.path.expanduser(root)
         super().__init__(root, transform)
         
         if types is None:
             types = ["obj"]
         
-        # Normalize extensions to always start with a dot and be lowercase
         self.types = {f".{t.lstrip('.').lower()}" for t in types}
         self.cached = cached
         self._cache = {}
@@ -61,7 +93,6 @@ class MeshDataset(BaseMeshDataset):
                 if ext in self.types:
                     mesh_files.append(os.path.join(dirpath, f))
                     
-        # Sort for deterministic ordering across operating systems and runs
         mesh_files.sort()
         if self.watertight_only and mesh_files:
             with Pool() as pool:
@@ -70,9 +101,11 @@ class MeshDataset(BaseMeshDataset):
         return mesh_files
 
     def __len__(self) -> int:
+        """int: Total number of valid mesh files found."""
         return len(self.all_files)
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx: int) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, str]]:
+        """Loads and returns 3D mesh `(vertices, faces, [hash_id])`."""
         f_path = self.all_files[idx]
         hash_id = None
         if self.return_hash_id:
@@ -87,7 +120,6 @@ class MeshDataset(BaseMeshDataset):
                 return vertices_t, faces_t, hash_id
             return vertices_t, faces_t
             
-        # Safely load mesh using trimesh
         mesh = trimesh.load(f_path, process=False, force='mesh', skip_materials=True)
         if isinstance(mesh, trimesh.Scene):
             mesh = mesh.dump(concatenate=True)
@@ -110,13 +142,15 @@ class MeshDataset(BaseMeshDataset):
 
 
 class MeshFolderDataset(BaseMeshDataset):
-    """
-    A generic folder dataset where subfolders inside the root directory correspond to different classes.
-    For example:
+    """Multi-class folder dataset where immediate subdirectories correspond to discrete class labels.
+
+    Example layout:
         root/chair/chair01.obj
         root/table/table01.obj
-    Returns tuples of (vertices, faces, label) where label is the integer index of the subfolder class.
+
+    Returns tuples of `(vertices, faces, label, [hash_id])`.
     """
+
     def __init__(
         self,
         root: str,
@@ -125,7 +159,8 @@ class MeshFolderDataset(BaseMeshDataset):
         cached: bool = False,
         return_hash_id: bool = False,
         watertight_only: bool = False,
-    ):
+    ) -> None:
+        """Initializes the MeshFolderDataset."""
         root = os.path.expanduser(root)
         super().__init__(root, transform)
         
@@ -142,14 +177,14 @@ class MeshFolderDataset(BaseMeshDataset):
         self.samples = self._query_samples()
         self.all_files = [path for path, _ in self.samples]
 
-    def _find_classes(self) -> tuple[List[str], dict[str, int]]:
+    def _find_classes(self) -> Tuple[List[str], Dict[str, int]]:
         if not os.path.exists(self.root):
             return [], {}
         classes = sorted([d.name for d in os.scandir(self.root) if d.is_dir()])
         class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
         return classes, class_to_idx
 
-    def _query_samples(self) -> List[tuple[str, int]]:
+    def _query_samples(self) -> List[Tuple[str, int]]:
         samples = []
         if not os.path.exists(self.root):
             return samples
@@ -163,7 +198,6 @@ class MeshFolderDataset(BaseMeshDataset):
                     if ext in self.types:
                         samples.append((os.path.join(dirpath, f), cls_idx))
                         
-        # Sort samples by file path for deterministic ordering across runs and platforms
         samples.sort(key=lambda x: x[0])
         if self.watertight_only and samples:
             paths = [p for p, _ in samples]
@@ -173,9 +207,11 @@ class MeshFolderDataset(BaseMeshDataset):
         return samples
 
     def __len__(self) -> int:
+        """int: Total number of labeled mesh samples."""
         return len(self.samples)
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx: int) -> Union[Tuple[torch.Tensor, torch.Tensor, int], Tuple[torch.Tensor, torch.Tensor, int, str]]:
+        """Loads and returns `(vertices, faces, class_label, [hash_id])`."""
         f_path, label = self.samples[idx]
         hash_id = None
         if self.return_hash_id:
@@ -190,7 +226,6 @@ class MeshFolderDataset(BaseMeshDataset):
                 return vertices_t, faces_t, label, hash_id
             return vertices_t, faces_t, label
             
-        # Safely load mesh using trimesh
         mesh = trimesh.load(f_path, process=False, force='mesh', skip_materials=True)
         if isinstance(mesh, trimesh.Scene):
             mesh = mesh.dump(concatenate=True)
@@ -213,17 +248,16 @@ class MeshFolderDataset(BaseMeshDataset):
 
 
 class ToyMeshDataset(BaseMeshDataset):
-    """
-    Dataset containing available test meshes from conquer3d.data.assets.common
-    except 'woody', 'alligator', and 'iphigenia'.
-    """
+    """Benchmark test dataset aggregating standard 3D meshes from `conquer3d.data.assets.common`."""
+
     def __init__(
         self,
         root: str = "~/.conquer3d/",
         transform: Optional[Callable] = None,
         cached: bool = False,
         return_hash_id: bool = False,
-    ):
+    ) -> None:
+        """Initializes the ToyMeshDataset."""
         root = os.path.expanduser(root)
         super().__init__(root, transform)
         self.cached = cached
@@ -237,14 +271,15 @@ class ToyMeshDataset(BaseMeshDataset):
                 if name.lower() not in exclude_names:
                     self.mesh_classes.append((name, cls))
                     
-        # Sort by class name for deterministic dataset ordering
         self.mesh_classes.sort(key=lambda x: x[0])
         self.names = [name for name, _ in self.mesh_classes]
 
     def __len__(self) -> int:
+        """int: Number of benchmark models."""
         return len(self.mesh_classes)
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx: int) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, str]]:
+        """Retrieves `(vertices, faces, [asset_name])`."""
         if self.cached and idx in self._cache:
             vertices_t, faces_t = self._cache[idx]
             if self.transform:

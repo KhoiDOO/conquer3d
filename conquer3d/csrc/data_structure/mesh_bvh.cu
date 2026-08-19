@@ -1,3 +1,8 @@
+/**
+ * @file mesh_bvh.cu
+ * @brief CUDA kernel implementations for MeshBVH: Fast Winding Numbers (FWN), signed distance fields (SDF), and ray casting.
+ */
+
 #include "mesh_bvh.h"
 #include "../primitive/triangle.h"
 #include "../primitive/edge.h"

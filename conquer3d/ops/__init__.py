@@ -1,3 +1,15 @@
+"""GPU-accelerated geometric operations, distances, and differentiable isosurface extraction.
+
+This package provides:
+- Classical and differentiable Marching Cubes (`marching_cubes`, `diff_marching_cubes`).
+- Asymptotic decider Marching Cubes (`mca`).
+- Differentiable Dual Marching Cubes (`dmc`).
+- Dual Contouring with GPU Jacobi QEF solver (`dc`).
+- Marching Tetrahedra on arbitrary tets (`marching_tetrahedra`) and cubic grids (`marching_tetrahedra_grid`, `diff_marching_tetrahedra_grid`).
+- GPU KD-Tree accelerated Chamfer and Hausdorff distances (`chamfer_distance`, `hausdorff_distance`).
+- TSDF RGB-D volume integration (`single_view_volume_integral`).
+"""
+
 from .marching_cubes import marching_cubes
 from .marching_cubes_asymptotic import marching_cubes_asymptotic, mca
 from .dual_contouring import dual_contouring, dc

@@ -1,8 +1,35 @@
+"""GPU-accelerated Differentiable Dual Contouring (DC) with Jacobi QEF solvers.
+
+Dual Contouring (Ju et al., 2002) extracts explicit surface meshes from volumetric scalar
+fields while preserving sharp features, creases, and corners. For each active voxel cell
+intersected by the isosurface, a single dual vertex is placed at the feature point minimizing
+the Quadratic Error Function (QEF):
+
+$$E(v) = \\sum_{i} \\left( n_i \\cdot (v - p_i) \\right)^2$$
+
+where $p_i$ are Hermite edge intersection points and $n_i$ are the corresponding surface normals.
+The QEF minimum is solved in parallel on the GPU using cyclic Jacobi Singular Value
+Decomposition (SVD) on register arrays.
+
+Example:
+    >>> import torch
+    >>> from conquer3d.ops import dual_contouring
+    >>> # Extract sharp mesh from voxel grid and signed distance field
+    >>> verts, faces = dual_contouring(grid_vertices, voxels, sdf, iso=0.0, quad_split=True)
+"""
+
+from typing import Tuple, Optional, Union
 import torch
-from typing import Tuple, Optional
 from .. import _C
 
+
 class DiffDualContouring(torch.autograd.Function):
+    """PyTorch autograd Function for Differentiable Dual Contouring on CUDA.
+
+    Implements forward surface extraction with Jacobi QEF solvers and backward
+    adjoint gradient propagation with respect to input scalar SDF values and vertex colors.
+    """
+
     @staticmethod
     def forward(
         ctx,
@@ -14,7 +41,34 @@ class DiffDualContouring(torch.autograd.Function):
         iso: float = 0.0,
         quad_split: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-        # Ensure inputs are CUDA and contiguous
+        """Forward pass extracting dual vertices and quadrilateral/triangle connectivity.
+
+        Args:
+            ctx: PyTorch autograd context object.
+            grid_vertices (torch.Tensor): Float32 tensor of shape `(N, 3)` containing 3D grid
+                vertex coordinates on CUDA.
+            voxels (torch.Tensor): Int32 tensor of shape `(M, 8)` containing 8 corner vertex
+                indices per voxel cell in counter-clockwise convention on CUDA.
+            sdf (torch.Tensor): Float32 tensor of shape `(N,)` containing scalar SDF values on CUDA.
+            grid_normals (torch.Tensor, optional): Float32 tensor of shape `(N, 3)` containing
+                explicit vertex normal vectors. If None, evaluated on-the-fly via analytical
+                trilinear cell gradients. Defaults to None.
+            colors (torch.Tensor, optional): Float32 tensor of shape `(N, C)` containing vertex
+                colors or feature embeddings on CUDA. Defaults to None.
+            iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
+            quad_split (bool, optional): If True, splits dual quadrilaterals into 2 triangles
+                according to the optimal Delaunay min-angle criterion; if False, returns quads `(Q, 4)`.
+                Defaults to True.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+                - extracted_vertices: Float32 tensor of shape `(V, 3)` with surface vertex positions.
+                - extracted_faces: Int32 tensor of shape `(F, 3)` (triangles) or `(Q, 4)` (quads).
+                - extracted_colors: Float32 tensor of shape `(V, C)` or None if colors was None.
+
+        Raises:
+            RuntimeError: If `grid_vertices`, `voxels`, or `sdf` are not on CUDA.
+        """
         if not grid_vertices.is_cuda or not voxels.is_cuda or not sdf.is_cuda:
             raise RuntimeError("dual_contouring requires CUDA tensors")
 
@@ -39,10 +93,21 @@ class DiffDualContouring(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_verts, grad_faces, grad_colors):
+        """Backward pass evaluating analytical adjoint gradients w.r.t. input SDF and colors.
+
+        Args:
+            ctx: PyTorch autograd context object containing saved forward tensors.
+            grad_verts (torch.Tensor): Float32 tensor of shape `(V, 3)` containing upstream vertex gradients.
+            grad_faces (torch.Tensor): Upstream face gradients (unused, non-differentiable discrete topology).
+            grad_colors (torch.Tensor, optional): Float32 tensor of shape `(V, C)` containing upstream color gradients.
+
+        Returns:
+            Tuple[None, None, torch.Tensor, None, Optional[torch.Tensor], None, None]:
+                Gradients corresponding to (grid_vertices, voxels, sdf, grid_normals, colors, iso, quad_split).
+        """
         grid_vertices, voxels, sdf, grid_normals, colors = ctx.saved_tensors
         iso = ctx.iso
 
-        # If no gradients needed
         if not sdf.requires_grad and (colors is None or not colors.requires_grad):
             return None, None, None, None, None, None, None
 
@@ -59,6 +124,7 @@ class DiffDualContouring(torch.autograd.Function):
 
         return None, None, grad_sdf, None, grad_colors_in, None, None
 
+
 def dual_contouring(
     grid_vertices: torch.Tensor,
     voxels: torch.Tensor,
@@ -67,31 +133,44 @@ def dual_contouring(
     colors: Optional[torch.Tensor] = None,
     iso: float = 0.0,
     quad_split: bool = True
-) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-    """
-    Extracts an explicit surface mesh from a voxel grid and scalar field using
-    Differentiable Dual Contouring with GPU Quadratic Error Function (QEF) solver.
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """Extracts sharp surface meshes from volumetric scalar fields using Differentiable Dual Contouring.
 
-    Preserves sharp creases, features, and mechanical corners by placing dual vertices
-    inside voxel cells via regularized Jacobi SVD optimization.
+    Preserves sharp creases, mechanical edges, and corners by positioning dual vertices
+    at the optimal Quadratic Error Function (QEF) minimizer using register-level Jacobi SVD.
 
     Args:
-        grid_vertices (torch.Tensor): (N, 3) float32 corner coordinates.
-        voxels (torch.Tensor): (M, 8) int32 corner indices in CCW convention.
-        sdf (torch.Tensor): (N,) float32 scalar field.
-        grid_normals (torch.Tensor, optional): (N, 3) float32 explicit vertex normals.
-            If None, evaluated on-the-fly via analytical trilinear cell gradients.
-        colors (torch.Tensor, optional): (N, C) float32 vertex feature colors.
-        iso (float, optional): Isolevel threshold (default: 0.0).
-        quad_split (bool, optional): If True (default), splits each quadrilateral into 2
-            triangles with optimal Delaunay angle criterion; if False, returns (Q, 4) quad mesh.
+        grid_vertices (torch.Tensor): Float32 tensor of shape `(N, 3)` containing grid vertex
+            coordinates on CUDA. Must be contiguous.
+        voxels (torch.Tensor): Int32 tensor of shape `(M, 8)` containing 8 corner vertex indices
+            per voxel cell on CUDA.
+        sdf (torch.Tensor): Float32 tensor of shape `(N,)` containing scalar SDF values on CUDA.
+        grid_normals (torch.Tensor, optional): Float32 tensor of shape `(N, 3)` containing explicit
+            surface normals at grid vertices. If None, evaluated on-the-fly via analytical
+            trilinear cell gradients. Defaults to None.
+        colors (torch.Tensor, optional): Float32 tensor of shape `(N, C)` containing vertex feature
+            colors on CUDA. Defaults to None.
+        iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
+        quad_split (bool, optional): If True, splits dual quadrilaterals into 2 triangles using
+            the optimal Delaunay angle criterion; if False, returns quads of shape `(Q, 4)`.
+            Defaults to True.
 
     Returns:
-        Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-            - extracted_vertices (torch.Tensor): (V, 3) float32 surface vertex positions.
-            - extracted_faces (torch.Tensor): (F, 3) int32 triangles if quad_split=True,
-                                             or (Q, 4) int32 quads if quad_split=False.
-            - extracted_colors (torch.Tensor | None): (V, C) float32 interpolated colors.
+        Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+            - If `colors` is None: Returns `(vertices, faces)`.
+            - If `colors` is provided: Returns `(vertices, faces, colors)`.
+            - `vertices`: Float32 tensor of shape `(V, 3)` on CUDA.
+            - `faces`: Int32 tensor of shape `(F, 3)` for triangles or `(Q, 4)` for quads on CUDA.
+            - `colors`: Float32 tensor of shape `(V, C)` on CUDA.
+
+    Raises:
+        RuntimeError: If inputs are not on CUDA or not contiguous.
+
+    Example:
+        >>> import torch
+        >>> from conquer3d.ops import dual_contouring
+        >>> # Extract sharp 3D surface mesh
+        >>> verts, faces = dual_contouring(grid_vertices, voxels, sdf, iso=0.0)
     """
     grid_vertices = grid_vertices.contiguous().float()
     voxels = voxels.contiguous().int()
@@ -114,5 +193,6 @@ def dual_contouring(
         return verts, faces
     return verts, faces, out_colors
 
-# Alias
+
+# Public alias
 dc = dual_contouring

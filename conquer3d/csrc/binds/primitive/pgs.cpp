@@ -53,11 +53,26 @@ std::tuple<torch::Tensor, torch::Tensor> solve_pgs_cluster_tangency_radius_wrapp
     return std::make_tuple(isos, invalid_mask);
 }
 
-void bind_primitive_pgs(py::module_ &m)
-{
+void bind_primitive_pgs(py::module_ &m) {
     m.def("solve_pgs_cluster_tangency_radius_func", &solve_pgs_cluster_tangency_radius_wrapper,
-          py::arg("means"),
-          py::arg("normals"),
-          py::arg("covis"),
-          py::arg("k") = 16);
+          py::arg("means"), py::arg("normals"), py::arg("covis"), py::arg("k") = 16,
+          R"pbdoc(
+          Computes pairwise tangency contact radii for Planar Gaussians from k-NN clusters (CUDA).
+
+          Args:
+              means (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+              normals (torch.Tensor): (N, 3) float32 principal planar normal axes on CUDA.
+              covis (torch.Tensor): (N, 6) float32 inverse covariance matrices on CUDA.
+              k (int, optional): Number of nearest neighbors. Defaults to 16.
+
+          Returns:
+              Tuple[torch.Tensor, torch.Tensor]:
+                  - isos (torch.Tensor): (N,) float32 optimal tangency radii.
+                  - invalid_mask (torch.Tensor): (N,) bool mask indicating failure or degenerate pairs.
+
+          Example:
+              >>> import torch
+              >>> from conquer3d._C import solve_pgs_cluster_tangency_radius_func
+              >>> isos, invalid_mask = solve_pgs_cluster_tangency_radius_func(means, normals, covis, k=16)
+          )pbdoc");
 }
