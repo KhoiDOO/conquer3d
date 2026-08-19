@@ -1,16 +1,37 @@
+"""Iphigenia benchmark model asset loader from Polygon Mesh Processing (pmp-book.org).
+
+This module downloads the full-resolution Iphigenia sculpture mesh and loads it
+into PyTorch vertex and face tensors.
+"""
+
+from typing import Tuple, Optional
 import os
 import urllib.request
 import zipfile
 import torch
 from conquer3d.io.off import read_off
 
+
 class Iphiagenia:
-    """
-    Iphigenia asset mesh from pmp-book.org.
-    Downloads the full resolution Iphigenia mesh (zip), extracts the .off file,
+    """Iphigenia asset mesh from pmp-book.org.
+
+    Downloads the full resolution Iphigenia mesh (zip), extracts the `.off` file,
     and loads the vertices and faces into PyTorch tensors.
+
+    Attributes:
+        url (str): Remote download URL.
+        download_dir (str): Local cache directory path.
+        vertices (torch.Tensor | None): Float32 tensor of shape `(V, 3)`.
+        faces (torch.Tensor | None): Int64 tensor of shape `(F, 3)`.
+        colors (torch.Tensor | None): Optional vertex color tensor.
     """
-    def __init__(self, download_dir="~/.conquer3d"):
+
+    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
+        """Initializes and downloads/extracts the Iphigenia mesh.
+
+        Args:
+            download_dir (str, optional): Target local directory. Defaults to `"~/.conquer3d"`.
+        """
         self.url = "https://www.pmp-book.org/download/meshes/iphi_fullres.zip"
         self.download_dir = os.path.expanduser(download_dir)
         self.vertices = None
@@ -19,7 +40,7 @@ class Iphiagenia:
         
         self._load()
 
-    def _load(self):
+    def _load(self) -> None:
         os.makedirs(self.download_dir, exist_ok=True)
         zip_path = os.path.join(self.download_dir, "iphi_fullres.zip")
         
@@ -42,7 +63,16 @@ class Iphiagenia:
                 # off_file is a file-like object of bytes.
                 # read_off will automatically decode and parse it.
                 self.vertices, self.faces = read_off(off_file)
-    def get(self):
+
+    def get(self) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        """Retrieves clones of the loaded geometry tensors.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+                - vertices: (V, 3) float32 coordinates.
+                - faces: (F, 3) int64 face indices.
+                - colors: (V, 3) float32 colors or None.
+        """
         return (
             self.vertices.clone(),
             self.faces.clone(),
