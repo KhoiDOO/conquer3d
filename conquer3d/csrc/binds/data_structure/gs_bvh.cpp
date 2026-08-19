@@ -312,97 +312,108 @@ std::tuple<torch::Tensor, torch::Tensor> GSBVH::query_edge(
     return std::make_tuple(hit_mask, out_gaus_ids);
 }
 
-void bind_ds_gs_bvh(py::module_ &m)
-{
-    py::class_<GSBVH, BVH>(m, "GSBVH", R"doc(
-        A specialized Bounding Volume Hierarchy for Gaussian Splatting operations.
-        Inherits from BVH.
-        )doc")
+void bind_ds_gs_bvh(py::module_ &m) {
+    py::class_<GSBVH, BVH>(m, "GSBVH", R"pbdoc(
+        GPU-accelerated Bounding Volume Hierarchy specialized for 3D Gaussian Splatting (GS).
+
+        Example:
+            >>> import torch
+            >>> from conquer3d._C import GSBVH
+            >>> gs_bvh = GSBVH(gs_aabb_mins, gs_aabb_maxs)
+            >>> hit_mask, gaus_ids = gs_bvh.query_edge(starts, ends, means, opacities, covis)
+        )pbdoc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
-             py::arg("in_aabb_mins"),
-             py::arg("in_aabb_maxs"),
-             R"doc(
-        Construct and build the Karras LBVH for Gaussians.
+             py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
+             R"pbdoc(
+             Constructs and builds GSBVH from Gaussian AABB bounds.
 
-        Args:
-            in_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB minimums.
-            in_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB maximums.
-        )doc")
+             Args:
+                 in_aabb_mins (torch.Tensor): (N, 3) float32 Gaussian lower bounds on CUDA.
+                 in_aabb_maxs (torch.Tensor): (N, 3) float32 Gaussian upper bounds on CUDA.
+
+             Example:
+                 >>> gs_bvh = GSBVH(gs_aabb_mins, gs_aabb_maxs)
+             )pbdoc")
         .def("query_voxel_pair", &GSBVH::query_voxel_pair,
-             py::arg("vx_aabb_mins"),
-             py::arg("vx_aabb_maxs"),
-             py::arg("means"),
-             py::arg("covis"),
-             py::arg("opacities"),
-             py::arg("gs_aabb_mins"),
-             py::arg("gs_aabb_maxs"),
-             py::arg("contact_points"),
-             py::arg("isos") = ISO,
-             py::arg("ar_threshold") = 0.0f,
-             py::arg("p_threshold") = 0.0f,
-             py::arg("return_centroids") = false,
-             py::arg("max_capacity") = BVH_MAX_CAPACITY,
-             R"doc(
-        Perform exact Broad-to-Narrow phase intersection between Voxels and Gaussians.
+             py::arg("vx_aabb_mins"), py::arg("vx_aabb_maxs"),
+             py::arg("means"), py::arg("covis"), py::arg("opacities"),
+             py::arg("gs_aabb_mins"), py::arg("gs_aabb_maxs"), py::arg("contact_points"),
+             py::arg("isos") = ISO, py::arg("ar_threshold") = 0.0f, py::arg("p_threshold") = 0.0f,
+             py::arg("return_centroids") = false, py::arg("max_capacity") = BVH_MAX_CAPACITY,
+             R"pbdoc(
+             Performs exact broad-to-narrow phase intersection testing between 3D voxel boxes and ellipsoidal Gaussians.
 
-        Args:
-            vx_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB minimums.
-            vx_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of voxel AABB maximums.
-            means (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian means.
-            covis (torch.Tensor): Shape (N, 6) float32 tensor of Gaussian inverse covariances.
-            opacities (torch.Tensor): Shape (N,) float32 tensor of Gaussian opacities.
-            gs_aabb_mins (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB minimums.
-            gs_aabb_maxs (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian AABB maximums.
-            contact_points (torch.Tensor): Shape (N, 3) float32 tensor of contact points.
-            isos (float | torch.Tensor): Iso-surface threshold. Can be a float or (N,) float32 tensor. Defaults to ISO.
-            ar_threshold (float): Alpha scaling threshold. Defaults to 0.0.
-            p_threshold (float): Probability threshold. Defaults to 0.0.
-            return_centroids (bool): Whether to compute and return intersection centroids/densities. Defaults to false.
-            max_capacity (int): Max global capacity for hits. Defaults to BVH_MAX_CAPACITY.
+             Args:
+                 vx_aabb_mins (torch.Tensor): (M, 3) float32 voxel lower bounds on CUDA.
+                 vx_aabb_maxs (torch.Tensor): (M, 3) float32 voxel upper bounds on CUDA.
+                 means (torch.Tensor): (N, 3) float32 Gaussian centroids on CUDA.
+                 covis (torch.Tensor): (N, 6) float32 inverse covariance matrices on CUDA.
+                 opacities (torch.Tensor): (N,) float32 Gaussian opacity weights on CUDA.
+                 gs_aabb_mins (torch.Tensor): (N, 3) float32 Gaussian AABB lower bounds.
+                 gs_aabb_maxs (torch.Tensor): (N, 3) float32 Gaussian AABB upper bounds.
+                 contact_points (torch.Tensor): (N, 3) float32 contact points on CUDA.
+                 isos (float | torch.Tensor, optional): Mahalanobis threshold. Defaults to ISO.
+                 ar_threshold (float, optional): Alpha density cutoff. Defaults to 0.0.
+                 p_threshold (float, optional): Probability density cutoff. Defaults to 0.0.
+                 return_centroids (bool, optional): Compute intersection centroid positions. Defaults to False.
+                 max_capacity (int, optional): Maximum pairs buffer capacity. Defaults to 10000000.
 
-        Returns:
-            tuple: (hit_mask, voxel_ids, gaussian_ids, centroids, densities)
-        )doc")
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+                     - hit_mask (torch.Tensor): (M,) bool mask of intersected voxels.
+                     - out_voxel_ids (torch.Tensor): (K,) int64 intersected voxel indices.
+                     - out_gaus_ids (torch.Tensor): (K,) int64 intersected Gaussian indices.
+                     - centroids (torch.Tensor, optional): (K, 3) float32 intersection centroids.
+                     - densities (torch.Tensor, optional): (K,) float32 evaluated densities.
+
+             Example:
+                 >>> hits, v_ids, g_ids, _, _ = gs_bvh.query_voxel_pair(vx_mins, vx_maxs, means, covis, opacities, gs_mins, gs_maxs, contacts)
+             )pbdoc")
         .def("query_edge_pair", &GSBVH::query_edge_pair,
-             py::arg("edge_starts"),
-             py::arg("edge_ends"),
-             py::arg("means"),
-             py::arg("covis"),
-             py::arg("isos") = ISO,
-             py::arg("max_capacity") = BVH_MAX_CAPACITY,
-             R"doc(
-        Find all Gaussians intersected by each line segment.
+             py::arg("edge_starts"), py::arg("edge_ends"),
+             py::arg("means"), py::arg("covis"),
+             py::arg("isos") = ISO, py::arg("max_capacity") = BVH_MAX_CAPACITY,
+             R"pbdoc(
+             Finds all Gaussians pierced by line segments.
 
-        Args:
-            edge_starts (torch.Tensor): Shape (E, 3) float32 tensor of edge start points.
-            edge_ends (torch.Tensor): Shape (E, 3) float32 tensor of edge end points.
-            means (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian means.
-            covis (torch.Tensor): Shape (N, 6) float32 tensor of Gaussian inverse covariances.
-            isos (float | torch.Tensor): Iso-surface threshold. Can be a float or (N,) tensor. Defaults to ISO.
-            max_capacity (int): Max global capacity for hits. Defaults to BVH_MAX_CAPACITY.
+             Args:
+                 edge_starts (torch.Tensor): (E, 3) float32 start coordinates on CUDA.
+                 edge_ends (torch.Tensor): (E, 3) float32 end coordinates on CUDA.
+                 means (torch.Tensor): (N, 3) float32 Gaussian centroids on CUDA.
+                 covis (torch.Tensor): (N, 6) float32 inverse covariances on CUDA.
+                 isos (float | torch.Tensor, optional): Mahalanobis isosurface threshold. Defaults to ISO.
+                 max_capacity (int, optional): Maximum collision pairs buffer capacity. Defaults to 10000000.
 
-        Returns:
-            tuple: (hit_mask, edge_ids, gaussian_ids)
-        )doc")
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                     - hit_mask (torch.Tensor): (E,) bool mask indicating whether segment hit any Gaussian.
+                     - edge_ids (torch.Tensor): (K,) int64 edge indices.
+                     - gaussian_ids (torch.Tensor): (K,) int64 intersected Gaussian indices.
+
+             Example:
+                 >>> hit_mask, e_ids, g_ids = gs_bvh.query_edge_pair(starts, ends, means, covis)
+             )pbdoc")
         .def("query_edge", &GSBVH::query_edge,
-             py::arg("edge_starts"),
-             py::arg("edge_ends"),
-             py::arg("means"),
-             py::arg("opacities"),
-             py::arg("covis"),
+             py::arg("edge_starts"), py::arg("edge_ends"),
+             py::arg("means"), py::arg("opacities"), py::arg("covis"),
              py::arg("isos") = ISO,
-             R"doc(
-        Find the single highest-density Gaussian intersected by each line segment.
+             R"pbdoc(
+             Finds the single highest-density Gaussian pierced by each line segment.
 
-        Args:
-            edge_starts (torch.Tensor): Shape (E, 3) float32 tensor of edge start points.
-            edge_ends (torch.Tensor): Shape (E, 3) float32 tensor of edge end points.
-            means (torch.Tensor): Shape (N, 3) float32 tensor of Gaussian means.
-            opacities (torch.Tensor): Shape (N,) float32 tensor of Gaussian opacities.
-            covis (torch.Tensor): Shape (N, 6) float32 tensor of Gaussian inverse covariances.
-            isos (float | torch.Tensor): Iso-surface threshold. Defaults to ISO.
+             Args:
+                 edge_starts (torch.Tensor): (E, 3) float32 start coordinates on CUDA.
+                 edge_ends (torch.Tensor): (E, 3) float32 end coordinates on CUDA.
+                 means (torch.Tensor): (N, 3) float32 Gaussian centroids on CUDA.
+                 opacities (torch.Tensor): (N,) float32 Gaussian opacity weights on CUDA.
+                 covis (torch.Tensor): (N, 6) float32 inverse covariances on CUDA.
+                 isos (float | torch.Tensor, optional): Mahalanobis isosurface threshold. Defaults to ISO.
 
-        Returns:
-            tuple: (hit_mask, gaussian_ids)
-        )doc");
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor]:
+                     - hit_mask (torch.Tensor): (E,) bool mask indicating whether segment hit any Gaussian.
+                     - gaussian_ids (torch.Tensor): (E,) int64 indices of max-density hit Gaussians (-1 for misses).
+
+             Example:
+                 >>> hit_mask, g_ids = gs_bvh.query_edge(starts, ends, means, opacities, covis)
+             )pbdoc");
 }
