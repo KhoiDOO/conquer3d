@@ -1,3 +1,8 @@
+/**
+ * @file mc.cu
+ * @brief CUDA kernel implementations for Classical Marching Cubes and analytical adjoint backward pass.
+ */
+
 #include "mc.h"
 #include "../maths/maths.h"
 #include <cuda_runtime.h>
