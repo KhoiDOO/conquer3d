@@ -1,3 +1,8 @@
+/**
+ * @file pgs_aabb.cu
+ * @brief CUDA kernel implementations for analytical Axis-Aligned Bounding Box (AABB) bounds of Periodic Gaussians.
+ */
+
 #include "pgs.h"
 #include "pgs_math.cuh"
 
