@@ -78,12 +78,12 @@
 
 *Empirical extraction performance on **NVIDIA GeForce RTX 4090** on the **Fandisk CAD model** at **$1024^3$ resolution** (6.86M sparse vertices, 5.15M active voxels):*
 
-| Algorithm | Mesh Output | Extracted Vertices | Extracted Faces / Quads | Latency (ms) | Throughput | Watertight (0 Holes) |
+| Algorithm | Mesh Output | Extracted Vertices | Extracted Faces / Quads | Latency (ms) | Throughput | Watertight |
 | :--- | :--- | :--- | :--- | :---: | :---: | :---: |
-| **Dual Marching Cubes (DMC)** | Triangles | **1,716,386** | **3,432,768** | **3.44 ms** | **$1.0\text{ BILLION faces/s}$** | **Yes (0 holes)** |
-| **Dual Marching Cubes (DMC)** | Pure Quads | **1,716,386** | **1,716,384** | **3.22 ms** | **$533\text{ M quads/s}$** | **Yes (0 holes)** |
-| **Dual Contouring (DC + Normals)** | Triangles | 1,716,386 | 3,432,768 | **4.79 ms** | $717\text{ M faces/s}$ | **Yes (0 holes)** |
-| **Marching Cubes Asymptotic (MCA)** | Triangles | 1,716,384 | 3,432,764 | 16.42 ms | $209\text{ M faces/s}$ | **Yes (0 holes)** |
+| **Dual Marching Cubes (DMC)** | Triangles | **1,716,386** | **3,432,768** | **3.44 ms** | **~1.0B faces/s** | **Yes** |
+| **Dual Marching Cubes (DMC)** | Pure Quads | **1,716,386** | **1,716,384** | **3.22 ms** | **533M quads/s** | **Yes** |
+| **Dual Contouring (DC + Normals)** | Triangles | 1,716,386 | 3,432,768 | **4.79 ms** | **717M faces/s** | **Yes** |
+| **Marching Cubes Asymptotic (MCA)** | Triangles | 1,716,384 | 3,432,764 | 16.42 ms | **209M faces/s** | **Yes** |
 
 ---
 
