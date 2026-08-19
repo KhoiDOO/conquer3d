@@ -1,3 +1,11 @@
+/**
+ * @file gs_math.cuh
+ * @brief High-performance CUDA device inline mathematical routines for 3D Gaussian Splatting.
+ * @details Implements Mahalanobis distance evaluations, exponential density queries,
+ * quaternion-to-rotation conversions, inverse covariance formulations, and analytical
+ * ellipsoid-segment quadratic intersection tests.
+ */
+
 #ifndef GS_MATH_CUH
 #define GS_MATH_CUH
 
@@ -9,6 +17,14 @@
 namespace gs
 {
 
+    /**
+     * @brief Computes squared Mahalanobis distance $d^2 = (p - \mu)^T \Sigma^{-1} (p - \mu)$ on device.
+     * 
+     * @param[in]  point         Query point coordinate in world space.
+     * @param[in]  mean          Gaussian centroid coordinate $\mu$.
+     * @param[in]  covi          Upper-triangular packed inverse covariance array $\Sigma^{-1}$ of length 6.
+     * @param[out] out_distance  Computed squared Mahalanobis distance.
+     */
     __device__ __forceinline__ void compute_mahalanobis_distance(
         const float3 &point,
         const float3 &mean,
@@ -23,6 +39,15 @@ namespace gs
             d.z * (d.x * covi[2] + d.y * covi[4] + d.z * covi[5]);
     }
 
+    /**
+     * @brief Evaluates Gaussian volumetric density $\rho(p) = \alpha \exp(-\frac{1}{2} d^2)$ at point $p$.
+     * 
+     * @param[in]  point       Query point in world space.
+     * @param[in]  mean        Gaussian centroid $\mu$.
+     * @param[in]  covi        Upper-triangular packed inverse covariance entries $\Sigma^{-1}$.
+     * @param[in]  opacity     Gaussian opacity scaling factor $\alpha$.
+     * @param[out] out_density Computed scalar density clamped to zero for $d^2 > 30$.
+     */
     __device__ __forceinline__ void compute_density(
         const float3 &point,
         const float3 &mean,
@@ -45,6 +70,9 @@ namespace gs
         }
     }
 
+    /**
+     * @brief Evaluates local-origin Gaussian density $\rho(p) = \alpha \exp(-\frac{1}{2} p^T \Sigma^{-1} p)$.
+     */
     __device__ __forceinline__ void compute_density_local(
         const float3 &point,
         const float *covi,
@@ -65,6 +93,9 @@ namespace gs
         }
     }
 
+    /**
+     * @brief Computes diagonal inverse scale matrix $S^{-1} = \text{diag}(1/s_x, 1/s_y, 1/s_z)$.
+     */
     __device__ __forceinline__ void compute_inverse_scale(
         const float3 &scale, 
         float3x3 &out_inv_scale
@@ -75,6 +106,14 @@ namespace gs
             0.0f, 0.0f, 1.0f / scale.z);
     }
 
+    /**
+     * @brief Converts unit quaternion $(r, x, y, z)$ into 3x3 orthonormal rotation matrix $R$.
+     * 
+     * @param[in]  rot           Quaternion representation $(r, x, y, z)$.
+     * @param[out] out_rotation  Resulting 3x3 orthonormal rotation matrix.
+     * @param[in]  rotnorm       Whether to normalize quaternion before conversion.
+     * @param[in]  transpose     Whether to output transposed rotation matrix $R^T$.
+     */
     __device__ __forceinline__ void compute_rotation(
         const float4 &rot,
         float3x3 &out_rotation,
@@ -110,6 +149,9 @@ namespace gs
         }
     }
 
+    /**
+     * @brief Computes 3D inverse covariance matrix $\Sigma^{-1} = R S^{-2} R^T$.
+     */
     __device__ __forceinline__ void compute_cov_inverse(
         const float3x3 &inv_scale,
         const float3x3 &rotation_transpose,
@@ -133,6 +175,21 @@ namespace gs
         covi[5] = out_cov_inv.m[2][2];
     }
 
+    /**
+     * @brief Analytical ray/segment intersection test against 3D Gaussian ellipsoid isosurface.
+     * 
+     * @details Solves the quadratic equation $a t^2 + b t + c = 0$ along the ray $p(t) = P_0 + t (P_1 - P_0)$.
+     * 
+     * @param[in]  c0..c5        Six upper-triangular components of $\Sigma^{-1}$.
+     * @param[in]  iso           Mahalanobis radius squared threshold $r^2$.
+     * @param[in]  segment_start Segment start position $P_0$.
+     * @param[in]  segment_end   Segment end position $P_1$.
+     * @param[in]  return_t      Whether to compute and clamp entry/exit parameters $t \in [0, 1]$.
+     * @param[out] t_entry       Segment parametric entry position $t_{\text{entry}}$.
+     * @param[out] t_exit        Segment parametric exit position $t_{\text{exit}}$.
+     * 
+     * @return bool True if segment intersects the ellipsoid within $t \in [0, 1]$.
+     */
     __device__ __forceinline__ bool test_gs_segment(
         const float c0, const float c1, const float c2,
         const float c3, const float c4, const float c5,
@@ -143,45 +200,32 @@ namespace gs
         float &t_entry, float &t_exit
     )
     {
-        // d = P1 - P0
         float3 d = segment_end - segment_start;
 
-        // Sigma^-1 * d
         float3 v_d = make_float3(
             c0 * d.x + c1 * d.y + c2 * d.z,
             c1 * d.x + c3 * d.y + c4 * d.z,
             c2 * d.x + c4 * d.y + c5 * d.z);
 
-        // Sigma^-1 * P0
         float3 v_p0 = make_float3(
             c0 * segment_start.x + c1 * segment_start.y + c2 * segment_start.z,
             c1 * segment_start.x + c3 * segment_start.y + c4 * segment_start.z,
             c2 * segment_start.x + c4 * segment_start.y + c5 * segment_start.z);
 
-        // A = d^T * (Sigma^-1 * d)
         float a = maths::dot(d, v_d);
-
-        // B = 2 * P0^T * (Sigma^-1 * d)
         float b = 2.0f * maths::dot(segment_start, v_d);
-
-        // C = P0^T * (Sigma^-1 * P0) - iso
         float c = maths::dot(segment_start, v_p0) - iso;
 
-        // B^2 - 4AC
         float dcrm = fmaxf(b * b - 4.0f * a * c, 0.0f);
 
-        // 6. Check for Intersection
         if (dcrm > 0.0f)
         {
-            // Calculate the two roots (t_entry and t_exit)
             float rdcrm = sqrtf(dcrm) / (2.0f * a);
             float b2a = -b / (2.0f * a);
 
             t_entry = b2a - rdcrm;
             t_exit = b2a + rdcrm;
 
-            // If it exits before t=0.0, it's behind the start point.
-            // If it enters after t=1.0, it's past the end point.
             if (return_t)
             {
                 t_entry = fmaxf(t_entry, 0.0f);
