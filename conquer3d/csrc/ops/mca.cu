@@ -1,3 +1,10 @@
+/**
+ * @file mca.cu
+ * @brief CUDA kernel implementations for Marching Cubes with Asymptotic Deciders (Nielson & Hamann 1991).
+ * @details Resolves face and internal ambiguities on voxel cells to extract topologically consistent,
+ * watertight 2-manifold surfaces.
+ */
+
 #include "mca.h"
 #include "mca_data.h"
 #include "../maths/maths.h"
