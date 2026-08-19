@@ -1,3 +1,8 @@
+/**
+ * @file grid.cu
+ * @brief CUDA kernel implementations for depth map unprojection and active voxel identification.
+ */
+
 #include "grid.h"
 #include <stdio.h>
 #include <math.h>
