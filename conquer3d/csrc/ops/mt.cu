@@ -1,3 +1,8 @@
+/**
+ * @file mt.cu
+ * @brief CUDA kernel implementations for Marching Tetrahedra on unstructured meshes and analytical backward pass.
+ */
+
 #include "mt.h"
 #include "../maths/maths.h"
 #include <cuda_runtime.h>
