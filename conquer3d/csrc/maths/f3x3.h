@@ -1,3 +1,8 @@
+/**
+ * @file f3x3.h
+ * @brief 3x3 single-precision matrix struct with hardware arithmetic operators for CUDA device execution.
+ */
+
 #ifndef F3X3_H
 #define F3X3_H
 
@@ -10,6 +15,9 @@
 #include <vector_functions.h>
 #include <math_constants.h>
 
+/**
+ * @brief 3x3 float matrix.
+ */
 typedef struct
 {
     float m[3][3];
