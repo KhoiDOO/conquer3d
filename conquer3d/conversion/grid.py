@@ -1,31 +1,36 @@
+"""Sparse coordinate and dense occupancy grid conversion utilities.
+
+This module provides bi-directional format converters between voxel-centric
+sparse tensor coordinates `(batch_idx, x, y, z)` (compatible with SpConv / TorchSparse)
+and dense volumetric occupancy / SDF grids for surface reconstruction.
+"""
+
+from typing import Tuple, List, Union, Optional
 import torch
-from typing import Tuple, List, Union
+
 
 def voxel2sparse(
     active_indices: torch.Tensor,
     voxels: torch.Tensor,
     idx_grids: torch.Tensor,
-    sdf: torch.Tensor = None,
+    sdf: Optional[torch.Tensor] = None,
     batch_idx: int = 0
 ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-    """
-    Converts 1D active voxel indices into the [N, 4] coordinates tensor 
-    expected by sparse neural networks (like spconv/torchsparse).
+    """Converts 1D active voxel indices into a 4D sparse coordinates tensor `[N, 4]`.
     
     Args:
-        active_indices (torch.Tensor): 1D tensor of active voxel indices.
-        voxels (torch.Tensor): An int32 tensor of shape (V, 8) containing corner indices for each voxel.
-        idx_grids (torch.Tensor): An int64 tensor of shape (N, 3) containing the (i, j, k) 3D coordinate indices for each vertex.
-        sdf (torch.Tensor, optional): A float32 tensor of shape (N,) containing the SDF values. If provided, the function will also extract the 8 corner SDFs for each active voxel. Defaults to None.
-        batch_idx (int, optional): The batch index to prepend. Defaults to 0.
+        active_indices (torch.Tensor): 1D int64 tensor of active voxel linear indices.
+        voxels (torch.Tensor): Int32 tensor of shape `(V, 8)` containing voxel corner indices.
+        idx_grids (torch.Tensor): Int64 tensor of shape `(N, 3)` containing `(i, j, k)` discrete coordinates.
+        sdf (torch.Tensor, optional): Float32 tensor of shape `(N,)` containing corner SDF values.
+            If provided, extracts 8 corner SDFs per active voxel. Defaults to None.
+        batch_idx (int, optional): The batch index to prepend in column 0. Defaults to 0.
         
     Returns:
-        If sdf is None:
-            torch.Tensor: An int32 tensor of shape (N, 4) in the format [batch_idx, x, y, z].
-        If sdf is provided:
-            Tuple[torch.Tensor, torch.Tensor]: 
-                - sparse_coords (torch.Tensor): [N, 4] tensor
-                - sparse_sdfs (torch.Tensor): [N, 8] tensor containing the 8 corner SDF values for each voxel.
+        Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+            - If `sdf is None`: Int32 tensor of shape `(N, 4)` in `[batch_idx, x, y, z]` format.
+            - If `sdf is not None`: Tuple of `(sparse_coords, sparse_sdfs)` where `sparse_sdfs`
+              has shape `(N, 8)` containing the 8 corner scalar values for each active voxel.
     """
     active_corners = voxels[active_indices]
     base_vertex_indices = active_corners[:, 0].to(torch.int64)
@@ -40,6 +45,7 @@ def voxel2sparse(
     
     return sparse_coords
 
+
 def sparse2voxel(
     sparse_coords: torch.Tensor,
     sparse_sdfs: torch.Tensor,
@@ -47,22 +53,23 @@ def sparse2voxel(
     grid_max: Union[List[float], Tuple[float, float, float]],
     res: Union[List[int], Tuple[int, int, int]]
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Converts pure voxel-centric sparse representations back into a localized, 
-    dense-free mesh topology ready for marching cubes.
+    """Converts voxel-centric sparse representations into a localized mesh topology.
     
+    Reconstructs unique corner vertex positions and local voxel indices for direct
+    consumption by Marching Cubes without allocating dense $O(R^3)$ grids.
+
     Args:
-        sparse_coords (torch.Tensor): [N, 4] tensor of voxel coords [batch_idx, x, y, z].
-        sparse_sdfs (torch.Tensor): [N, 8] tensor of corner SDFs.
-        grid_min (List[float]): Global minimum (x, y, z) bounds.
-        grid_max (List[float]): Global maximum (x, y, z) bounds.
-        res (List[int]): Global resolution (rx, ry, rz).
+        sparse_coords (torch.Tensor): Int32 tensor of shape `(N, 4)` in `[batch_idx, x, y, z]` format.
+        sparse_sdfs (torch.Tensor): Float32 tensor of shape `(N, 8)` containing 8 corner SDFs per voxel.
+        grid_min (Union[List[float], Tuple[float, float, float]]): Global minimum `(x, y, z)` bounds.
+        grid_max (Union[List[float], Tuple[float, float, float]]): Global maximum `(x, y, z)` bounds.
+        res (Union[List[int], Tuple[int, int, int]]): Global grid resolution `(rx, ry, rz)`.
         
     Returns:
         Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            - unique_vertices (torch.Tensor): [M, 3] float coordinates of all unique mesh vertices.
-            - local_voxels (torch.Tensor): [N, 8] int tensor of corner indices mapping to unique_vertices.
-            - merged_sdfs (torch.Tensor): [M,] float tensor of averaged SDF values at unique_vertices.
+            - unique_vertices (torch.Tensor): Float32 coordinates `(M, 3)` of unique mesh vertices.
+            - local_voxels (torch.Tensor): Int32 tensor `(N, 8)` mapping voxels to `unique_vertices`.
+            - merged_sdfs (torch.Tensor): Float32 tensor `(M,)` of averaged SDF values at `unique_vertices`.
     """
     device = sparse_coords.device
     
@@ -109,21 +116,21 @@ def sparse2voxel(
     
     return unique_vertices, local_voxels, merged_sdfs
 
+
 def sparse_coo2dense_occ(
     sparse_coords: torch.Tensor,
     batch_size: int,
     res: Union[List[int], Tuple[int, int, int]]
 ) -> torch.Tensor:
-    """
-    Converts a [N, 4] sparse coordinates tensor into a [B, 1, rx, ry, rz] dense occupancy grid.
+    """Converts a `(N, 4)` sparse coordinate tensor into a dense occupancy grid `[B, 1, rx, ry, rz]`.
     
     Args:
-        sparse_coords (torch.Tensor): An int32 tensor of shape (N, 4) in the format [batch_idx, x, y, z].
-        batch_size (int): The batch size B.
-        res (List[int] | Tuple[int, int, int]): The grid resolution (rx, ry, rz).
+        sparse_coords (torch.Tensor): Int32 tensor of shape `(N, 4)` in `[batch_idx, x, y, z]` format.
+        batch_size (int): The batch size $B$.
+        res (Union[List[int], Tuple[int, int, int]]): The grid resolution `(rx, ry, rz)`.
         
     Returns:
-        torch.Tensor: A float32 tensor of shape [B, 1, rx, ry, rz] containing 1.0 at active voxels and 0.0 otherwise.
+        torch.Tensor: A float32 tensor of shape `(B, 1, rx, ry, rz)` with 1.0 at active voxels and 0.0 elsewhere.
     """
     rx, ry, rz = res
     dense_occ = torch.zeros((batch_size, 1, rx, ry, rz), dtype=torch.float32, device=sparse_coords.device)
@@ -136,18 +143,20 @@ def sparse_coo2dense_occ(
     dense_occ[b, 0, x, y, z] = 1.0
     return dense_occ
 
+
 def dense_occ2sparse_coo(
     dense_occ: torch.Tensor,
     threshold: float = 0.0
 ) -> torch.Tensor:
-    """
-    Converts a [B, C, rx, ry, rz] dense occupancy grid back to a [N, 4] sparse coordinates tensor.
+    """Converts a dense 5D occupancy grid `[B, C, rx, ry, rz]` to a 4D sparse coordinate tensor `[N, 4]`.
     
     Args:
-        dense_occ (torch.Tensor): A tensor of shape [B, C, rx, ry, rz].
+        dense_occ (torch.Tensor): Tensor of shape `(B, C, rx, ry, rz)` containing occupancy probabilities or SDF.
+        threshold (float, optional): Value threshold above which voxels are considered occupied.
+            Defaults to 0.0.
         
     Returns:
-        torch.Tensor: An int32 tensor of shape (N, 4) in the format [batch_idx, x, y, z].
+        torch.Tensor: Int32 tensor of shape `(N, 4)` in `[batch_idx, x, y, z]` format.
     """
     active_mask = dense_occ > threshold
     indices = torch.argwhere(active_mask)
