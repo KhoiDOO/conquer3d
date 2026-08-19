@@ -91,6 +91,11 @@ class Beast(Common3D):
         super().__init__("beast.obj", download_dir)
 
 
+class BeetleAlt(Common3D):
+    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
+        super().__init__("beetle-alt.obj", download_dir)
+
+
 class Beetle(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
         super().__init__("beetle.obj", download_dir)
@@ -101,19 +106,9 @@ class Bimba(Common3D):
         super().__init__("bimba.obj", download_dir)
 
 
-class Bob(Common3D):
+class Cheburashka(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        super().__init__("bob.obj", download_dir)
-
-
-class Bunny(Common3D):
-    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        super().__init__("bunny.obj", download_dir)
-
-
-class Camel(Common3D):
-    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        super().__init__("camel.obj", download_dir)
+        super().__init__("cheburashka.obj", download_dir)
 
 
 class Cow(Common3D):
@@ -121,34 +116,29 @@ class Cow(Common3D):
         super().__init__("cow.obj", download_dir)
 
 
-class Dinosaur(Common3D):
+class Fandisk(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        super().__init__("dinosaur.obj", download_dir)
+        super().__init__("fandisk.obj", download_dir)
 
 
-class Dragon(Common3D):
+class HappyBuddha(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        super().__init__("dragon.obj", download_dir)
+        super().__init__("happy.obj", download_dir)
 
 
-class Duck(Common3D):
+class Homer(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        super().__init__("duck.obj", download_dir)
-
-
-class Feline(Common3D):
-    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        super().__init__("feline.obj", download_dir)
-
-
-class Frog(Common3D):
-    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        super().__init__("frog.obj", download_dir)
+        super().__init__("homer.obj", download_dir)
 
 
 class Horse(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
         super().__init__("horse.obj", download_dir)
+        
+        
+class Igea(Common3D):
+    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
+        super().__init__("igea.obj", download_dir)
 
 
 class Lucy(Common3D):
@@ -156,9 +146,24 @@ class Lucy(Common3D):
         super().__init__("lucy.obj", download_dir)
 
 
-class Nefertiti(Common3D):
+class MaxPlanck(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
+        super().__init__("max-planck.obj", download_dir)
+
+
+class Nefertiti(Common3D):
+    def __init__(self, download_dir: str ="~/.conquer3d") -> None:
         super().__init__("nefertiti.obj", download_dir)
+
+
+class Ogre(Common3D):
+    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
+        super().__init__("ogre.obj", download_dir)
+
+
+class RockerArm(Common3D):
+    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
+        super().__init__("rocker-arm.obj", download_dir)
 
 
 class Spot(Common3D):
@@ -169,13 +174,23 @@ class Spot(Common3D):
 class StanfordBunny(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
         super().__init__("stanford-bunny.obj", download_dir)
-
-
-class StanfordDragon(Common3D):
+        
+        
+class Suzanne(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        super().__init__("stanford-dragon.obj", download_dir)
+        super().__init__("suzanne.obj", download_dir)
 
 
 class Teapot(Common3D):
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
         super().__init__("teapot.obj", download_dir)
+
+
+class Woody(Common3D):
+    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
+        super().__init__("woody.obj", download_dir)
+        
+
+class XYZRGBDragon(Common3D):
+    def __init__(self, download_dir: str = "~/.conquer3d") -> None:
+        super().__init__("xyzrgb_dragon.obj", download_dir)
