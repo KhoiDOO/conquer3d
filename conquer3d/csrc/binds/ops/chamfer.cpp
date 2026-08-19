@@ -37,6 +37,23 @@ std::tuple<torch::Tensor, torch::Tensor> one_sided_chamfer_distance_wrapper(
 }
 
 void bind_ops_chamfer(py::module_& m) {
-    m.def("one_sided_chamfer_distance", &one_sided_chamfer_distance_wrapper, "One Sided Chamfer Distance",
-          py::arg("query_points"), py::arg("reference_points"));
+    m.def("one_sided_chamfer_distance", &one_sided_chamfer_distance_wrapper,
+          py::arg("query_points"), py::arg("reference_points"),
+          R"pbdoc(
+          Computes one-sided nearest-neighbor squared Euclidean distances from query to reference point clouds on CUDA.
+
+          Args:
+              query_points (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+              reference_points (torch.Tensor): (M, 3) float32 coordinates on CUDA.
+
+          Returns:
+              Tuple[torch.Tensor, torch.Tensor]:
+                  - distances (torch.Tensor): (N,) float32 squared Euclidean distance to closest reference point.
+                  - indices (torch.Tensor): (N,) int64 index of the closest reference point for each query point.
+
+          Example:
+              >>> import torch
+              >>> from conquer3d._C import one_sided_chamfer_distance
+              >>> dists, inds = one_sided_chamfer_distance(query_pts, ref_pts)
+          )pbdoc");
 }
