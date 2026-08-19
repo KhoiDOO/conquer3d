@@ -402,110 +402,145 @@ void MeshBVH::build_winding_data(
     this->has_winding_data = true;
 }
 
-void bind_ds_mesh_bvh(py::module_ &m)
-{
-    py::class_<MeshBVH, BVH>(m, "MeshBVH", R"doc(
-    A specialized Bounding Volume Hierarchy for Triangle Meshes.
-    Inherits from BVH.
-    )doc")
+void bind_ds_mesh_bvh(py::module_ &m) {
+    py::class_<MeshBVH, BVH>(m, "MeshBVH", R"pbdoc(
+        GPU-accelerated Bounding Volume Hierarchy specialized for Triangle Meshes.
+
+        Example:
+            >>> import torch
+            >>> from conquer3d._C import MeshBVH
+            >>> mesh_bvh = MeshBVH(triangle_aabb_mins, triangle_aabb_maxs)
+            >>> is_intersect = mesh_bvh.is_self_intersection(verts, tris)
+        )pbdoc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
-             py::arg("in_aabb_mins"),
-             py::arg("in_aabb_maxs"),
-             R"doc(
-        Construct MeshBVH from Triangle AABBs.
+             py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
+             R"pbdoc(
+             Constructs and builds MeshBVH from triangle AABBs.
 
-        Args:
-            in_aabb_mins (torch.Tensor): Shape (M, 3) float32 tensor of triangle AABB minimums.
-            in_aabb_maxs (torch.Tensor): Shape (M, 3) float32 tensor of triangle AABB maximums.
-        )doc")
+             Args:
+                 in_aabb_mins (torch.Tensor): (M, 3) float32 triangle lower bounds on CUDA.
+                 in_aabb_maxs (torch.Tensor): (M, 3) float32 triangle upper bounds on CUDA.
+
+             Example:
+                 >>> mesh_bvh = MeshBVH(aabb_mins, aabb_maxs)
+             )pbdoc")
         .def("get_self_intersection", &MeshBVH::get_self_intersection,
-             py::arg("vertices"),
-             py::arg("triangles"),
-             R"doc(
-        Find all self-intersecting triangle pairs.
+             py::arg("vertices"), py::arg("triangles"),
+             R"pbdoc(
+             Finds all self-intersecting triangle index pairs in the mesh.
 
-        Args:
-            vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
-            triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
+             Args:
+                 vertices (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+                 triangles (torch.Tensor): (M, 3) int32 triangle vertex indices on CUDA.
 
-        Returns:
-            torch.Tensor: Shape (K, 2) int64 tensor of intersecting triangle index pairs.
-        )doc")
+             Returns:
+                 torch.Tensor: (K, 2) int64 intersecting triangle index pairs.
+
+             Example:
+                 >>> pairs = mesh_bvh.get_self_intersection(vertices, triangles)
+             )pbdoc")
         .def("is_self_intersection", &MeshBVH::is_self_intersection,
-             py::arg("vertices"),
-             py::arg("triangles"),
-             R"doc(
-        Check if there are any self-intersecting triangle pairs.
+             py::arg("vertices"), py::arg("triangles"),
+             R"pbdoc(
+             Checks whether the mesh has any self-intersecting triangle pairs.
 
-        Args:
-            vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
-            triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
+             Args:
+                 vertices (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+                 triangles (torch.Tensor): (M, 3) int32 triangle vertex indices on CUDA.
 
-        Returns:
-            bool: True if there is at least one self-intersection.
-        )doc")
-        .def("get_ray_intersection", [](MeshBVH &self, const torch::Tensor &ray_origins, const torch::Tensor &ray_dirs, const torch::Tensor &vertices, const torch::Tensor &triangles, bool return_distance) -> py::object
-             {
+             Returns:
+                 bool: True if at least one self-intersection exists, False otherwise.
+
+             Example:
+                 >>> has_self_int = mesh_bvh.is_self_intersection(vertices, triangles)
+             )pbdoc")
+        .def("get_ray_intersection", [](MeshBVH &self, const torch::Tensor &ray_origins, const torch::Tensor &ray_dirs,
+                                         const torch::Tensor &vertices, const torch::Tensor &triangles,
+                                         bool return_distance) -> py::object {
                  auto result = self.get_ray_intersection(ray_origins, ray_dirs, vertices, triangles, return_distance);
                  if (return_distance) {
                      return py::cast(result);
                  } else {
                      return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result), std::get<2>(result)));
-                 } }, py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("vertices"), py::arg("triangles"), py::arg("return_distance") = false,
-             R"doc(
-        Find all ray-triangle intersections.
+                 }
+             },
+             py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("vertices"), py::arg("triangles"),
+             py::arg("return_distance") = false,
+             R"pbdoc(
+             Computes ray-triangle surface intersections using Möller-Trumbore algorithm.
 
-        Args:
-            ray_origins (torch.Tensor): Shape (R, 3) float32 tensor of ray origins.
-            ray_dirs (torch.Tensor): Shape (R, 3) float32 tensor of ray directions.
-            vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
-            triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
-            return_distance (bool): Whether to compute and return ray hit distances. Defaults to false.
+             Args:
+                 ray_origins (torch.Tensor): (R, 3) float32 ray origins on CUDA.
+                 ray_dirs (torch.Tensor): (R, 3) float32 normalized ray directions on CUDA.
+                 vertices (torch.Tensor): (N, 3) float32 mesh vertices on CUDA.
+                 triangles (torch.Tensor): (M, 3) int32 mesh triangles on CUDA.
+                 return_distance (bool, optional): If True, computes and returns hit distances. Defaults to False.
 
-        Returns:
-            tuple: (ray_ids, triangle_ids, intersect_points, [distances])
-        )doc")
-        .def("query_point", &MeshBVH::query_point, py::arg("query_points"), py::arg("vertices"), py::arg("triangles"), py::arg("return_sdf") = false, py::arg("return_prj_pts") = true, py::arg("sign_mode") = 0, py::arg("triangle_normals") = py::none(), py::arg("vertex_normals") = py::none(), py::arg("edge_normals") = py::none(), py::arg("flood_fill_mask") = py::none(), py::arg("flood_grid_min") = py::none(), py::arg("flood_grid_max") = py::none(), py::arg("flood_grid_res") = py::none(),
-             R"doc(
-        Find the closest triangle to each query point.
+             Returns:
+                 Union[Tuple[torch.Tensor, torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+                     - ray_ids (torch.Tensor): (K,) int64 ray indices.
+                     - triangle_ids (torch.Tensor): (K,) int64 intersected triangle indices.
+                     - intersect_points (torch.Tensor): (K, 3) float32 exact 3D hit positions.
+                     - [distances] (torch.Tensor, optional): (K,) float32 hit distances $t$.
 
-        Args:
-            query_points (torch.Tensor): Shape (Q, 3) float32 tensor of query points.
-            vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
-            triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
-            return_sdf (bool): Whether to compute signed distances instead of unsigned. Defaults to false.
-            return_prj_pts (bool): Whether to compute and return projected points. Defaults to true.
-            sign_mode (int): Winding number method (0 for ray casting, 1 for fast winding number, 2 for pseudonormals, 3 for flood fill, 4 for hybrid WN + pseudonormal). Defaults to 0.
-            triangle_normals (torch.Tensor, optional): Pre-computed face normals from TriangleMesh.
-            vertex_normals (torch.Tensor, optional): Pre-computed vertex normals from TriangleMesh.
-            edge_normals (torch.Tensor, optional): Pre-computed edge normals from TriangleMesh.
-            flood_fill_mask (torch.Tensor, optional): Pre-computed flood fill volume mask.
-            flood_grid_min (list, optional): Flood grid bounding box min.
-            flood_grid_max (list, optional): Flood grid bounding box max.
-            flood_grid_res (list, optional): Flood grid vertex resolution.
+             Example:
+                 >>> ray_ids, tri_ids, pts = mesh_bvh.get_ray_intersection(origins, dirs, verts, tris)
+             )pbdoc")
+        .def("query_point", &MeshBVH::query_point,
+             py::arg("query_points"), py::arg("vertices"), py::arg("triangles"),
+             py::arg("return_sdf") = false, py::arg("return_prj_pts") = true, py::arg("sign_mode") = 0,
+             py::arg("triangle_normals") = py::none(), py::arg("vertex_normals") = py::none(),
+             py::arg("edge_normals") = py::none(), py::arg("flood_fill_mask") = py::none(),
+             py::arg("flood_grid_min") = py::none(), py::arg("flood_grid_max") = py::none(),
+             py::arg("flood_grid_res") = py::none(),
+             R"pbdoc(
+             Finds closest triangles, projected surface points, and Signed Distance Fields (SDF).
 
-        Returns:
-            tuple: (query_ids, triangle_ids, projected_points, distances)
-        )doc")
-        .def("build_winding_data", &MeshBVH::build_winding_data, py::arg("vertices"), py::arg("triangles"),
-             R"doc(
-        Computes the hierarchical area-weighted constants for Fast Winding Number queries.
+             Args:
+                 query_points (torch.Tensor): (Q, 3) float32 query coordinates on CUDA.
+                 vertices (torch.Tensor): (N, 3) float32 mesh vertices on CUDA.
+                 triangles (torch.Tensor): (M, 3) int32 mesh triangles on CUDA.
+                 return_sdf (bool, optional): Return signed distance instead of unsigned. Defaults to False.
+                 return_prj_pts (bool, optional): Return closest surface projections. Defaults to True.
+                 sign_mode (int, optional): Sign evaluation method (0: ray parity, 1: Fast Winding Number, 2: angle-weighted pseudonormals, 3: flood-fill mask). Defaults to 0.
 
-        Args:
-            vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
-            triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
-        )doc")
-        .def("query_voxel", &MeshBVH::query_voxel, py::arg("query_mins"), py::arg("query_maxs"), py::arg("vertices"), py::arg("triangles"),
-             R"doc(
-        Queries whether each voxel intersects the mesh.
-        
-        Args:
-            query_mins (torch.Tensor): Shape (Q, 3) float32 tensor of voxel minimums.
-            query_maxs (torch.Tensor): Shape (Q, 3) float32 tensor of voxel maximums.
-            vertices (torch.Tensor): Shape (N, 3) float32 tensor of vertices.
-            triangles (torch.Tensor): Shape (M, 3) int32 tensor of triangles.
-            
-        Returns:
-            torch.Tensor: Boolean tensor of shape (Q,) indicating intersection.
-        )doc");
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+                     - query_ids (torch.Tensor): (Q,) int64 query indices.
+                     - triangle_ids (torch.Tensor): (Q,) int64 closest triangle indices.
+                     - projected_points (torch.Tensor): (Q, 3) float32 closest surface coordinates.
+                     - distances (torch.Tensor): (Q,) float32 signed/unsigned distances.
+
+             Example:
+                 >>> q_ids, tri_ids, prj_pts, dists = mesh_bvh.query_point(query_pts, verts, tris, return_sdf=True)
+             )pbdoc")
+        .def("build_winding_data", &MeshBVH::build_winding_data,
+             py::arg("vertices"), py::arg("triangles"),
+             R"pbdoc(
+             Computes hierarchical dipole moment constants for Barnes-Hut Fast Winding Number queries.
+
+             Args:
+                 vertices (torch.Tensor): (N, 3) float32 mesh vertices on CUDA.
+                 triangles (torch.Tensor): (M, 3) int32 mesh triangles on CUDA.
+
+             Example:
+                 >>> mesh_bvh.build_winding_data(vertices, triangles)
+             )pbdoc")
+        .def("query_voxel", &MeshBVH::query_voxel,
+             py::arg("query_mins"), py::arg("query_maxs"), py::arg("vertices"), py::arg("triangles"),
+             R"pbdoc(
+             Tests SAT overlap between 3D voxel boxes and mesh triangles.
+
+             Args:
+                 query_mins (torch.Tensor): (Q, 3) float32 voxel min bounds on CUDA.
+                 query_maxs (torch.Tensor): (Q, 3) float32 voxel max bounds on CUDA.
+                 vertices (torch.Tensor): (N, 3) float32 mesh vertices on CUDA.
+                 triangles (torch.Tensor): (M, 3) int32 mesh triangles on CUDA.
+
+             Returns:
+                 torch.Tensor: (Q,) bool tensor where True indicates voxel intersects mesh.
+
+             Example:
+                 >>> is_occupied = mesh_bvh.query_voxel(vx_mins, vx_maxs, verts, tris)
+             )pbdoc");
 }
