@@ -942,423 +942,429 @@ bool TriangleMesh::is_manifold(bool allow_boundary_edge)
     return this->is_edge_manifold(allow_boundary_edge) && this->is_vertex_manifold() && !this->is_self_intersection();
 }
 
-void bind_ds_triangle_mesh(py::module_ &m)
-{
-    py::class_<TriangleMesh>(m, "TriangleMesh", R"doc(
-        A highly efficient Triangle Mesh data structure natively backed by CUDA.
+void bind_ds_triangle_mesh(py::module_ &m) {
+    py::class_<TriangleMesh>(m, "TriangleMesh", R"pbdoc(
+        GPU-accelerated Triangle Mesh data structure with differential geometry and spatial query primitives.
 
-        Args:
-            in_vertices (torch.Tensor): A tensor of shape (N, 3) containing float32 vertex coordinates.
-            in_triangles (torch.Tensor): A tensor of shape (M, 3) containing int32 triangle indices.
-            in_vertex_normals (torch.Tensor, optional): A tensor of shape (N, 3) containing float32 vertex normals. Defaults to None.
-            in_vertex_colors (torch.Tensor, optional): A tensor of shape (N, 3) containing float32 vertex colors. Defaults to None.
-        )doc")
+        Example:
+            >>> import torch
+            >>> from conquer3d._C import TriangleMesh
+            >>> mesh = TriangleMesh(vertices, triangles)
+            >>> is_m = mesh.is_manifold()
+        )pbdoc")
         .def(py::init<const torch::Tensor &, const torch::Tensor &, std::optional<torch::Tensor>, std::optional<torch::Tensor>>(),
-             py::arg("in_vertices"),
-             py::arg("in_triangles"),
-             py::arg("in_vertex_normals") = std::nullopt,
-             py::arg("in_vertex_colors") = std::nullopt)
-        .def_property_readonly("num_triangles", &TriangleMesh::get_num_triangles, R"doc(
-        Total number of triangles.
+             py::arg("in_vertices"), py::arg("in_triangles"),
+             py::arg("in_vertex_normals") = std::nullopt, py::arg("in_vertex_colors") = std::nullopt,
+             R"pbdoc(
+             Constructs a GPU TriangleMesh instance.
 
-        Returns:
-            int - Total number of triangles.
-        )doc")
-        .def_property_readonly("vertices", &TriangleMesh::get_vertices, R"doc(
-        Mesh vertices coordinates.
+             Args:
+                 in_vertices (torch.Tensor): (N, 3) float32 coordinates on CUDA.
+                 in_triangles (torch.Tensor): (M, 3) int32 triangle vertex indices on CUDA.
+                 in_vertex_normals (torch.Tensor, optional): (N, 3) float32 vertex normals on CUDA.
+                 in_vertex_colors (torch.Tensor, optional): (N, 3) float32 RGB vertex colors on CUDA.
 
-        Returns:
-            torch.Tensor - Shape (N, 3) float32 tensor of vertices.
-        )doc")
-        .def_property_readonly("vertex_normals", [](TriangleMesh &self) { return self.get_vertex_normals(0); }, R"doc(
-        Vertex normals (unweighted mode 0 by default).
+             Example:
+                 >>> mesh = TriangleMesh(verts, tris)
+             )pbdoc")
+        .def_property_readonly("num_triangles", &TriangleMesh::get_num_triangles, "Total number of triangles in mesh (int).")
+        .def_property_readonly("vertices", &TriangleMesh::get_vertices, "Mesh vertex coordinates (N, 3) float32.")
+        .def_property_readonly("vertex_normals", [](TriangleMesh &self) { return self.get_vertex_normals(0); },
+                               "Vertex normals (N, 3) float32 (unweighted average mode 0).")
+        .def("get_vertex_normals", &TriangleMesh::get_vertex_normals, py::arg("mode") = 0,
+             R"pbdoc(
+             Retrieves or lazily computes vertex normals on GPU.
 
-        Returns:
-            torch.Tensor - Shape (N, 3) float32 tensor of vertex normals.
-        )doc")
-        .def("get_vertex_normals", &TriangleMesh::get_vertex_normals, py::arg("mode") = 0, R"doc(
-        Get vertex normals with specific mode (0: unweighted average, 1: angle-weighted pseudonormals).
+             Args:
+                 mode (int, optional): Normal mode (0: unweighted face average, 1: incident angle-weighted pseudonormals). Defaults to 0.
 
-        Args:
-            mode (int, optional): Normal computation mode. Defaults to 0.
+             Returns:
+                 torch.Tensor: (N, 3) float32 unit vertex normals.
 
-        Returns:
-            torch.Tensor - Shape (N, 3) float32 tensor of vertex normals.
-        )doc")
-        .def("compute_vertex_normals", &TriangleMesh::compute_vertex_normals, py::arg("mode") = 0, R"doc(
-        Compute vertex normals with specific mode (0: unweighted average, 1: angle-weighted pseudonormals).
+             Example:
+                 >>> v_normals = mesh.get_vertex_normals(mode=1)
+             )pbdoc")
+        .def("compute_vertex_normals", &TriangleMesh::compute_vertex_normals, py::arg("mode") = 0,
+             R"pbdoc(
+             Computes vertex normals on GPU.
 
-        Args:
-            mode (int, optional): Normal computation mode. Defaults to 0.
-        )doc")
-        .def_property_readonly("vertex_colors", &TriangleMesh::get_vertex_colors, R"doc(
-        Vertex colors.
+             Args:
+                 mode (int, optional): Normal mode (0: unweighted, 1: angle-weighted). Defaults to 0.
 
-        Returns:
-            torch.Tensor - Shape (N, 3) float32 tensor of vertex colors.
-        )doc")
-        .def_property_readonly("vertex_degrees", &TriangleMesh::get_vertex_degrees, R"doc(
-        Degree of each vertex (number of incident edges).
+             Example:
+                 >>> mesh.compute_vertex_normals(mode=1)
+             )pbdoc")
+        .def_property_readonly("vertex_colors", &TriangleMesh::get_vertex_colors, "Vertex colors (N, 3) float32.")
+        .def_property_readonly("vertex_degrees", &TriangleMesh::get_vertex_degrees, "Vertex degrees (number of incident edges) (N,) int32.")
+        .def_property_readonly("valence_567_percentage", &TriangleMesh::get_valence_567_percentage, "Percentage of vertices with valence 5, 6, or 7.")
+        .def_property_readonly("vertex_lb_uniform", &TriangleMesh::get_vertex_lb_uniform, "Uniform Laplace-Beltrami operator (N, 3) float32.")
+        .def_property_readonly("triangles", &TriangleMesh::get_triangles, "Mesh triangles (M, 3) int32.")
+        .def_property_readonly("triangle_areas", &TriangleMesh::get_triangle_areas, "Areas of each triangle (M,) float32.")
+        .def_property_readonly("triangle_normals", &TriangleMesh::get_triangle_normals, "Normals of each triangle (M, 3) float32.")
+        .def_property_readonly("edge_normals", &TriangleMesh::get_edge_normals, "Directed edge normals (3*M, 3) float32 for sign queries.")
+        .def_property_readonly("edge_normal", &TriangleMesh::get_edge_normal, "Alias for edge_normals.")
+        .def("get_edge_normals", &TriangleMesh::get_edge_normals, "Get edge normals (3*M, 3) float32 for pseudonormal sign queries.")
+        .def("get_edge_normal", &TriangleMesh::get_edge_normal, "Alias for get_edge_normals.")
+        .def("compute_edge_normals", &TriangleMesh::compute_edge_normals, "Compute edge normals for pseudonormal sign queries.")
+        .def("compute_edge_normal", &TriangleMesh::compute_edge_normal, "Alias for compute_edge_normals.")
+        .def_property_readonly("surface_area", &TriangleMesh::get_surface_area, "Total surface area of the mesh.")
+        .def("get_quality", &TriangleMesh::get_quality,
+             R"pbdoc(
+             Computes mesh triangle quality metric $Q = \frac{2\sqrt{3} \cdot r_{in}}{r_{circ}}$.
 
-        Returns:
-            torch.Tensor - Shape (N,) int32 tensor of vertex degrees.
-        )doc")
-        .def_property_readonly("valence_567_percentage", &TriangleMesh::get_valence_567_percentage, R"doc(
-        Percentage of vertices whose degrees (valences) are 5, 6, or 7.
+             Returns:
+                 Tuple[float, float]: (min_quality, average_quality) in range [0, 1].
 
-        Returns:
-            float - Percentage in range [0, 100].
-        )doc")
-        .def_property_readonly("vertex_lb_uniform", &TriangleMesh::get_vertex_lb_uniform, R"doc(
-        Uniform Laplace-Beltrami operator evaluated at each vertex.
+             Example:
+                 >>> min_q, avg_q = mesh.get_quality()
+             )pbdoc")
+        .def("get_aspect_ratio", &TriangleMesh::get_aspect_ratio, py::arg("mode"),
+             R"pbdoc(
+             Computes aspect ratio for all triangles.
 
-        Returns:
-            torch.Tensor - Shape (N, 3) float32 tensor of uniform laplacian vectors.
-        )doc")
-        .def_property_readonly("triangles", &TriangleMesh::get_triangles, R"doc(
-        Mesh triangles.
+             Args:
+                 mode (int): Aspect ratio formula mode.
 
-        Returns:
-            torch.Tensor - Shape (M, 3) int32 tensor of triangles.
-        )doc")
-        .def_property_readonly("triangle_areas", &TriangleMesh::get_triangle_areas, R"doc(
-        Areas of each triangle.
+             Returns:
+                 torch.Tensor: (M,) float32 aspect ratio per face.
 
-        Returns:
-            torch.Tensor - Shape (M,) float32 tensor of triangle areas.
-        )doc")
-        .def_property_readonly("triangle_normals", &TriangleMesh::get_triangle_normals, R"doc(
-        Normals of each triangle.
+             Example:
+                 >>> ar = mesh.get_aspect_ratio(0)
+             )pbdoc")
+        .def("get_radii_ratio", &TriangleMesh::get_radii_ratio,
+             R"pbdoc(
+             Computes ratio of incircle to circumcircle radius: $2 \cdot r_{in} / r_{circ}$.
 
-        Returns:
-            torch.Tensor - Shape (M, 3) float32 tensor of triangle normals.
-        )doc")
-        .def_property_readonly("edge_normals", &TriangleMesh::get_edge_normals, R"doc(
-        Normals of each directed edge slot (3 per triangle) for sign queries.
+             Returns:
+                 torch.Tensor: (M,) float32 ratio values per face.
 
-        Returns:
-            torch.Tensor - Shape (3*M, 3) float32 tensor of edge normals.
-        )doc")
-        .def_property_readonly("edge_normal", &TriangleMesh::get_edge_normal, R"doc(
-        Alias for edge_normals.
+             Example:
+                 >>> ratios = mesh.get_radii_ratio()
+             )pbdoc")
+        .def("get_triangle_regularity", &TriangleMesh::get_triangle_regularity,
+             R"pbdoc(
+             Computes triangle regularity: $2\sqrt{3} \cdot r_{in} / l_{max}$.
 
-        Returns:
-            torch.Tensor - Shape (3*M, 3) float32 tensor of edge normals.
-        )doc")
-        .def("get_edge_normals", &TriangleMesh::get_edge_normals, R"doc(
-        Get edge normals for pseudonormal sign queries.
+             Returns:
+                 torch.Tensor: (M,) float32 regularity values in [0, 1].
 
-        Returns:
-            torch.Tensor - Shape (3*M, 3) float32 tensor of edge normals.
-        )doc")
-        .def("get_edge_normal", &TriangleMesh::get_edge_normal, R"doc(
-        Alias for get_edge_normals.
+             Example:
+                 >>> reg = mesh.get_triangle_regularity()
+             )pbdoc")
+        .def("get_radius_edge_ratio", &TriangleMesh::get_radius_edge_ratio,
+             R"pbdoc(
+             Computes radius-edge ratio: $r_{circ} / l_{min}$.
 
-        Returns:
-            torch.Tensor - Shape (3*M, 3) float32 tensor of edge normals.
-        )doc")
-        .def("compute_edge_normals", &TriangleMesh::compute_edge_normals, R"doc(
-        Compute edge normals for pseudonormal sign queries.
-        )doc")
-        .def("compute_edge_normal", &TriangleMesh::compute_edge_normal, R"doc(
-        Alias for compute_edge_normals.
-        )doc")
-        .def_property_readonly("surface_area", &TriangleMesh::get_surface_area, R"doc(
-        Total surface area of the mesh.
+             Returns:
+                 torch.Tensor: (M,) float32 radius-edge ratio values.
 
-        Returns:
-            torch.Tensor - Total surface area of the mesh.
-        )doc")
-        .def("get_quality", &TriangleMesh::get_quality, R"doc(
-        Compute the global quality of the mesh.
+             Example:
+                 >>> re = mesh.get_radius_edge_ratio()
+             )pbdoc")
+        .def("get_angle_deviation", &TriangleMesh::get_angle_deviation,
+             R"pbdoc(
+             Computes mean internal angle deviation from equilateral 60 degrees.
 
-        Returns:
-            Tuple[float, float] - Minimum and average triangle quality.
-        )doc")
-        .def("get_aspect_ratio", &TriangleMesh::get_aspect_ratio, py::arg("mode"), R"doc(
-        Compute aspect ratio for all triangles.
+             Returns:
+                 torch.Tensor: (M,) float32 angle deviation in degrees.
 
-        Args:
-            mode (int): The formula mode to use.
+             Example:
+                 >>> dev = mesh.get_angle_deviation()
+             )pbdoc")
+        .def_property_readonly("bvh", &TriangleMesh::build_bvh, "The Bounding Volume Hierarchy (MeshBVH) built for this mesh.")
+        .def("build_bvh", &TriangleMesh::build_bvh, "Builds and returns the MeshBVH for the mesh.")
+        .def("build_flood_fill_data", &TriangleMesh::build_flood_fill_data,
+             py::arg("grid_min") = py::none(), py::arg("grid_max") = py::none(),
+             py::arg("res") = py::none(), py::arg("connectivity") = 6,
+             R"pbdoc(
+             Pre-computes a volumetric flood-fill occupancy grid for sign_mode=3.
 
-        Returns:
-            torch.Tensor - Shape (M,) float32 tensor of triangle aspect ratios.
-        )doc")
-        .def("get_radii_ratio", &TriangleMesh::get_radii_ratio, R"doc(
-        Compute the radii ratio (incircle / circumcircle) for all triangles.
+             Args:
+                 grid_min (List[float], optional): Lower grid extents [x, y, z].
+                 grid_max (List[float], optional): Upper grid extents [x, y, z].
+                 res (List[int], optional): Grid resolution [rx, ry, rz].
+                 connectivity (int, optional): Neighborhood connectivity (6, 18, 26). Defaults to 6.
 
-        Returns:
-            torch.Tensor - Shape (M,) float32 tensor of triangle radii ratios.
-        )doc")
-        .def("get_triangle_regularity", &TriangleMesh::get_triangle_regularity, R"doc(
-        Compute the triangle regularity (2 * sqrt(3) * r / l) for all triangles.
+             Example:
+                 >>> mesh.build_flood_fill_data([-1,-1,-1], [1,1,1], [128,128,128])
+             )pbdoc")
+        .def_property_readonly("flood_fill_mask", &TriangleMesh::get_flood_fill_mask, "Pre-computed flood fill int32 mask tensor.")
+        .def_property_readonly("flood_grid_min", &TriangleMesh::get_flood_grid_min, "Flood grid bounding box min coordinates.")
+        .def_property_readonly("flood_grid_max", &TriangleMesh::get_flood_grid_max, "Flood grid bounding box max coordinates.")
+        .def_property_readonly("flood_grid_res", &TriangleMesh::get_flood_grid_res, "Flood grid vertex resolution.")
+        .def("get_self_intersection", &TriangleMesh::get_self_intersection,
+             R"pbdoc(
+             Finds all self-intersecting triangle pairs in the mesh.
 
-        Returns:
-            torch.Tensor - Shape (M,) float32 tensor of triangle regularities.
-        )doc")
-        .def("get_radius_edge_ratio", &TriangleMesh::get_radius_edge_ratio, R"doc(
-        Compute the radius edge ratio (R / e) for all triangles.
+             Returns:
+                 torch.Tensor: (K, 2) int64 index pairs of colliding triangles.
 
-        Returns:
-            torch.Tensor - Shape (M,) float32 tensor of triangle radius edge ratios.
-        )doc")
-        .def("get_angle_deviation", &TriangleMesh::get_angle_deviation, R"doc(
-        Compute the mean angle deviation from 60 degrees for all triangles.
+             Example:
+                 >>> pairs = mesh.get_self_intersection()
+             )pbdoc")
+        .def("is_self_intersection", &TriangleMesh::is_self_intersection,
+             R"pbdoc(
+             Checks if the mesh contains any self-intersecting triangle pairs.
 
-        Returns:
-            torch.Tensor - Shape (M,) float32 tensor of triangle angle deviations.
-        )doc")
-        .def_property_readonly("bvh", &TriangleMesh::build_bvh, R"doc(
-        The Bounding Volume Hierarchy built for this mesh.
+             Returns:
+                 bool: True if self-intersection detected, False otherwise.
 
-        Returns:
-            MeshBVH - The Bounding Volume Hierarchy built for this mesh.
-        )doc")
-        .def("build_bvh", &TriangleMesh::build_bvh, R"doc(
-        Builds and returns the Bounding Volume Hierarchy for the mesh.
-
-        Returns:
-            MeshBVH: The constructed BVH object.
-        )doc")
-        .def("build_flood_fill_data", &TriangleMesh::build_flood_fill_data, py::arg("grid_min") = py::none(), py::arg("grid_max") = py::none(), py::arg("res") = py::none(), py::arg("connectivity") = 6, R"doc(
-        Builds volumetric flood fill mask for sign_mode=3.
-
-        Args:
-            grid_min (list, optional): Bounding grid minimum coordinates [x, y, z].
-            grid_max (list, optional): Bounding grid maximum coordinates [x, y, z].
-            res (list, optional): Grid vertex resolutions [rx, ry, rz].
-            connectivity (int, optional): Voxel connectivity (6, 18, or 26). Defaults to 6.
-        )doc")
-        .def_property_readonly("flood_fill_mask", &TriangleMesh::get_flood_fill_mask, R"doc(
-        The pre-computed flood fill int32 mask tensor.
-        )doc")
-        .def_property_readonly("flood_grid_min", &TriangleMesh::get_flood_grid_min, R"doc(
-        The flood grid bounding box min coordinates.
-        )doc")
-        .def_property_readonly("flood_grid_max", &TriangleMesh::get_flood_grid_max, R"doc(
-        The flood grid bounding box max coordinates.
-        )doc")
-        .def_property_readonly("flood_grid_res", &TriangleMesh::get_flood_grid_res, R"doc(
-        The flood grid vertex resolution.
-        )doc")
-        .def("get_self_intersection", &TriangleMesh::get_self_intersection, R"doc(
-        Finds all self-intersecting triangle pairs in the mesh.
-
-        Returns:
-            torch.Tensor: A tensor of shape (K, 2) containing pairs of intersecting triangle indices.
-        )doc")
-        .def("is_self_intersection", &TriangleMesh::is_self_intersection, R"doc(
-        Checks whether the mesh contains any self-intersecting triangles.
-
-        Returns:
-            bool: True if there is at least one self-intersection, False otherwise.
-        )doc")
-        .def("get_ray_intersection", [](TriangleMesh &self, const torch::Tensor &ray_origins, const torch::Tensor &ray_dirs, bool return_distance) -> py::object
-             {
+             Example:
+                 >>> has_self_int = mesh.is_self_intersection()
+             )pbdoc")
+        .def("get_ray_intersection", [](TriangleMesh &self, const torch::Tensor &ray_origins, const torch::Tensor &ray_dirs,
+                                         bool return_distance) -> py::object {
                  auto result = self.get_ray_intersection(ray_origins, ray_dirs, return_distance);
                  if (return_distance) {
                      return py::cast(result);
                  } else {
                      return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result), std::get<2>(result)));
-                 } }, py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("return_distance") = false,
-             R"doc(
-        Computes intersections between a batch of rays and the mesh triangles.
+                 }
+             },
+             py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("return_distance") = false,
+             R"pbdoc(
+             Computes ray-mesh surface intersections via Möller-Trumbore algorithm.
 
-        Args:
-            ray_origins (torch.Tensor): Shape (R, 3) float32 tensor of ray origins.
-            ray_dirs (torch.Tensor): Shape (R, 3) float32 tensor of ray directions.
-            return_distance (bool, optional): If True, returns intersection distances. Defaults to False.
+             Args:
+                 ray_origins (torch.Tensor): (R, 3) float32 ray origins on CUDA.
+                 ray_dirs (torch.Tensor): (R, 3) float32 normalized ray directions on CUDA.
+                 return_distance (bool, optional): Return hit distance along ray. Defaults to False.
 
-        Returns:
-            tuple: (ray_ids, triangle_ids, intersect_points, [distances])
-        )doc")
-        .def("query_points", &TriangleMesh::query_points, py::arg("query_pts"), py::arg("return_sdf") = false, py::arg("return_prj_pts") = true, py::arg("sign_mode") = 0, py::arg("distance_mode") = 0,
-             R"doc(
-        Finds the closest triangles and computes distances/SDFs for query points.
+             Returns:
+                 Union[Tuple[torch.Tensor, torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+                     - ray_ids (torch.Tensor): (K,) int64 ray indices.
+                     - triangle_ids (torch.Tensor): (K,) int64 hit triangle indices.
+                     - intersect_points (torch.Tensor): (K, 3) float32 exact 3D hit positions.
+                     - [distances] (torch.Tensor, optional): (K,) float32 hit distances $t$.
 
-        Args:
-            query_pts (torch.Tensor): Shape (Q, 3) float32 tensor of query points.
-            return_sdf (bool, optional): Whether to return Signed Distance Field values. Defaults to False.
-            return_prj_pts (bool, optional): Whether to return projected points on the mesh. Defaults to True.
-            sign_mode (int, optional): The method for computing signs (0: ray casting parity, 1: fast winding number, 2: angle-weighted pseudonormals, 3: volumetric flood fill + pseudonormal hybrid, 4: hybrid WN + pseudonormals). Defaults to 0.
-            distance_mode (int, optional): Distance computation mode. Defaults to 0.
+             Example:
+                 >>> ray_ids, tri_ids, pts = mesh.get_ray_intersection(origins, dirs)
+             )pbdoc")
+        .def("query_points", &TriangleMesh::query_points,
+             py::arg("query_pts"), py::arg("return_sdf") = false, py::arg("return_prj_pts") = true,
+             py::arg("sign_mode") = 0, py::arg("distance_mode") = 0,
+             R"pbdoc(
+             Finds closest triangles and computes Signed Distance Fields (SDF).
 
-        Returns:
-            tuple: (query_ids, triangle_ids, projected_points, distances)
-        )doc")
-        .def_property_readonly("edges", &TriangleMesh::get_edges, R"doc(
-        Unique edges of the mesh.
+             Args:
+                 query_pts (torch.Tensor): (Q, 3) float32 query coordinates on CUDA.
+                 return_sdf (bool, optional): Return signed distance instead of unsigned. Defaults to False.
+                 return_prj_pts (bool, optional): Return closest surface projection coordinates. Defaults to True.
+                 sign_mode (int, optional): Sign evaluation method (0: ray parity, 1: Fast Winding Number, 2: angle-weighted pseudonormals, 3: flood-fill mask). Defaults to 0.
+                 distance_mode (int, optional): Distance algorithm (0: Ericson closest point, 1: projected normal). Defaults to 0.
 
-        Returns:
-            torch.Tensor - Shape (E, 2) int32 tensor of unique edges.
-        )doc")
-        .def_property_readonly("edge_to_triangle_offsets", &TriangleMesh::get_edge_to_triangle_offsets, R"doc(
-        Edge to triangle offsets.
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+                     - query_ids (torch.Tensor): (Q,) int64 query point indices.
+                     - triangle_ids (torch.Tensor): (Q,) int64 closest triangle indices.
+                     - projected_points (torch.Tensor): (Q, 3) float32 closest surface coordinates.
+                     - distances (torch.Tensor): (Q,) float32 signed/unsigned distances.
 
-        Returns:
-            torch.Tensor - Edge to triangle offsets.
-        )doc")
-        .def_property_readonly("edge_to_triangle_counts", &TriangleMesh::get_edge_to_triangle_counts, R"doc(
-        Edge to triangle counts.
-
-        Returns:
-            torch.Tensor - Edge to triangle counts.
-        )doc")
-        .def_property_readonly("edge_to_triangle_indices", &TriangleMesh::get_edge_to_triangle_indices, R"doc(
-        Edge to triangle indices.
-
-        Returns:
-            torch.Tensor - Edge to triangle indices.
-        )doc")
+             Example:
+                 >>> q_ids, tri_ids, prj_pts, dists = mesh.query_points(query_pts, return_sdf=True)
+             )pbdoc")
+        .def_property_readonly("edges", &TriangleMesh::get_edges, "Unique edges of the mesh (E, 2) int32.")
+        .def_property_readonly("edge_to_triangle_offsets", &TriangleMesh::get_edge_to_triangle_offsets, "Edge to triangle CSR offsets.")
+        .def_property_readonly("edge_to_triangle_counts", &TriangleMesh::get_edge_to_triangle_counts, "Edge to triangle incident counts.")
+        .def_property_readonly("edge_to_triangle_indices", &TriangleMesh::get_edge_to_triangle_indices, "Edge to triangle incident face indices.")
         .def("compute_triangle_areas", &TriangleMesh::compute_triangle_areas, "Computes the areas of all triangles.")
         .def("compute_triangle_normals", &TriangleMesh::compute_triangle_normals, "Computes the normals for all triangles.")
         .def("compute_edges_to_triangle_map", &TriangleMesh::compute_edges_to_triangle_map, "Computes the edge-to-triangle connectivity map.")
-        .def("get_edges_to_triangle_map", &TriangleMesh::get_edges_to_triangle_map, R"doc(
-        Gets the edge to triangle connectivity mapping.
+        .def("get_edges_to_triangle_map", &TriangleMesh::get_edges_to_triangle_map,
+             R"pbdoc(
+             Gets edge-to-triangle CSR connectivity structure.
 
-        Returns:
-            tuple: (edges, offsets, counts, indices)
-        )doc")
-        .def("compute_vertices_to_triangle_map", &TriangleMesh::compute_vertices_to_triangle_map, "Computes the vertex-to-triangle connectivity map.")
-        .def("get_vertices_to_triangle_map", &TriangleMesh::get_vertices_to_triangle_map, R"doc(
-        Gets the vertex to triangle connectivity mapping.
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: (edges, offsets, counts, indices)
 
-        Returns:
-            tuple: (offsets, counts, indices)
-        )doc")
-        .def_property_readonly("vertex_to_triangle_offsets", &TriangleMesh::get_vertex_to_triangle_offsets, R"doc(
-        Vertex to triangle offsets.
+             Example:
+                 >>> edges, offsets, counts, indices = mesh.get_edges_to_triangle_map()
+             )pbdoc")
+        .def("compute_vertices_to_triangle_map", &TriangleMesh::compute_vertices_to_triangle_map, "Computes vertex-to-triangle connectivity map.")
+        .def("get_vertices_to_triangle_map", &TriangleMesh::get_vertices_to_triangle_map,
+             R"pbdoc(
+             Gets vertex-to-triangle CSR connectivity structure.
 
-        Returns:
-            torch.Tensor - Vertex to triangle offsets.
-        )doc")
-        .def_property_readonly("vertex_to_triangle_counts", &TriangleMesh::get_vertex_to_triangle_counts, R"doc(
-        Vertex to triangle counts.
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: (offsets, counts, indices)
 
-        Returns:
-            torch.Tensor - Vertex to triangle counts.
-        )doc")
-        .def_property_readonly("vertex_to_triangle_indices", &TriangleMesh::get_vertex_to_triangle_indices, R"doc(
-        Vertex to triangle indices.
+             Example:
+                 >>> offsets, counts, indices = mesh.get_vertices_to_triangle_map()
+             )pbdoc")
+        .def_property_readonly("vertex_to_triangle_offsets", &TriangleMesh::get_vertex_to_triangle_offsets, "Vertex to triangle CSR offsets.")
+        .def_property_readonly("vertex_to_triangle_counts", &TriangleMesh::get_vertex_to_triangle_counts, "Vertex to triangle incident counts.")
+        .def_property_readonly("vertex_to_triangle_indices", &TriangleMesh::get_vertex_to_triangle_indices, "Vertex to triangle incident face indices.")
+        .def("is_edge_manifold", &TriangleMesh::is_edge_manifold, py::arg("allow_boundary_edge") = true,
+             R"pbdoc(
+             Checks if every mesh edge is shared by at most 2 triangles.
 
-        Returns:
-            torch.Tensor - Vertex to triangle indices.
-        )doc")
-        .def("is_edge_manifold", &TriangleMesh::is_edge_manifold, py::arg("allow_boundary_edge") = true, R"doc(
-        Checks if the mesh is edge manifold.
+             Args:
+                 allow_boundary_edge (bool, optional): If True, open boundary edges with 1 incident face are permitted. Defaults to True.
 
-        Args:
-            allow_boundary_edge (bool, optional): Whether to permit boundary edges (count <= 2). Defaults to True.
+             Returns:
+                 bool: True if edge-manifold, False otherwise.
 
-        Returns:
-            bool: True if the mesh is edge manifold.
-        )doc")
-        .def("is_vertex_manifold", &TriangleMesh::is_vertex_manifold, R"doc(
-        Checks if the mesh is vertex manifold.
+             Example:
+                 >>> is_em = mesh.is_edge_manifold(allow_boundary_edge=False)
+             )pbdoc")
+        .def("is_vertex_manifold", &TriangleMesh::is_vertex_manifold,
+             R"pbdoc(
+             Checks if every vertex forms a single topological disc or cone neighborhood.
 
-        Returns:
-            bool: True if all vertices are manifold.
-        )doc")
-        .def("is_manifold", &TriangleMesh::is_manifold, py::arg("allow_boundary_edge") = true, R"doc(
-        Checks if the mesh is fully manifold (edge, vertex, and no self-intersections).
+             Returns:
+                 bool: True if vertex-manifold, False otherwise.
 
-        Args:
-            allow_boundary_edge (bool, optional): Whether to permit boundary edges. Defaults to True.
+             Example:
+                 >>> is_vm = mesh.is_vertex_manifold()
+             )pbdoc")
+        .def("is_manifold", &TriangleMesh::is_manifold, py::arg("allow_boundary_edge") = true,
+             R"pbdoc(
+             Checks if the mesh is fully 2-manifold (edge-manifold, vertex-manifold, without self-intersections).
 
-        Returns:
-            bool: True if fully manifold.
-        )doc")
-        .def("get_non_manifold_vertices", &TriangleMesh::get_non_manifold_vertices, R"doc(
-        Gets all non-manifold vertices.
+             Args:
+                 allow_boundary_edge (bool, optional): Allow open boundary edges. Defaults to True.
 
-        Returns:
-            torch.Tensor: Tensor of vertex indices that are non-manifold.
-        )doc")
-        .def("get_isolated_vertices", &TriangleMesh::get_isolated_vertices, R"doc(
-        Gets the indices of all isolated vertices (degree 0).
+             Returns:
+                 bool: True if fully 2-manifold, False otherwise.
 
-        Returns:
-            torch.Tensor - 1D tensor of isolated vertex indices.
-        )doc")
-        .def_property_readonly("num_isolated_vertices", &TriangleMesh::get_num_isolated_vertices, R"doc(
-        Gets the total number of isolated vertices.
+             Example:
+                 >>> is_m = mesh.is_manifold()
+             )pbdoc")
+        .def("get_non_manifold_vertices", &TriangleMesh::get_non_manifold_vertices,
+             R"pbdoc(
+             Finds indices of non-manifold vertices in the mesh.
 
-        Returns:
-            int - The total number of isolated vertices.
-        )doc")
-        .def("remove_isolated_vertices", &TriangleMesh::remove_isolated_vertices, R"doc(
-        Removes all isolated vertices from the mesh and reindexes the triangles.
-        )doc")
-        .def("get_voronoi_areas", &TriangleMesh::get_voronoi_areas, R"doc(
-            Get the per-vertex voronoi areas.
-        )doc")
-        .def("get_gaussian_curvature", &TriangleMesh::get_gaussian_curvature, R"doc(
-            Compute and return the discrete Gaussian curvature (angle deficit) at each vertex.
-        )doc")
-        .def("get_mean_curvature", &TriangleMesh::get_mean_curvature, py::arg("signed_curvature") = false, R"doc(
-            Compute and return the discrete Mean curvature at each vertex using the Laplace-Beltrami operator.
-            If signed_curvature is true, returns H. If false, returns |H|.
-        )doc")
-        .def("get_principal_curvatures", &TriangleMesh::get_principal_curvatures, py::arg("signed_curvature") = true, R"doc(
-            Compute and return the two principal curvatures (k1, k2) at each vertex as an [N, 2] tensor.
-            k1 is the maximum principal curvature, k2 is the minimum principal curvature.
-        )doc")
-        .def("compute_laplacian", &TriangleMesh::compute_laplacian, py::arg("mode") = 0, R"doc(
-        Computes the Laplace-Beltrami operator.
+             Returns:
+                 torch.Tensor: (K,) int32 indices of non-manifold vertices.
 
-        Args:
-            mode (int): The laplacian mode. 0 for Uniform, 1 for Cotangent.
+             Example:
+                 >>> nm_verts = mesh.get_non_manifold_vertices()
+             )pbdoc")
+        .def("get_isolated_vertices", &TriangleMesh::get_isolated_vertices,
+             R"pbdoc(
+             Finds indices of isolated vertices with degree 0.
 
-        Returns:
-            torch.Tensor - Shape (N, 3) float32 tensor of laplacian vectors.
-        )doc")
-        .def_property_readonly("vertex_lb_cotangent", &TriangleMesh::get_vertex_lb_cotangent, R"doc(
-        Cotangent Laplace-Beltrami operator evaluated at each vertex.
+             Returns:
+                 torch.Tensor: (K,) int32 indices of isolated vertices.
 
-        Returns:
-            torch.Tensor - Shape (N, 3) float32 tensor.
-        )doc")
-        .def_property_readonly("voronoi_areas", &TriangleMesh::get_voronoi_areas, R"doc(
-        Vertex voronoi areas (1/3 of the sum of incident triangle areas).
+             Example:
+                 >>> iso_verts = mesh.get_isolated_vertices()
+             )pbdoc")
+        .def_property_readonly("num_isolated_vertices", &TriangleMesh::get_num_isolated_vertices, "Total number of isolated vertices (int).")
+        .def("remove_isolated_vertices", &TriangleMesh::remove_isolated_vertices,
+             R"pbdoc(
+             Removes unreferenced isolated vertices and compacts triangle indices.
 
-        Returns:
-            torch.Tensor - Shape (N,) float32 tensor.
-        )doc")
-        .def("remove_triangles_by_mask", &TriangleMesh::remove_triangles_by_mask, py::arg("keep_mask"), R"doc(
-        Removes triangles from the mesh based on a boolean mask.
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor]: (new_vertices, new_triangles)
 
-        Args:
-            keep_mask (torch.Tensor): Shape (M,) boolean tensor indicating which triangles to keep.
-        )doc")
-        .def("fix_normals", &TriangleMesh::fix_normals, R"doc(
-        Fixes the winding order and outward orientation of the mesh normals.
-        This uses a CUDA-accelerated BFS to ensure consistent winding, 
-        and computes signed volumes to ensure all disconnected components face outward.
-        )doc")
-        .def("sample_points", &TriangleMesh::sample_points, py::arg("num_points"), py::arg("uniform") = false, py::arg("return_normals") = false, py::arg("return_colors") = false, py::arg("use_triangle_normal") = true, R"doc(
-        Samples random points on the surface of the mesh.
+             Example:
+                 >>> clean_verts, clean_tris = mesh.remove_isolated_vertices()
+             )pbdoc")
+        .def("get_voronoi_areas", &TriangleMesh::get_voronoi_areas,
+             R"pbdoc(
+             Computes mixed Voronoi / barycentric dual cell areas per vertex (Meyer et al. 2003).
 
-        Args:
-            num_points (int): The number of points to sample.
-            uniform (bool, optional): If True, samples uniformly by area. Defaults to False.
-            return_normals (bool, optional): If True, returns normals at sampled points. Defaults to False.
-            return_colors (bool, optional): If True, returns colors at sampled points. Defaults to False.
-            use_triangle_normal (bool, optional): If True, uses flat triangle normals instead of interpolated vertex normals. Defaults to True.
+             Returns:
+                 torch.Tensor: (N,) float32 Voronoi area per vertex.
 
-        Returns:
-            tuple: (points, triangle_indices, [normals], [colors])
-        )doc")
-        .def("compute_vertex_normals", &TriangleMesh::compute_vertex_normals, "Computes area-weighted vertex normals.")
-        .def_property_readonly("euler_characteristic", &TriangleMesh::get_euler_characteristic, R"doc(
-        The Euler characteristic (V - E + F) of the mesh.
+             Example:
+                 >>> voronoi_a = mesh.get_voronoi_areas()
+             )pbdoc")
+        .def("get_gaussian_curvature", &TriangleMesh::get_gaussian_curvature,
+             R"pbdoc(
+             Computes discrete Gaussian curvature via Gauss-Bonnet angle defect $K_i = \frac{2\pi - \sum \theta_j}{A_{Voronoi}}$.
 
-        Returns:
-            int - The Euler characteristic (V - E + F) of the mesh.
-        )doc")
-        .def_property_readonly("genus", &TriangleMesh::get_genus, R"doc(
-        The topological genus of the mesh.
+             Returns:
+                 torch.Tensor: (N,) float32 discrete Gaussian curvature.
 
-        Returns:
-            int - The topological genus of the mesh.
-        )doc");
+             Example:
+                 >>> gauss_curv = mesh.get_gaussian_curvature()
+             )pbdoc")
+        .def("get_mean_curvature", &TriangleMesh::get_mean_curvature, py::arg("signed_curvature") = false,
+             R"pbdoc(
+             Computes discrete Mean curvature using cotangent Laplace-Beltrami operator $H_i = \frac{1}{2} \|\Delta_{LB} v_i\|$.
+
+             Args:
+                 signed_curvature (bool, optional): Project against vertex normal for sign. Defaults to False.
+
+             Returns:
+                 torch.Tensor: (N,) float32 discrete Mean curvature.
+
+             Example:
+                 >>> mean_curv = mesh.get_mean_curvature(signed_curvature=True)
+             )pbdoc")
+        .def("get_principal_curvatures", &TriangleMesh::get_principal_curvatures, py::arg("signed_curvature") = true,
+             R"pbdoc(
+             Computes principal curvatures $(k_1, k_2) = H \pm \sqrt{\max(0, H^2 - K)}$.
+
+             Args:
+                 signed_curvature (bool, optional): Retain sign for mean curvature $H$. Defaults to True.
+
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor]: (k1, k2) principal curvatures of shape (N,) float32.
+
+             Example:
+                 >>> k1, k2 = mesh.get_principal_curvatures()
+             )pbdoc")
+        .def("compute_laplacian", &TriangleMesh::compute_laplacian, py::arg("mode") = 0,
+             R"pbdoc(
+             Computes Laplace-Beltrami vector field on mesh vertices.
+
+             Args:
+                 mode (int, optional): Laplacian mode (0: Uniform umbrella, 1: Cotangent weights). Defaults to 0.
+
+             Returns:
+                 torch.Tensor: (N, 3) float32 Laplacian vectors.
+
+             Example:
+                 >>> lap = mesh.compute_laplacian(mode=1)
+             )pbdoc")
+        .def_property_readonly("vertex_lb_cotangent", &TriangleMesh::get_vertex_lb_cotangent, "Cotangent Laplace-Beltrami vectors (N, 3) float32.")
+        .def_property_readonly("voronoi_areas", &TriangleMesh::get_voronoi_areas, "Vertex Voronoi areas (N,) float32.")
+        .def("remove_triangles_by_mask", &TriangleMesh::remove_triangles_by_mask, py::arg("keep_mask"),
+             R"pbdoc(
+             Filters mesh triangles using boolean mask and removes orphaned vertices.
+
+             Args:
+                 keep_mask (torch.Tensor): (M,) bool mask where True indicates kept triangles.
+
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor]: (filtered_vertices, filtered_triangles)
+
+             Example:
+                 >>> f_verts, f_tris = mesh.remove_triangles_by_mask(mask)
+             )pbdoc")
+        .def("fix_normals", &TriangleMesh::fix_normals,
+             R"pbdoc(
+             Reorients triangle winding orders consistently so outward normals face outside.
+
+             Example:
+                 >>> mesh.fix_normals()
+             )pbdoc")
+        .def("sample_points", &TriangleMesh::sample_points,
+             py::arg("num_points"), py::arg("uniform") = false, py::arg("return_normals") = false,
+             py::arg("return_colors") = false, py::arg("use_triangle_normal") = true,
+             R"pbdoc(
+             Samples random 3D points on the mesh surface via area-weighted CDF sampling.
+
+             Args:
+                 num_points (int): Number of points to sample.
+                 uniform (bool, optional): Stratified uniform grid sampling. Defaults to False.
+                 return_normals (bool, optional): Return surface normal at each sample. Defaults to False.
+                 return_colors (bool, optional): Return interpolated RGB color at each sample. Defaults to False.
+                 use_triangle_normal (bool, optional): Use face normal instead of interpolated vertex normal. Defaults to True.
+
+             Returns:
+                 Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+                     - points (torch.Tensor): (num_points, 3) float32 coordinates.
+                     - triangle_indices (torch.Tensor): (num_points,) int32 sampled face IDs.
+                     - [normals] (torch.Tensor, optional): (num_points, 3) float32 normal vectors.
+                     - [colors] (torch.Tensor, optional): (num_points, 3) float32 RGB colors.
+
+             Example:
+                 >>> pts, tri_ids, normals, _ = mesh.sample_points(5000, return_normals=True)
+             )pbdoc")
+        .def_property_readonly("euler_characteristic", &TriangleMesh::get_euler_characteristic, "The Euler characteristic (V - E + F) of the mesh (int).")
+        .def_property_readonly("genus", &TriangleMesh::get_genus, "The topological genus of the mesh (int).");
 }
