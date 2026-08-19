@@ -7,8 +7,17 @@ operators (Laplace-Beltrami, Curvatures), differentiable isosurface extraction
 Splatting geometric utilities.
 """
 
+import os
+import sys
 import importlib.metadata
 import torch
+
+# Ensure PyTorch C++ symbols (libc10.so, libtorch.so) are loaded into global symbol table on Linux
+if hasattr(os, 'RTLD_GLOBAL') and hasattr(sys, 'getdlopenflags'):
+    try:
+        sys.setdlopenflags(sys.getdlopenflags() | os.RTLD_GLOBAL)
+    except Exception:
+        pass
 
 try:
     __version__ = importlib.metadata.version('conquer3d')
