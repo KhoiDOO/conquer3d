@@ -1,3 +1,8 @@
+/**
+ * @file f4x4.h
+ * @brief 4x4 single-precision homogeneous transformation matrix struct and GPU device operations.
+ */
+
 #ifndef F4x4_H
 #define F4x4_H
 
@@ -9,6 +14,9 @@
 #include <vector_functions.h>
 #include <math_constants.h>
 
+/**
+ * @brief 4x4 float matrix.
+ */
 typedef struct
 {
     float m[4][4];
