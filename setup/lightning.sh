@@ -24,7 +24,7 @@ pip install git+https://github.com/NVlabs/nvdiffrast.git
 
 # 5. Install visualization and meshing utilities
 echo "Installing visualization and meshing utilities..."
-pip install plotly open3d jupyter trimesh point-cloud-utils meshlib pymeshlab kiui einops
+pip install plotly open3d jupyter trimesh point-cloud-utils pymeshlab kiui einops
 pip install rectified-flow-pytorch
 
 # 6. Install geocutool itself
