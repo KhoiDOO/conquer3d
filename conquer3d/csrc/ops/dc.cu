@@ -454,6 +454,37 @@ __global__ void backward_dual_contouring_kernel(
     }
 }
 
+__global__ void detect_active_voxels_kernel(
+    const int *__restrict__ voxels,
+    const float *__restrict__ sdf,
+    float iso,
+    int num_voxels,
+    int *__restrict__ voxel_is_active,
+    int *__restrict__ bipolar_edge_counts
+) {
+    int m = blockIdx.x * blockDim.x + threadIdx.x;
+    if (m >= num_voxels) return;
+
+    float s[8];
+    #pragma unroll
+    for (int i = 0; i < 8; ++i) {
+        s[i] = sdf[voxels[m * 8 + i]];
+    }
+
+    int count = 0;
+    #pragma unroll
+    for (int e = 0; e < 12; ++e) {
+        float s0 = s[dc_edge_corners[e][0]];
+        float s1 = s[dc_edge_corners[e][1]];
+        if ((s0 < iso && s1 >= iso) || (s0 >= iso && s1 < iso)) {
+            count++;
+        }
+    }
+
+    bipolar_edge_counts[m] = count;
+    voxel_is_active[m] = (count > 0) ? 1 : 0;
+}
+
 // -----------------------------------------------------------------------------------------
 // Host Implementation
 // -----------------------------------------------------------------------------------------
@@ -463,6 +494,7 @@ std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> dual_contouring(
     const at::Tensor &sdf,
     const c10::optional<at::Tensor> &grid_normals,
     const c10::optional<at::Tensor> &colors,
+    const c10::optional<at::Tensor> &voxel_vertices,
     float iso,
     bool quad_split
 ) {
@@ -480,27 +512,43 @@ std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> dual_contouring(
         };
     }
 
-    // 1. Pass 1: Compute Dual Vertices per Voxel via QEF
-    at::Tensor dual_vertices = at::empty({num_voxels, 3}, grid_vertices.options());
-    at::Tensor voxel_is_active = at::zeros({num_voxels}, voxels.options());
-    at::Tensor bipolar_edge_counts = at::empty({num_voxels}, voxels.options());
-
     int threads = 256;
     int blocks = (num_voxels + threads - 1) / threads;
 
-    const float3 *normals_ptr = grid_normals.has_value() ? reinterpret_cast<const float3*>(grid_normals.value().data_ptr<float>()) : nullptr;
+    at::Tensor voxel_is_active = at::zeros({num_voxels}, voxels.options());
+    at::Tensor bipolar_edge_counts = at::empty({num_voxels}, voxels.options());
+    const float3 *source_dual_vertices_ptr = nullptr;
+    at::Tensor dual_vertices;
 
-    compute_dual_vertices_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
-        reinterpret_cast<const float3*>(grid_vertices.data_ptr<float>()),
-        voxels.data_ptr<int>(),
-        sdf.data_ptr<float>(),
-        normals_ptr,
-        iso,
-        num_voxels,
-        reinterpret_cast<float3*>(dual_vertices.data_ptr<float>()),
-        voxel_is_active.data_ptr<int>(),
-        bipolar_edge_counts.data_ptr<int>()
-    );
+    if (voxel_vertices.has_value() && voxel_vertices.value().defined() && voxel_vertices.value().numel() > 0) {
+        // Fast path: use precomputed inside-voxel vertices directly (zero QEF overhead)
+        source_dual_vertices_ptr = reinterpret_cast<const float3*>(voxel_vertices.value().data_ptr<float>());
+        detect_active_voxels_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
+            voxels.data_ptr<int>(),
+            sdf.data_ptr<float>(),
+            iso,
+            num_voxels,
+            voxel_is_active.data_ptr<int>(),
+            bipolar_edge_counts.data_ptr<int>()
+        );
+    } else {
+        // Standard path: compute dual vertices via GPU QEF minimization
+        dual_vertices = at::empty({num_voxels, 3}, grid_vertices.options());
+        source_dual_vertices_ptr = reinterpret_cast<const float3*>(dual_vertices.data_ptr<float>());
+        const float3 *normals_ptr = grid_normals.has_value() ? reinterpret_cast<const float3*>(grid_normals.value().data_ptr<float>()) : nullptr;
+
+        compute_dual_vertices_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
+            reinterpret_cast<const float3*>(grid_vertices.data_ptr<float>()),
+            voxels.data_ptr<int>(),
+            sdf.data_ptr<float>(),
+            normals_ptr,
+            iso,
+            num_voxels,
+            reinterpret_cast<float3*>(dual_vertices.data_ptr<float>()),
+            voxel_is_active.data_ptr<int>(),
+            bipolar_edge_counts.data_ptr<int>()
+        );
+    }
 
     // 2. Prefix sum for active voxels
     at::Tensor voxel_to_compact_idx = at::empty({num_voxels}, voxels.options());
@@ -544,7 +592,7 @@ std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> dual_contouring(
     }
 
     compact_dual_vertices_and_colors_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
-        reinterpret_cast<const float3*>(dual_vertices.data_ptr<float>()),
+        source_dual_vertices_ptr,
         voxel_is_active.data_ptr<int>(),
         voxel_to_compact_idx.data_ptr<int>(),
         voxels.data_ptr<int>(),
@@ -590,8 +638,7 @@ std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> dual_contouring(
     emit_bipolar_edges_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
         voxels.data_ptr<int>(),
         sdf.data_ptr<float>(),
-        edge_offsets.data_ptr<int>()
-        ,
+        edge_offsets.data_ptr<int>(),
         iso,
         num_voxels,
         reinterpret_cast<uint64_t*>(edge_keys.data_ptr<int64_t>()),
@@ -617,7 +664,7 @@ std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> dual_contouring(
         reinterpret_cast<const uint32_t*>(voxel_and_edge.data_ptr<int>()),
         reinterpret_cast<const float3*>(grid_vertices.data_ptr<float>()),
         sdf.data_ptr<float>(),
-        reinterpret_cast<const float3*>(dual_vertices.data_ptr<float>()),
+        source_dual_vertices_ptr,
         voxel_to_compact_idx.data_ptr<int>(),
         total_edge_instances,
         reinterpret_cast<int4*>(raw_quads.data_ptr<int>()),
