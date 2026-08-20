@@ -35,6 +35,7 @@ class DiffDualMarchingCubes(torch.autograd.Function):
         voxels: torch.Tensor,
         sdf: torch.Tensor,
         colors: Optional[torch.Tensor] = None,
+        voxel_vertices: Optional[torch.Tensor] = None,
         iso: float = 0.0,
         quad_split: bool = True,
         project_iters: int = 5
@@ -50,6 +51,8 @@ class DiffDualMarchingCubes(torch.autograd.Function):
             sdf (torch.Tensor): Float32 tensor of shape `(N,)` containing scalar SDF values on CUDA.
             colors (torch.Tensor, optional): Float32 tensor of shape `(N, C)` containing vertex
                 colors or feature embeddings on CUDA. Defaults to None.
+            voxel_vertices (torch.Tensor, optional): Float32 tensor of shape `(M, 3)` containing
+                precomputed inside-voxel vertex coordinates on CUDA. Defaults to None.
             iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
             quad_split (bool, optional): If True, splits dual quadrilaterals into 2 triangles
                 using optimal Delaunay angle criteria; if False, returns quads `(Q, 4)`.
@@ -75,9 +78,11 @@ class DiffDualMarchingCubes(torch.autograd.Function):
 
         if colors is not None:
             colors = colors.contiguous().float()
+        if voxel_vertices is not None:
+            voxel_vertices = voxel_vertices.contiguous().float()
 
         verts, faces, out_colors = _C.dual_marching_cubes(
-            grid_vertices, voxels, sdf, colors, iso, quad_split, project_iters
+            grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters
         )
 
         ctx.save_for_backward(grid_vertices, voxels, sdf, colors)
@@ -98,15 +103,15 @@ class DiffDualMarchingCubes(torch.autograd.Function):
             grad_colors (torch.Tensor, optional): Float32 tensor of shape `(V, C)` containing upstream color gradients.
 
         Returns:
-            Tuple[None, None, torch.Tensor, Optional[torch.Tensor], None, None, None]:
-                Gradients corresponding to (grid_vertices, voxels, sdf, colors, iso, quad_split, project_iters).
+            Tuple[None, None, torch.Tensor, Optional[torch.Tensor], None, None, None, None]:
+                Gradients corresponding to (grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters).
         """
         grid_vertices, voxels, sdf, colors = ctx.saved_tensors
         iso = ctx.iso
         project_iters = ctx.project_iters
 
         if not sdf.requires_grad and (colors is None or not colors.requires_grad):
-            return None, None, None, None, None, None, None
+            return None, None, None, None, None, None, None, None
 
         grad_sdf, grad_colors_in = _C.dual_marching_cubes_backward(
             grad_verts.contiguous(),
@@ -119,7 +124,7 @@ class DiffDualMarchingCubes(torch.autograd.Function):
             project_iters
         )
 
-        return None, None, grad_sdf, grad_colors_in, None, None, None
+        return None, None, grad_sdf, grad_colors_in, None, None, None, None
 
 
 def dual_marching_cubes(
@@ -127,6 +132,7 @@ def dual_marching_cubes(
     voxels: torch.Tensor,
     sdf: torch.Tensor,
     colors: Optional[torch.Tensor] = None,
+    voxel_vertices: Optional[torch.Tensor] = None,
     iso: float = 0.0,
     quad_split: bool = True,
     project_iters: int = 5
@@ -136,8 +142,8 @@ def dual_marching_cubes(
     Unlike standard Dual Contouring which generates at most 1 dual vertex per voxel cell,
     Dual Marching Cubes decomposes each voxel cell into independent contours using asymptotic
     deciders and extracts multiple dual vertices per cell, eliminating topological pinch points
-    and guaranteeing manifold surfaces. Dual vertices are iteratively projected onto the exact
-    trilinear level set via Newton-Raphson optimization.
+    and guaranteeing manifold surfaces. Dual vertices can be iteratively projected onto the exact
+    trilinear level set via Newton-Raphson optimization or assigned directly from `voxel_vertices`.
 
     Args:
         grid_vertices (torch.Tensor): Float32 tensor of shape `(N, 3)` containing grid vertex
@@ -147,6 +153,9 @@ def dual_marching_cubes(
         sdf (torch.Tensor): Float32 tensor of shape `(N,)` containing scalar SDF values on CUDA.
         colors (torch.Tensor, optional): Float32 tensor of shape `(N, C)` containing vertex feature
             colors on CUDA. Defaults to None.
+        voxel_vertices (torch.Tensor, optional): Float32 tensor of shape `(M, 3)` containing
+            precomputed inside-voxel vertex coordinates on CUDA. If provided, DMC bypasses
+            Newton-Raphson level-set projections and assigns these coordinates directly. Defaults to None.
         iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
         quad_split (bool, optional): If True, splits dual quadrilaterals into 2 triangles using
             the optimal Delaunay angle criterion; if False, returns quads of shape `(Q, 4)`.
@@ -164,6 +173,7 @@ def dual_marching_cubes(
 
     Raises:
         RuntimeError: If inputs are not on CUDA or not contiguous.
+        ValueError: If `voxel_vertices` does not have shape `(M, 3)`.
 
     Example:
         >>> import torch
@@ -176,14 +186,22 @@ def dual_marching_cubes(
     sdf = sdf.contiguous().float()
     if colors is not None:
         colors = colors.contiguous().float()
+    if voxel_vertices is not None:
+        if not voxel_vertices.is_cuda:
+            raise RuntimeError("voxel_vertices must be on CUDA")
+        if voxel_vertices.dtype != torch.float32:
+            voxel_vertices = voxel_vertices.float()
+        if voxel_vertices.ndim != 2 or voxel_vertices.shape[0] != voxels.shape[0] or voxel_vertices.shape[1] != 3:
+            raise ValueError(f"voxel_vertices must have shape (M, 3) matching voxels ({voxels.shape[0]}, 3), got {voxel_vertices.shape}")
+        voxel_vertices = voxel_vertices.contiguous()
 
     if sdf.requires_grad or (colors is not None and colors.requires_grad):
         verts, faces, out_colors = DiffDualMarchingCubes.apply(
-            grid_vertices, voxels, sdf, colors, iso, quad_split, project_iters
+            grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters
         )
     else:
         verts, faces, out_colors = _C.dual_marching_cubes(
-            grid_vertices, voxels, sdf, colors, iso, quad_split, project_iters
+            grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters
         )
 
     if colors is None:
