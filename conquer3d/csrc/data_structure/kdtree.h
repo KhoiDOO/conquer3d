@@ -157,7 +157,10 @@ namespace kdtree
             float3 d = qp - p;
             float dist_sq = maths::dot(d, d);
 
-            push_pq(dist_sq, tree_inds[curr], best_dists, best_inds, k);
+            if (isfinite(dist_sq))
+            {
+                push_pq(dist_sq, tree_inds[curr], best_dists, best_inds, k);
+            }
 
             float axis_dist = (axis == 0) ? d.x : ((axis == 1) ? d.y : d.z);
 
