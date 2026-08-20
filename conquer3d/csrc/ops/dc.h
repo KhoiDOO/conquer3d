@@ -26,8 +26,9 @@ std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> dual_contouring(
     const at::Tensor &grid_vertices,
     const at::Tensor &voxels,
     const at::Tensor &sdf,
-    const c10::optional<at::Tensor> &grid_normals,
-    const c10::optional<at::Tensor> &colors,
+    const c10::optional<at::Tensor> &grid_normals = c10::nullopt,
+    const c10::optional<at::Tensor> &colors = c10::nullopt,
+    const c10::optional<at::Tensor> &voxel_vertices = c10::nullopt,
     float iso = 0.0f,
     bool quad_split = true
 );
