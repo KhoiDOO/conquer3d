@@ -15,11 +15,25 @@ std::tuple<torch::Tensor, torch::Tensor> one_sided_chamfer_distance_wrapper(
     uint32_t num_query_points = query_points.size(0);
     uint32_t num_reference_points = reference_points.size(0);
 
+    if (num_query_points == 0) {
+        return std::make_tuple(
+            torch::empty({0}, query_points.options()),
+            torch::empty({0}, query_points.options().dtype(torch::kInt64))
+        );
+    }
+
+    if (num_reference_points == 0) {
+        return std::make_tuple(
+            torch::full({(int64_t)num_query_points}, std::numeric_limits<float>::infinity(), query_points.options()),
+            torch::full({(int64_t)num_query_points}, -1, query_points.options().dtype(torch::kInt64))
+        );
+    }
+
     const float3* __restrict__ p_query_points = (float3*)query_points.data_ptr<float>();
     const float3* __restrict__ p_reference_points = (float3*)reference_points.data_ptr<float>();
 
-    torch::Tensor distances = torch::empty({num_query_points}, query_points.options());
-    torch::Tensor indices = torch::empty({num_query_points}, query_points.options().dtype(torch::kInt64));
+    torch::Tensor distances = torch::empty({(int64_t)num_query_points}, query_points.options());
+    torch::Tensor indices = torch::empty({(int64_t)num_query_points}, query_points.options().dtype(torch::kInt64));
 
     float* __restrict__ p_distances = distances.data_ptr<float>();
     int64_t* __restrict__ p_indices = indices.data_ptr<int64_t>();
