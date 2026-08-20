@@ -391,7 +391,12 @@ namespace mesh_bvh
         const int8_t *__restrict__ flood_mask,
         float3 flood_min,
         float3 flood_spacing,
-        int3 flood_dims)
+        int3 flood_dims,
+        const int8_t *__restrict__ cf_coarse_mask,
+        const int32_t *__restrict__ cf_boundary_lookup,
+        const int8_t *__restrict__ cf_fine_masks,
+        int3 cf_block_size,
+        int3 cf_coarse_dims)
     {
         int q_idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (q_idx >= num_queries)
@@ -492,6 +497,39 @@ namespace mesh_bvh
                     // Transition surface interface (0.25 < wn < 0.75) -> sub-voxel precision pseudonormal consensus
                     dist *= compute_pseudonormal_sign(p, best_pt, best_tri_id, vertices, triangles, pseudonormal_vertices, pseudonormal_edges, pseudonormal_faces);
                 }
+            } else if (sign_mode == 5) {
+                int gi = roundf((p.x - flood_min.x) / flood_spacing.x);
+                int gj = roundf((p.y - flood_min.y) / flood_spacing.y);
+                int gk = roundf((p.z - flood_min.z) / flood_spacing.z);
+
+                int ci = gi / cf_block_size.x;
+                int cj = gj / cf_block_size.y;
+                int ck = gk / cf_block_size.z;
+
+                if (ci >= 0 && ci < cf_coarse_dims.x && cj >= 0 && cj < cf_coarse_dims.y && ck >= 0 && ck < cf_coarse_dims.z && cf_coarse_mask != nullptr) {
+                    int c_idx = ci * (cf_coarse_dims.y * cf_coarse_dims.z) + cj * cf_coarse_dims.z + ck;
+                    int c_val = cf_coarse_mask[c_idx];
+                    if (c_val == 2) {
+                        // Guaranteed Exterior Water -> positive sign
+                    } else if (c_val == -1 || c_val == -2) {
+                        // Guaranteed Interior -> strictly negative sign
+                        dist = -dist;
+                    } else if (c_val == 1 && cf_boundary_lookup != nullptr && cf_fine_masks != nullptr) {
+                        int b_idx = cf_boundary_lookup[c_idx];
+                        if (b_idx >= 0) {
+                            int fi = gi % cf_block_size.x;
+                            int fj = gj % cf_block_size.y;
+                            int fk = gk % cf_block_size.z;
+                            int fine_idx = b_idx * (cf_block_size.x * cf_block_size.y * cf_block_size.z) + fi * (cf_block_size.y * cf_block_size.z) + fj * cf_block_size.z + fk;
+                            int fine_val = cf_fine_masks[fine_idx];
+                            if (fine_val != 2) {
+                                dist = -dist;
+                            }
+                        } else {
+                            dist = -dist;
+                        }
+                    }
+                }
             }
         }
 
@@ -527,7 +565,12 @@ namespace mesh_bvh
         const int8_t *flood_mask,
         float3 flood_min,
         float3 flood_spacing,
-        int3 flood_dims)
+        int3 flood_dims,
+        const int8_t *cf_coarse_mask,
+        const int32_t *cf_boundary_lookup,
+        const int8_t *cf_fine_masks,
+        int3 cf_block_size,
+        int3 cf_coarse_dims)
     {
         int threads = NTHREADS;
         int blocks = (num_queries + threads - 1) / threads;
@@ -556,7 +599,12 @@ namespace mesh_bvh
             flood_mask,
             flood_min,
             flood_spacing,
-            flood_dims);
+            flood_dims,
+            cf_coarse_mask,
+            cf_boundary_lookup,
+            cf_fine_masks,
+            cf_block_size,
+            cf_coarse_dims);
     }
 
     __global__ void bottom_up_winding_data_kernel(
