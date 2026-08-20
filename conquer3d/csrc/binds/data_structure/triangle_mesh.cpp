@@ -1,6 +1,7 @@
 #include <torch/extension.h>
 #include "../../data_structure/triangle_mesh.h"
 #include "../../ops/flood_fill.h"
+#include "../../ops/flood_fill_cf.h"
 #include "../../check.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -447,6 +448,105 @@ std::vector<int64_t> TriangleMesh::get_flood_grid_res()
     return this->flood_grid_res.value();
 }
 
+void TriangleMesh::build_flood_fill_cf_data(
+    std::optional<std::vector<float>> grid_min,
+    std::optional<std::vector<float>> grid_max,
+    std::optional<std::vector<int64_t>> res,
+    std::optional<std::vector<int64_t>> block_size,
+    int connectivity)
+{
+    this->build_bvh();
+    std::vector<float> min_vals;
+    std::vector<float> max_vals;
+    if (grid_min.has_value()) {
+        min_vals = grid_min.value();
+    } else {
+        auto v_min = std::get<0>(torch::min(this->vertices, 0));
+        v_min = v_min - 0.05f;
+        min_vals = {v_min[0].item<float>(), v_min[1].item<float>(), v_min[2].item<float>()};
+    }
+    if (grid_max.has_value()) {
+        max_vals = grid_max.value();
+    } else {
+        auto v_max = std::get<0>(torch::max(this->vertices, 0));
+        v_max = v_max + 0.05f;
+        max_vals = {v_max[0].item<float>(), v_max[1].item<float>(), v_max[2].item<float>()};
+    }
+    std::vector<int64_t> res_vals;
+    if (res.has_value()) {
+        res_vals = res.value();
+    } else {
+        res_vals = {128, 128, 128};
+    }
+    std::vector<int64_t> bs_vals;
+    if (block_size.has_value()) {
+        bs_vals = block_size.value();
+    }
+
+    auto cf_res = ops::compute_flood_fill_cf(
+        this->vertices,
+        this->triangles,
+        this->bvh.value().aabb_mins,
+        this->bvh.value().aabb_maxs,
+        this->bvh.value().bvh_children,
+        this->bvh.value().object_ids,
+        min_vals,
+        max_vals,
+        res_vals,
+        bs_vals,
+        connectivity
+    );
+
+    this->cf_coarse_mask = cf_res.coarse_mask;
+    this->cf_boundary_lookup = cf_res.boundary_block_lookup;
+    this->cf_fine_masks = cf_res.fine_boundary_masks;
+    this->cf_block_size = cf_res.block_size;
+    this->cf_coarse_res = cf_res.coarse_res;
+    this->flood_grid_min = min_vals;
+    this->flood_grid_max = max_vals;
+    this->flood_grid_res = res_vals;
+}
+
+torch::Tensor TriangleMesh::get_cf_coarse_mask()
+{
+    if (!this->cf_coarse_mask.has_value()) {
+        this->build_flood_fill_cf_data();
+    }
+    return this->cf_coarse_mask.value();
+}
+
+torch::Tensor TriangleMesh::get_cf_boundary_lookup()
+{
+    if (!this->cf_boundary_lookup.has_value()) {
+        this->build_flood_fill_cf_data();
+    }
+    return this->cf_boundary_lookup.value();
+}
+
+torch::Tensor TriangleMesh::get_cf_fine_masks()
+{
+    if (!this->cf_fine_masks.has_value()) {
+        this->build_flood_fill_cf_data();
+    }
+    return this->cf_fine_masks.value();
+}
+
+std::vector<int64_t> TriangleMesh::get_cf_block_size()
+{
+    if (!this->cf_block_size.has_value()) {
+        this->build_flood_fill_cf_data();
+    }
+    return this->cf_block_size.value();
+}
+
+std::vector<int64_t> TriangleMesh::get_cf_coarse_res()
+{
+    if (!this->cf_coarse_res.has_value()) {
+        this->build_flood_fill_cf_data();
+    }
+    return this->cf_coarse_res.value();
+}
+
 torch::Tensor TriangleMesh::get_self_intersection()
 {
     this->build_bvh();
@@ -476,6 +576,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleM
         this->build_bvh();
         if (sign_mode == 3 && !this->flood_fill_mask.has_value()) {
             this->build_flood_fill_data();
+        } else if (sign_mode == 5 && !this->cf_coarse_mask.has_value()) {
+            this->build_flood_fill_cf_data();
         }
         return this->bvh.value().query_point(
             query_pts,
@@ -488,9 +590,14 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleM
             (sign_mode == 2 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_vertex_normals(1)) : std::nullopt,
             (sign_mode == 2 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_edge_normals()) : std::nullopt,
             (sign_mode == 3) ? this->flood_fill_mask : std::nullopt,
-            (sign_mode == 3) ? this->flood_grid_min : std::nullopt,
-            (sign_mode == 3) ? this->flood_grid_max : std::nullopt,
-            (sign_mode == 3) ? this->flood_grid_res : std::nullopt);
+            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_min : std::nullopt,
+            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_max : std::nullopt,
+            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_res : std::nullopt,
+            (sign_mode == 5) ? this->cf_coarse_mask : std::nullopt,
+            (sign_mode == 5) ? this->cf_boundary_lookup : std::nullopt,
+            (sign_mode == 5) ? this->cf_fine_masks : std::nullopt,
+            (sign_mode == 5) ? this->cf_block_size : std::nullopt,
+            (sign_mode == 5) ? this->cf_coarse_res : std::nullopt);
     }
     else
     {
@@ -1092,6 +1199,24 @@ void bind_ds_triangle_mesh(py::module_ &m) {
         .def_property_readonly("flood_grid_min", &TriangleMesh::get_flood_grid_min, "Flood grid bounding box min coordinates.")
         .def_property_readonly("flood_grid_max", &TriangleMesh::get_flood_grid_max, "Flood grid bounding box max coordinates.")
         .def_property_readonly("flood_grid_res", &TriangleMesh::get_flood_grid_res, "Flood grid vertex resolution.")
+        .def("build_flood_fill_cf_data", &TriangleMesh::build_flood_fill_cf_data,
+             py::arg("grid_min") = py::none(), py::arg("grid_max") = py::none(),
+             py::arg("res") = py::none(), py::arg("block_size") = py::none(), py::arg("connectivity") = 6,
+             R"pbdoc(
+             Pre-computes a 2-level Coarse-to-Fine (CF) volumetric flood-fill structure (< 10 MB VRAM at 1024^3).
+
+             Args:
+                 grid_min (List[float], optional): Lower grid extents [x, y, z].
+                 grid_max (List[float], optional): Upper grid extents [x, y, z].
+                 res (List[int], optional): Fine grid resolution [rx, ry, rz].
+                 block_size (List[int], optional): Macro-block size [bx, by, bz]. If omitted, dynamically computed.
+                 connectivity (int, optional): Neighborhood connectivity (6, 18, 26). Defaults to 6.
+
+             Example:
+                 >>> mesh.build_flood_fill_cf_data([-1,-1,-1], [1,1,1], [1024,1024,1024])
+             )pbdoc")
+        .def_property_readonly("cf_coarse_mask", &TriangleMesh::get_cf_coarse_mask, "Coarse macro-block int8 status tensor.")
+        .def_property_readonly("cf_fine_masks", &TriangleMesh::get_cf_fine_masks, "Fine boundary macro-block int8 local masks.")
         .def("get_self_intersection", &TriangleMesh::get_self_intersection,
              R"pbdoc(
              Finds all self-intersecting triangle pairs in the mesh.
@@ -1150,7 +1275,14 @@ void bind_ds_triangle_mesh(py::module_ &m) {
                  query_pts (torch.Tensor): (Q, 3) float32 query coordinates on CUDA.
                  return_sdf (bool, optional): Return signed distance instead of unsigned. Defaults to False.
                  return_prj_pts (bool, optional): Return closest surface projection coordinates. Defaults to True.
-                 sign_mode (int, optional): Sign evaluation method (0: ray parity, 1: Fast Winding Number, 2: angle-weighted pseudonormals, 3: flood-fill mask). Defaults to 0.
+                 sign_mode (int, optional): Sign evaluation method:
+                     - 0: Ray parity casting.
+                     - 1: Fast Winding Number (FWN).
+                     - 2: Angle-weighted pseudonormals.
+                     - 3: Volumetric 3D flood-fill mask (dense).
+                     - 4: Hybrid WN + pseudonormals.
+                     - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
+                     Defaults to 0.
                  distance_mode (int, optional): Distance algorithm (0: Ericson closest point, 1: projected normal). Defaults to 0.
 
              Returns:
@@ -1161,7 +1293,7 @@ void bind_ds_triangle_mesh(py::module_ &m) {
                      - distances (torch.Tensor): (Q,) float32 signed/unsigned distances.
 
              Example:
-                 >>> q_ids, tri_ids, prj_pts, dists = mesh.query_points(query_pts, return_sdf=True)
+                 >>> q_ids, tri_ids, prj_pts, dists = mesh.query_points(query_pts, return_sdf=True, sign_mode=5)
              )pbdoc")
         .def_property_readonly("edges", &TriangleMesh::get_edges, "Unique edges of the mesh (E, 2) int32.")
         .def_property_readonly("edge_to_triangle_offsets", &TriangleMesh::get_edge_to_triangle_offsets, "Edge to triangle CSR offsets.")
