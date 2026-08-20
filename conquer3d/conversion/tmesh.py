@@ -38,7 +38,9 @@ def tmesh2voxel(
             - 0: Ray parity casting.
             - 1: Fast Winding Number (FWN).
             - 2: Angle-weighted pseudonormals (default).
-            - 3: Volumetric 3D flood fill mask.
+            - 3: Volumetric 3D flood fill mask (dense).
+            - 4: Hybrid WN + pseudonormals.
+            - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -60,6 +62,8 @@ def tmesh2voxel(
     
     if sign_mode == 3:
         tm.build_flood_fill_data(grid_min, grid_max, res_list)
+    elif sign_mode == 5:
+        tm.build_flood_fill_cf_data(grid_min, grid_max, res_list)
     if sign_mode in [2, 4]:
         tm.compute_triangle_normals()
         tm.compute_vertex_normals(1)
@@ -116,7 +120,9 @@ def tmesh2sparse(
             - 0: Ray casting.
             - 1: Fast Winding Number.
             - 2: Pseudonormals (default).
-            - 3: Volumetric flood fill.
+            - 3: Volumetric flood fill (dense).
+            - 4: Hybrid WN + pseudonormals.
+            - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
         pad (int, optional): Voxel layer dilation radius. Defaults to 0 (set `pad=1` for DMC / DC).
         return_normals (bool, optional): If True, returns surface normal vectors. Defaults to False.
         normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector).
@@ -157,6 +163,8 @@ def tmesh2sparse(
 
     if sign_mode == 3:
         tm.build_flood_fill_data(grid_min, grid_max, res_list)
+    elif sign_mode == 5:
+        tm.build_flood_fill_cf_data(grid_min, grid_max, res_list)
     if sign_mode in [2, 4]:
         tm.compute_triangle_normals()
         tm.compute_vertex_normals(1)
