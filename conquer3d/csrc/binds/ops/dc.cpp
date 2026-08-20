@@ -11,6 +11,7 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> dual_cont
     torch::Tensor sdf,
     std::optional<torch::Tensor> grid_normals,
     std::optional<torch::Tensor> colors,
+    std::optional<torch::Tensor> voxel_vertices,
     float iso,
     bool quad_split
 ) {
@@ -24,6 +25,9 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> dual_cont
     if (colors.has_value() && colors.value().defined()) {
         CHECK_INPUT(colors.value());
     }
+    if (voxel_vertices.has_value() && voxel_vertices.value().defined()) {
+        CHECK_INPUT(voxel_vertices.value());
+    }
 
     return conquer3d::ops::dual_contouring(
         grid_vertices,
@@ -31,6 +35,7 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> dual_cont
         sdf,
         grid_normals,
         colors,
+        voxel_vertices,
         iso,
         quad_split
     );
@@ -77,9 +82,10 @@ void bind_ops_dc(py::module &m) {
     m.def("dual_contouring", &dual_contouring_wrapper,
           py::arg("grid_vertices"), py::arg("voxels"), py::arg("sdf"),
           py::arg("grid_normals") = py::none(), py::arg("colors") = py::none(),
+          py::arg("voxel_vertices") = py::none(),
           py::arg("iso") = 0.0f, py::arg("quad_split") = true,
           R"pbdoc(
-          Extracts a sharp-feature preserving surface mesh using Dual Contouring with GPU QEF solver (Ju et al. 2002).
+          Extracts a sharp-feature preserving surface mesh using Dual Contouring with GPU QEF solver (Ju et al. 2002) or precomputed voxel vertices.
 
           Args:
               grid_vertices (torch.Tensor): (N, 3) float32 corner coordinates on CUDA.
@@ -87,6 +93,7 @@ void bind_ops_dc(py::module &m) {
               sdf (torch.Tensor): (N,) float32 scalar SDF values on CUDA.
               grid_normals (torch.Tensor, optional): (N, 3) float32 explicit vertex normals for sharp CAD features. Defaults to None.
               colors (torch.Tensor, optional): (N, C) float32 vertex features/colors on CUDA. Defaults to None.
+              voxel_vertices (torch.Tensor, optional): (M, 3) float32 precomputed inside-voxel vertex coordinates on CUDA. Defaults to None.
               iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
               quad_split (bool, optional): If True, splits quads into Delaunay triangles; if False, returns quads. Defaults to True.
 
