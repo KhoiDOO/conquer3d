@@ -271,6 +271,7 @@ __global__ void dmc_extract_dual_vertices_and_edges_kernel(
     const int *__restrict__ voxels,
     const float *__restrict__ sdf,
     const float *__restrict__ colors,
+    const float3 *__restrict__ precomputed_vertices,
     int num_channels,
     const int *__restrict__ vert_offsets,
     const int *__restrict__ edge_offsets,
@@ -372,25 +373,34 @@ __global__ void dmc_extract_dual_vertices_and_edges_kernel(
         float v = v_sum / sz;
         float w = w_sum / sz;
 
-        // Newton-Raphson Level-Set Projection
-        for (int iter = 0; iter < project_iters; ++iter) {
-            float f_val = trilinear_val(u, v, w, s);
-            float3 grad = trilinear_grad(u, v, w, s);
-            float len_sq = grad.x * grad.x + grad.y * grad.y + grad.z * grad.z;
-            if (len_sq > 1e-8f) {
-                float step = 0.5f * (iso - f_val) / len_sq;
-                u = fmaxf(0.0f, fminf(1.0f, u + step * grad.x));
-                v = fmaxf(0.0f, fminf(1.0f, v + step * grad.y));
-                w = fmaxf(0.0f, fminf(1.0f, w + step * grad.z));
+        if (precomputed_vertices != nullptr) {
+            // Fast path: use precomputed inside-voxel vertex directly
+            out_vertices[dual_vert_idx] = precomputed_vertices[m];
+            float3 pt = precomputed_vertices[m];
+            u = fmaxf(0.0f, fminf(1.0f, (pt.x - c_min.x) / dx));
+            v = fmaxf(0.0f, fminf(1.0f, (pt.y - c_min.y) / dy));
+            w = fmaxf(0.0f, fminf(1.0f, (pt.z - c_min.z) / dz));
+        } else {
+            // Newton-Raphson Level-Set Projection
+            for (int iter = 0; iter < project_iters; ++iter) {
+                float f_val = trilinear_val(u, v, w, s);
+                float3 grad = trilinear_grad(u, v, w, s);
+                float len_sq = grad.x * grad.x + grad.y * grad.y + grad.z * grad.z;
+                if (len_sq > 1e-8f) {
+                    float step = 0.5f * (iso - f_val) / len_sq;
+                    u = fmaxf(0.0f, fminf(1.0f, u + step * grad.x));
+                    v = fmaxf(0.0f, fminf(1.0f, v + step * grad.y));
+                    w = fmaxf(0.0f, fminf(1.0f, w + step * grad.z));
+                }
             }
-        }
 
-        float3 pt = make_float3(
-            c_min.x + u * dx,
-            c_min.y + v * dy,
-            c_min.z + w * dz
-        );
-        out_vertices[dual_vert_idx] = pt;
+            float3 pt = make_float3(
+                c_min.x + u * dx,
+                c_min.y + v * dy,
+                c_min.z + w * dz
+            );
+            out_vertices[dual_vert_idx] = pt;
+        }
 
         // Interpolate colors if provided
         if (colors != nullptr && out_colors != nullptr) {
@@ -452,10 +462,10 @@ __global__ void dmc_gather_quads_kernel(
 
     for (int k = 0; k < count && k < 4; ++k) {
         uint32_t val = sorted_dual_vert_and_edge[i + k];
-        int dual_v = (int)(val >> 4);
+        int d_idx = (int)(val >> 4);
         int e = (int)(val & 0xF);
         int slot = dmc_edge_quadrant[e];
-        quad_v[slot] = dual_v;
+        quad_v[slot] = d_idx;
         present_mask |= (1 << slot);
     }
 
@@ -469,20 +479,23 @@ __global__ void dmc_gather_quads_kernel(
         int q_idx = atomicAdd(out_quad_count, 1);
         out_quads[q_idx] = q;
     } else if (count == 3) {
-        // Boundary triangle closure for sparse narrow-band boundaries
-        int filled[3];
-        int f_idx = 0;
+        int missing_slot = 0;
         #pragma unroll
-        for (int slot = 0; slot < 4; ++slot) {
-            if (present_mask & (1 << slot)) {
-                filled[f_idx++] = quad_v[slot];
+        for (int s = 0; s < 4; ++s) {
+            if (!(present_mask & (1 << s))) {
+                missing_slot = s;
+                break;
             }
         }
+        int va = quad_v[(missing_slot + 1) & 3];
+        int vb = quad_v[(missing_slot + 2) & 3];
+        int vc = quad_v[(missing_slot + 3) & 3];
+
         int4 q;
         if (s0 < s1) {
-            q = make_int4(filled[0], filled[1], filled[2], filled[0]);
+            q = make_int4(va, vb, vc, va);
         } else {
-            q = make_int4(filled[0], filled[2], filled[1], filled[0]);
+            q = make_int4(va, vc, vb, va);
         }
         int q_idx = atomicAdd(out_quad_count, 1);
         out_quads[q_idx] = q;
@@ -490,52 +503,45 @@ __global__ void dmc_gather_quads_kernel(
 }
 
 // -----------------------------------------------------------------------------------------
-// Kernel 4: Delaunay Max-Min Angle Quad Triangulation
+// Kernel 4: Optimal Quad-to-Triangle Splitting
 // -----------------------------------------------------------------------------------------
 __global__ void dmc_quad_to_triangle_kernel(
     const int4 *__restrict__ quads,
     const float3 *__restrict__ vertices,
     int num_quads,
-    int3 *__restrict__ out_triangles
+    int3 *__restrict__ out_triangles,
+    int *__restrict__ out_tri_count
 ) {
-    int q_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (q_idx >= num_quads) return;
+    int q = blockIdx.x * blockDim.x + threadIdx.x;
+    if (q >= num_quads) return;
 
-    int4 q = quads[q_idx];
-
-    // Check if this was a 3-vertex boundary closure
-    if (q.w == q.x) {
-        out_triangles[q_idx * 2 + 0] = make_int3(q.x, q.y, q.z);
-        out_triangles[q_idx * 2 + 1] = make_int3(q.x, q.x, q.x); // Degenerate marker
+    int4 quad = quads[q];
+    if (quad.x == quad.w) {
+        int idx = atomicAdd(out_tri_count, 1);
+        out_triangles[idx] = make_int3(quad.x, quad.y, quad.z);
         return;
     }
 
-    float3 p0 = vertices[q.x];
-    float3 p1 = vertices[q.y];
-    float3 p2 = vertices[q.z];
-    float3 p3 = vertices[q.w];
+    float3 p0 = vertices[quad.x];
+    float3 p1 = vertices[quad.y];
+    float3 p2 = vertices[quad.z];
+    float3 p3 = vertices[quad.w];
 
-    // Diagonal 0-2 split: Triangles (p0, p1, p2) & (p0, p2, p3)
-    float a0 = triangle_min_angle(p0, p1, p2);
-    float a1 = triangle_min_angle(p0, p2, p3);
-    float min_angle_diag02 = fminf(a0, a1);
+    float min_angle_A = fminf(triangle_min_angle(p0, p1, p2), triangle_min_angle(p0, p2, p3));
+    float min_angle_B = fminf(triangle_min_angle(p1, p2, p3), triangle_min_angle(p1, p3, p0));
 
-    // Diagonal 1-3 split: Triangles (p1, p2, p3) & (p1, p3, p0)
-    float b0 = triangle_min_angle(p1, p2, p3);
-    float b1 = triangle_min_angle(p1, p3, p0);
-    float min_angle_diag13 = fminf(b0, b1);
-
-    if (min_angle_diag02 >= min_angle_diag13) {
-        out_triangles[q_idx * 2 + 0] = make_int3(q.x, q.y, q.z);
-        out_triangles[q_idx * 2 + 1] = make_int3(q.x, q.z, q.w);
+    int idx = atomicAdd(out_tri_count, 2);
+    if (min_angle_A >= min_angle_B) {
+        out_triangles[idx]     = make_int3(quad.x, quad.y, quad.z);
+        out_triangles[idx + 1] = make_int3(quad.x, quad.z, quad.w);
     } else {
-        out_triangles[q_idx * 2 + 0] = make_int3(q.x, q.y, q.w);
-        out_triangles[q_idx * 2 + 1] = make_int3(q.y, q.z, q.w);
+        out_triangles[idx]     = make_int3(quad.y, quad.z, quad.w);
+        out_triangles[idx + 1] = make_int3(quad.y, quad.w, quad.x);
     }
 }
 
 // -----------------------------------------------------------------------------------------
-// Kernel 5: Analytical Backward Pass
+// Kernel 5: Differentiable Backward Kernel
 // -----------------------------------------------------------------------------------------
 __global__ void dmc_backward_kernel(
     const float3 *__restrict__ grad_vertices,
@@ -556,6 +562,7 @@ __global__ void dmc_backward_kernel(
 
     int c_idx[8];
     float s[8];
+    float u_arr[8];
     int i_case = 0;
 
     #pragma unroll
@@ -564,7 +571,6 @@ __global__ void dmc_backward_kernel(
         s[i] = sdf[c_idx[i]];
     }
 
-    float u_arr[8];
     u_arr[0] = s[0];
     u_arr[1] = s[1];
     u_arr[2] = s[3];
@@ -638,6 +644,7 @@ std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> dual_marching_cube
     const at::Tensor &voxels,
     const at::Tensor &sdf,
     const c10::optional<at::Tensor> &colors,
+    const c10::optional<at::Tensor> &voxel_vertices,
     float iso,
     bool quad_split,
     int project_iters
@@ -723,11 +730,16 @@ std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> dual_marching_cube
     auto edge_keys = at::empty({total_edge_instances}, grid_vertices.options().dtype(at::kLong));
     auto dual_vert_and_edge = at::empty({total_edge_instances}, voxels.options());
 
+    const float3 *precomputed_ptr = (voxel_vertices.has_value() && voxel_vertices->defined() && voxel_vertices->numel() > 0)
+        ? reinterpret_cast<const float3*>(voxel_vertices->data_ptr<float>())
+        : nullptr;
+
     dmc_extract_dual_vertices_and_edges_kernel<<<grid, block, 0, stream>>>(
         reinterpret_cast<const float3*>(grid_vertices.data_ptr<float>()),
         voxels.data_ptr<int>(),
         sdf.data_ptr<float>(),
         colors_ptr,
+        precomputed_ptr,
         num_channels,
         vert_offsets.data_ptr<int>(),
         edge_offsets.data_ptr<int>(),
@@ -774,19 +786,23 @@ std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> dual_marching_cube
 
     // Step 5: Triangulate Quads
     auto out_triangles = at::empty({num_quads * 2, 3}, voxels.options());
+    auto tri_count_tensor = at::zeros({1}, voxels.options());
     int q_grid = (num_quads + block - 1) / block;
 
-    dmc_quad_to_triangle_kernel<<<q_grid, block, 0, stream>>>(
-        reinterpret_cast<const int4*>(out_quads.data_ptr<int>()),
-        reinterpret_cast<const float3*>(out_vertices.data_ptr<float>()),
-        num_quads,
-        reinterpret_cast<int3*>(out_triangles.data_ptr<int>())
-    );
+    if (num_quads > 0) {
+        dmc_quad_to_triangle_kernel<<<q_grid, block, 0, stream>>>(
+            reinterpret_cast<const int4*>(out_quads.data_ptr<int>()),
+            reinterpret_cast<const float3*>(out_vertices.data_ptr<float>()),
+            num_quads,
+            reinterpret_cast<int3*>(out_triangles.data_ptr<int>()),
+            tri_count_tensor.data_ptr<int>()
+        );
+    }
 
-    // Remove any degenerate boundary marker triangles (where tri.x == tri.y == tri.z)
-    auto mask = (out_triangles.select(1, 0) != out_triangles.select(1, 1)) |
-                (out_triangles.select(1, 1) != out_triangles.select(1, 2));
-    out_triangles = out_triangles.index({mask});
+    int num_triangles = 0;
+    cudaMemcpyAsync(&num_triangles, tri_count_tensor.data_ptr<int>(), sizeof(int), cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
+    out_triangles = out_triangles.slice(0, 0, num_triangles);
 
     return std::make_tuple(out_vertices, out_triangles, out_colors);
 }
