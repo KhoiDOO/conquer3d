@@ -5,9 +5,31 @@
 
 #include "../data_structure/kdtree.h"
 
+#include <torch/extension.h>
 #include <cstdint>
-#include <thrust/device_vector.h>
-#include <thrust/sequence.h>
+#include <cfloat>
+
+__global__ void one_sided_chamfer_single_point_kernel(
+    const uint32_t num_query_points,
+    const float3 *__restrict__ query_points,
+    const float3 *__restrict__ reference_points,
+    float *__restrict__ distances,
+    int64_t *__restrict__ indices)
+{
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_query_points)
+        return;
+
+    float3 qp = query_points[idx];
+    float3 rp = reference_points[0];
+    float3 d = qp - rp;
+    float dist_sq = maths::dot(d, d);
+    if (!isfinite(dist_sq))
+        dist_sq = FLT_MAX;
+
+    distances[idx] = dist_sq;
+    indices[idx] = 0;
+}
 
 __global__ void one_sided_chamfer_distance_kernel(
     const uint32_t num_query_points,
@@ -55,24 +77,59 @@ void one_sided_chamfer_distance(
     float *__restrict__ distances,
     int64_t *__restrict__ indices)
 {
-    thrust::device_vector<float3> cloned_ref_points(reference_points, reference_points + num_reference_points);
-    thrust::device_vector<int64_t> reference_indices(num_reference_points);
-    thrust::sequence(reference_indices.begin(), reference_indices.end());
+    if (num_query_points == 0)
+        return;
 
-    kdtree::build(
-        num_reference_points,
-        thrust::raw_pointer_cast(cloned_ref_points.data()),
-        thrust::raw_pointer_cast(reference_indices.data()));
+    if (num_reference_points == 0)
+    {
+        // No reference points available: initialize distances to infinity and indices to -1
+        cudaMemsetAsync(distances, 0x7F, num_query_points * sizeof(float));
+        cudaMemsetAsync(indices, 0xFF, num_query_points * sizeof(int64_t));
+        return;
+    }
 
     uint32_t threads = NTHREADS;
     uint32_t blocks = (num_query_points + threads - 1) / threads;
+
+    if (num_reference_points == 1)
+    {
+        one_sided_chamfer_single_point_kernel<<<blocks, threads>>>(
+            num_query_points,
+            query_points,
+            reference_points,
+            distances,
+            indices);
+        return;
+    }
+
+    // Allocate PyTorch-backed memory for cloned points and permutation indices (zero cudaMalloc overhead)
+    auto opt_f = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kFloat32);
+    auto opt_i = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kInt64);
+
+    auto cloned_ref_tensor = torch::empty({(int64_t)num_reference_points, 3}, opt_f);
+    cudaMemcpyAsync(
+        cloned_ref_tensor.data_ptr<float>(),
+        reference_points,
+        num_reference_points * sizeof(float3),
+        cudaMemcpyDeviceToDevice
+    );
+
+    auto ref_indices_tensor = torch::arange((int64_t)num_reference_points, opt_i);
+
+    float3* p_cloned = (float3*)cloned_ref_tensor.data_ptr<float>();
+    int64_t* p_inds = ref_indices_tensor.data_ptr<int64_t>();
+
+    kdtree::build(
+        num_reference_points,
+        p_cloned,
+        p_inds);
 
     one_sided_chamfer_distance_kernel<<<blocks, threads>>>(
         num_query_points,
         query_points,
         num_reference_points,
-        thrust::raw_pointer_cast(cloned_ref_points.data()),
-        thrust::raw_pointer_cast(reference_indices.data()),
+        p_cloned,
+        p_inds,
         distances,
         indices);
 }
