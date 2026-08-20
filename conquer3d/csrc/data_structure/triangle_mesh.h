@@ -43,6 +43,13 @@ protected:
     std::optional<std::vector<float>> flood_grid_min = std::nullopt;
     std::optional<std::vector<float>> flood_grid_max = std::nullopt;
     std::optional<std::vector<int64_t>> flood_grid_res = std::nullopt;
+
+    std::optional<torch::Tensor> cf_coarse_mask = std::nullopt;
+    std::optional<torch::Tensor> cf_boundary_lookup = std::nullopt;
+    std::optional<torch::Tensor> cf_fine_masks = std::nullopt;
+    std::optional<std::vector<int64_t>> cf_block_size = std::nullopt;
+    std::optional<std::vector<int64_t>> cf_coarse_res = std::nullopt;
+
     std::optional<bool> opt_edge_manifold;
     std::optional<bool> opt_edge_manifold_w_boundary;
     std::optional<bool> opt_vertex_manifold;
@@ -176,6 +183,21 @@ public:
     std::vector<float> get_flood_grid_min();
     std::vector<float> get_flood_grid_max();
     std::vector<int64_t> get_flood_grid_res();
+
+    /**
+     * @brief Builds 2-Level Coarse-to-Fine (CF) Volumetric Flood Fill data (< 10 MB VRAM at 1024^3).
+     */
+    void build_flood_fill_cf_data(
+        std::optional<std::vector<float>> grid_min = std::nullopt,
+        std::optional<std::vector<float>> grid_max = std::nullopt,
+        std::optional<std::vector<int64_t>> res = std::nullopt,
+        std::optional<std::vector<int64_t>> block_size = std::nullopt,
+        int connectivity = 6);
+    torch::Tensor get_cf_coarse_mask();
+    torch::Tensor get_cf_boundary_lookup();
+    torch::Tensor get_cf_fine_masks();
+    std::vector<int64_t> get_cf_block_size();
+    std::vector<int64_t> get_cf_coarse_res();
 
     /** @brief Returns colliding triangle index pairs $(N, 2)$. */
     torch::Tensor get_self_intersection();
