@@ -99,7 +99,9 @@ public:
      *                              - 0: Ray parity casting.
      *                              - 1: Fast Winding Number (FWN).
      *                              - 2: Angle-weighted pseudonormals.
-     *                              - 3: Volumetric 3D flood fill mask.
+     *                              - 3: Volumetric 3D flood fill mask (dense).
+     *                              - 4: Hybrid Winding Number + Pseudonormals.
+     *                              - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill.
      * @param[in] triangle_normals  Optional (F, 3) triangle face normals.
      * @param[in] vertex_normals    Optional (V, 3) vertex pseudonormals.
      * @param[in] edge_normals      Optional (3*F, 3) edge pseudonormals.
@@ -107,6 +109,11 @@ public:
      * @param[in] flood_grid_min    Optional flood grid min bounds.
      * @param[in] flood_grid_max    Optional flood grid max bounds.
      * @param[in] flood_grid_res    Optional flood grid resolution.
+     * @param[in] cf_coarse_mask    Optional (Cx, Cy, Cz) int8 coarse mask for sign_mode=5.
+     * @param[in] cf_boundary_lookup Optional (Cx, Cy, Cz) int32 boundary lookup table for sign_mode=5.
+     * @param[in] cf_fine_masks    Optional (N_boundary, Bx, By, Bz) int8 fine masks for sign_mode=5.
+     * @param[in] cf_block_size     Optional macro-block size [Bx, By, Bz].
+     * @param[in] cf_coarse_res     Optional coarse grid resolution [Cx, Cy, Cz].
      * 
      * @return Tuple of (query_ids, closest_triangle_ids, projected_points, signed_distances).
      */
@@ -123,7 +130,12 @@ public:
         std::optional<torch::Tensor> flood_fill_mask = std::nullopt,
         std::optional<std::vector<float>> flood_grid_min = std::nullopt,
         std::optional<std::vector<float>> flood_grid_max = std::nullopt,
-        std::optional<std::vector<int64_t>> flood_grid_res = std::nullopt);
+        std::optional<std::vector<int64_t>> flood_grid_res = std::nullopt,
+        std::optional<torch::Tensor> cf_coarse_mask = std::nullopt,
+        std::optional<torch::Tensor> cf_boundary_lookup = std::nullopt,
+        std::optional<torch::Tensor> cf_fine_masks = std::nullopt,
+        std::optional<std::vector<int64_t>> cf_block_size = std::nullopt,
+        std::optional<std::vector<int64_t>> cf_coarse_res = std::nullopt);
 
     /**
      * @brief Performs triangle-box intersection tests against voxel cells.
@@ -196,7 +208,12 @@ namespace mesh_bvh
         const int8_t *flood_mask = nullptr,
         float3 flood_min = make_float3(0.0f, 0.0f, 0.0f),
         float3 flood_spacing = make_float3(1.0f, 1.0f, 1.0f),
-        int3 flood_dims = make_int3(0, 0, 0));
+        int3 flood_dims = make_int3(0, 0, 0),
+        const int8_t *cf_coarse_mask = nullptr,
+        const int32_t *cf_boundary_lookup = nullptr,
+        const int8_t *cf_fine_masks = nullptr,
+        int3 cf_block_size = make_int3(8, 8, 8),
+        int3 cf_coarse_dims = make_int3(0, 0, 0));
     
     __host__ void bottom_up_winding_data(
         const int num_objects,
