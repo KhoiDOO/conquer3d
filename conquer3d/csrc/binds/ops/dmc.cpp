@@ -10,6 +10,7 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> dual_marc
     torch::Tensor voxels,
     torch::Tensor sdf,
     std::optional<torch::Tensor> colors,
+    std::optional<torch::Tensor> voxel_vertices,
     float iso,
     bool quad_split,
     int project_iters
@@ -21,12 +22,16 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> dual_marc
     if (colors.has_value() && colors.value().defined()) {
         CHECK_INPUT(colors.value());
     }
+    if (voxel_vertices.has_value() && voxel_vertices.value().defined()) {
+        CHECK_INPUT(voxel_vertices.value());
+    }
 
     return conquer3d::ops::dual_marching_cubes(
         grid_vertices,
         voxels,
         sdf,
         colors,
+        voxel_vertices,
         iso,
         quad_split,
         project_iters
@@ -70,16 +75,17 @@ std::tuple<torch::Tensor, std::optional<torch::Tensor>> dual_marching_cubes_back
 void bind_ops_dmc(py::module &m) {
     m.def("dual_marching_cubes", &dual_marching_cubes_wrapper,
           py::arg("grid_vertices"), py::arg("voxels"), py::arg("sdf"),
-          py::arg("colors") = py::none(), py::arg("iso") = 0.0f,
-          py::arg("quad_split") = true, py::arg("project_iters") = 5,
+          py::arg("colors") = py::none(), py::arg("voxel_vertices") = py::none(),
+          py::arg("iso") = 0.0f, py::arg("quad_split") = true, py::arg("project_iters") = 5,
           R"pbdoc(
-          Extracts a watertight 2-manifold surface mesh using Differentiable Dual Marching Cubes (Schaefer & Warren 2004).
+          Extracts a watertight 2-manifold surface mesh using Differentiable Dual Marching Cubes (Schaefer & Warren 2004) or precomputed voxel vertices.
 
           Args:
               grid_vertices (torch.Tensor): (N, 3) float32 corner coordinates on CUDA.
               voxels (torch.Tensor): (M, 8) int32 corner indices per voxel cell.
               sdf (torch.Tensor): (N,) float32 scalar SDF values on CUDA.
               colors (torch.Tensor, optional): (N, C) float32 vertex features/colors on CUDA. Defaults to None.
+              voxel_vertices (torch.Tensor, optional): (M, 3) float32 precomputed inside-voxel vertex coordinates on CUDA. Defaults to None.
               iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
               quad_split (bool, optional): If True, splits into Delaunay triangles; if False, returns quads. Defaults to True.
               project_iters (int, optional): Newton-Raphson level-set projection iterations. Defaults to 5.
