@@ -1,0 +1,63 @@
+/**
+ * @file flood_fill_cf.h
+ * @brief High-performance GPU Coarse-to-Fine (CF) Hierarchical Volumetric Flood-Fill.
+ * 
+ * Provides a 2-level hierarchical spatial flood-fill pipeline consuming < 10 MB of VRAM
+ * at 1024^3 resolution with exact topological inside/outside sign determination.
+ */
+
+#pragma once
+
+#include <torch/extension.h>
+#include <cuda_runtime.h>
+#include <vector>
+#include <cstdint>
+
+namespace ops {
+
+    /**
+     * @brief Result container for Coarse-to-Fine Volumetric Flood Fill.
+     */
+    struct CFFloodFillResult {
+        torch::Tensor coarse_mask;            // (Cx, Cy, Cz) int8 tensor (2: water/exterior, -1: interior, 1: boundary)
+        torch::Tensor boundary_block_coords;  // (N_boundary, 3) int32
+        torch::Tensor boundary_block_lookup;  // (Cx, Cy, Cz) int32 dense lookup index (-1 if not boundary, else block index in fine_boundary_masks)
+        torch::Tensor fine_boundary_masks;    // (N_boundary, Bx, By, Bz) int8 local masks
+        std::vector<int64_t> block_size;      // [Bx, By, Bz]
+        std::vector<int64_t> coarse_res;      // [Cx, Cy, Cz]
+        std::vector<float> grid_min;
+        std::vector<float> grid_max;
+        std::vector<int64_t> grid_res;
+    };
+
+    /**
+     * @brief Computes 2-Level Coarse-to-Fine Volumetric Flood Fill on GPU.
+     *
+     * @param[in] vertices      (V, 3) float32 mesh vertex tensor.
+     * @param[in] triangles     (F, 3) int32 triangle index tensor.
+     * @param[in] aabb_mins     (2F-1, 3) BVH lower box coordinates.
+     * @param[in] aabb_maxs     (2F-1, 3) BVH upper box coordinates.
+     * @param[in] bvh_children  (2F-1, 2) BVH child node indices.
+     * @param[in] object_ids    (F,) leaf-to-triangle map.
+     * @param[in] grid_min      3D lower coordinate bounds [x_min, y_min, z_min].
+     * @param[in] grid_max      3D upper coordinate bounds [x_max, y_max, z_max].
+     * @param[in] grid_res      3D fine grid resolution [rx, ry, rz].
+     * @param[in] block_size    Optional macro-block size [bx, by, bz]. If empty, computed dynamically.
+     * @param[in] connectivity  Voxel neighbor connectivity (6, 18, 26).
+     * @return CFFloodFillResult struct holding coarse mask and fine boundary masks.
+     */
+    CFFloodFillResult compute_flood_fill_cf(
+        const torch::Tensor& vertices,
+        const torch::Tensor& triangles,
+        const torch::Tensor& aabb_mins,
+        const torch::Tensor& aabb_maxs,
+        const torch::Tensor& bvh_children,
+        const torch::Tensor& object_ids,
+        std::vector<float> grid_min,
+        std::vector<float> grid_max,
+        std::vector<int64_t> grid_res,
+        std::vector<int64_t> block_size = {},
+        int connectivity = 6
+    );
+
+} // namespace ops
