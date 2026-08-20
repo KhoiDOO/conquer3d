@@ -52,14 +52,25 @@ def one_sided_chamfer_distance(
     assert query_points.dtype == torch.float32 and reference_points.dtype == torch.float32, "Points must be float32"
     assert query_points.shape[1] == 3 and reference_points.shape[1] == 3, "Points must be 3D"
     
+    if query_points.shape[0] == 0:
+        return (
+            torch.empty((0,), device=query_points.device, dtype=torch.float32),
+            torch.empty((0,), device=query_points.device, dtype=torch.int64)
+        )
+    if reference_points.shape[0] == 0:
+        return (
+            torch.full((query_points.shape[0],), float('inf'), device=query_points.device, dtype=torch.float32),
+            torch.full((query_points.shape[0],), -1, device=query_points.device, dtype=torch.int64)
+        )
+
     query_points_c = query_points.contiguous()
     reference_points_c = reference_points.contiguous()
     
     distances, indices = _C.one_sided_chamfer_distance(query_points_c, reference_points_c)
     
     if not squared:
-        # clamp to avoid NaN from floating point inaccuracies
-        distances = torch.sqrt(torch.clamp(distances, min=1e-12))
+        # Critically small epsilon clamp to prevent NaN from floating-point underflow
+        distances = torch.sqrt(torch.clamp(distances, min=1e-26))
         
     return distances, indices
 
@@ -88,6 +99,16 @@ def chamfer_distance(
             - If `return_indices=True`: Tuple of `(loss, idx_x_to_y, idx_y_to_x)` where
               `idx_x_to_y` has shape `(N,)` and `idx_y_to_x` has shape `(M,)`.
     """
+    if x.shape[0] == 0 or y.shape[0] == 0:
+        zero_loss = torch.tensor(0.0, device=x.device, dtype=x.dtype)
+        if return_indices:
+            return (
+                zero_loss,
+                torch.empty((x.shape[0],), dtype=torch.int64, device=x.device),
+                torch.empty((y.shape[0],), dtype=torch.int64, device=y.device)
+            )
+        return zero_loss
+
     dist_x_to_y, idx_x_to_y = one_sided_chamfer_distance(x, y, squared=squared)
     dist_y_to_x, idx_y_to_x = one_sided_chamfer_distance(y, x, squared=squared)
     
@@ -122,6 +143,16 @@ def one_sided_hausdorff_distance(
             - If `return_indices=True`: Tuple `(max_dist, query_idx, ref_idx)` identifying
               the query point index and closest reference point index yielding the maximum distance.
     """
+    if query_points.shape[0] == 0 or reference_points.shape[0] == 0:
+        zero_dist = torch.tensor(0.0, device=query_points.device, dtype=query_points.dtype)
+        if return_indices:
+            return (
+                zero_dist,
+                torch.tensor(-1, device=query_points.device, dtype=torch.int64),
+                torch.tensor(-1, device=query_points.device, dtype=torch.int64)
+            )
+        return zero_dist
+
     distances, indices = one_sided_chamfer_distance(query_points, reference_points, squared=squared)
     
     max_dist, max_idx = torch.max(distances, dim=0)
@@ -155,6 +186,16 @@ def hausdorff_distance(
             - If `return_indices=True`: Tuple `(max_dist, x_idx, y_idx)` containing the
               maximal distance and corresponding point indices in `x` and `y`.
     """
+    if x.shape[0] == 0 or y.shape[0] == 0:
+        zero_dist = torch.tensor(0.0, device=x.device, dtype=x.dtype)
+        if return_indices:
+            return (
+                zero_dist,
+                torch.tensor(-1, device=x.device, dtype=torch.int64),
+                torch.tensor(-1, device=x.device, dtype=torch.int64)
+            )
+        return zero_dist
+
     if return_indices:
         dist_x_to_y, idx_x1, idx_y1 = one_sided_hausdorff_distance(x, y, squared=squared, return_indices=True)
         dist_y_to_x, idx_y2, idx_x2 = one_sided_hausdorff_distance(y, x, squared=squared, return_indices=True)
