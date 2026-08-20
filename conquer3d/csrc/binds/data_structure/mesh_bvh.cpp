@@ -142,11 +142,16 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     std::optional<torch::Tensor> flood_fill_mask,
     std::optional<std::vector<float>> flood_grid_min,
     std::optional<std::vector<float>> flood_grid_max,
-    std::optional<std::vector<int64_t>> flood_grid_res)
+    std::optional<std::vector<int64_t>> flood_grid_res,
+    std::optional<torch::Tensor> cf_coarse_mask,
+    std::optional<torch::Tensor> cf_boundary_lookup,
+    std::optional<torch::Tensor> cf_fine_masks,
+    std::optional<std::vector<int64_t>> cf_block_size,
+    std::optional<std::vector<int64_t>> cf_coarse_res)
 {
-    if (sign_mode != 0 && sign_mode != 1 && sign_mode != 2 && sign_mode != 3 && sign_mode != 4)
+    if (sign_mode != 0 && sign_mode != 1 && sign_mode != 2 && sign_mode != 3 && sign_mode != 4 && sign_mode != 5)
     {
-        throw std::runtime_error("sign_mode must be 0 (ray casting), 1 (fast winding number), 2 (pseudonormals), 3 (flood fill), or 4 (hybrid WN + pseudonormal)");
+        throw std::runtime_error("sign_mode must be 0 (ray casting), 1 (fast winding number), 2 (pseudonormals), 3 (flood fill), 4 (hybrid WN + pseudonormal), or 5 (coarse-to-fine flood fill)");
     }
 
     if ((sign_mode == 1 || sign_mode == 4) && !this->has_winding_data)
@@ -202,7 +207,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     }
 
     int num_queries = query_points.size(0);
-    int num_objects = this->object_ids.size(0);
+    int num_objects = triangles.size(0);
 
     auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(query_points.device());
     auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(query_points.device());
@@ -214,16 +219,18 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     {
         out_projected_pts = torch::empty({num_queries, 3}, options_f32);
     }
-    else
-    {
-        out_projected_pts = torch::empty({0, 3}, options_f32);
-    }
     torch::Tensor out_distances = torch::empty({num_queries}, options_f32);
 
     const int8_t *p_flood_mask = nullptr;
     float3 f_min = make_float3(0.0f, 0.0f, 0.0f);
     float3 f_spacing = make_float3(1.0f, 1.0f, 1.0f);
     int3 f_dims = make_int3(0, 0, 0);
+
+    const int8_t *p_cf_coarse_mask = nullptr;
+    const int32_t *p_cf_boundary_lookup = nullptr;
+    const int8_t *p_cf_fine_masks = nullptr;
+    int3 cf_bs = make_int3(8, 8, 8);
+    int3 cf_cd = make_int3(0, 0, 0);
 
     if (sign_mode == 3)
     {
@@ -238,10 +245,39 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
         int64_t rz = flood_grid_res->at(2);
         f_dims = make_int3(static_cast<int>(rx), static_cast<int>(ry), static_cast<int>(rz));
         f_spacing = make_float3(
-            (flood_grid_max->at(0) - flood_grid_min->at(0)) / (rx - 1),
-            (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1),
-            (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1)
+            (rx > 1) ? (flood_grid_max->at(0) - flood_grid_min->at(0)) / (rx - 1) : 1.0f,
+            (ry > 1) ? (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1) : 1.0f,
+            (rz > 1) ? (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1) : 1.0f
         );
+    }
+    else if (sign_mode == 5)
+    {
+        if (!cf_coarse_mask.has_value() || !cf_coarse_mask->defined() || !flood_grid_min.has_value() || !flood_grid_max.has_value() || !flood_grid_res.has_value())
+        {
+            throw std::runtime_error("For sign_mode == 5 (coarse-to-fine flood fill), CF flood fill data must be provided or built beforehand.");
+        }
+        p_cf_coarse_mask = cf_coarse_mask->data_ptr<int8_t>();
+        if (cf_boundary_lookup.has_value() && cf_boundary_lookup->defined()) {
+            p_cf_boundary_lookup = cf_boundary_lookup->data_ptr<int32_t>();
+        }
+        if (cf_fine_masks.has_value() && cf_fine_masks->defined()) {
+            p_cf_fine_masks = cf_fine_masks->data_ptr<int8_t>();
+        }
+        f_min = make_float3(flood_grid_min->at(0), flood_grid_min->at(1), flood_grid_min->at(2));
+        int64_t rx = flood_grid_res->at(0);
+        int64_t ry = flood_grid_res->at(1);
+        int64_t rz = flood_grid_res->at(2);
+        f_spacing = make_float3(
+            (rx > 1) ? (flood_grid_max->at(0) - flood_grid_min->at(0)) / (rx - 1) : 1.0f,
+            (ry > 1) ? (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1) : 1.0f,
+            (rz > 1) ? (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1) : 1.0f
+        );
+        if (cf_block_size.has_value() && cf_block_size->size() >= 3) {
+            cf_bs = make_int3(static_cast<int>(cf_block_size->at(0)), static_cast<int>(cf_block_size->at(1)), static_cast<int>(cf_block_size->at(2)));
+        }
+        if (cf_coarse_res.has_value() && cf_coarse_res->size() >= 3) {
+            cf_cd = make_int3(static_cast<int>(cf_coarse_res->at(0)), static_cast<int>(cf_coarse_res->at(1)), static_cast<int>(cf_coarse_res->at(2)));
+        }
     }
 
     mesh_bvh::query_point_mesh_bvh(
@@ -268,7 +304,12 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
         p_flood_mask,
         f_min,
         f_spacing,
-        f_dims);
+        f_dims,
+        p_cf_coarse_mask,
+        p_cf_boundary_lookup,
+        p_cf_fine_masks,
+        cf_bs,
+        cf_cd);
 
     return std::make_tuple(out_query_ids, out_object_ids, out_projected_pts, out_distances);
 }
@@ -493,6 +534,9 @@ void bind_ds_mesh_bvh(py::module_ &m) {
              py::arg("edge_normals") = py::none(), py::arg("flood_fill_mask") = py::none(),
              py::arg("flood_grid_min") = py::none(), py::arg("flood_grid_max") = py::none(),
              py::arg("flood_grid_res") = py::none(),
+             py::arg("cf_coarse_mask") = py::none(), py::arg("cf_boundary_lookup") = py::none(),
+             py::arg("cf_fine_masks") = py::none(), py::arg("cf_block_size") = py::none(),
+             py::arg("cf_coarse_res") = py::none(),
              R"pbdoc(
              Finds closest triangles, projected surface points, and Signed Distance Fields (SDF).
 
@@ -502,7 +546,7 @@ void bind_ds_mesh_bvh(py::module_ &m) {
                  triangles (torch.Tensor): (M, 3) int32 mesh triangles on CUDA.
                  return_sdf (bool, optional): Return signed distance instead of unsigned. Defaults to False.
                  return_prj_pts (bool, optional): Return closest surface projections. Defaults to True.
-                 sign_mode (int, optional): Sign evaluation method (0: ray parity, 1: Fast Winding Number, 2: angle-weighted pseudonormals, 3: flood-fill mask). Defaults to 0.
+                 sign_mode (int, optional): Sign evaluation method (0: ray parity, 1: Fast Winding Number, 2: angle-weighted pseudonormals, 3: flood-fill mask, 4: hybrid, 5: coarse-to-fine flood fill). Defaults to 0.
 
              Returns:
                  Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -512,7 +556,7 @@ void bind_ds_mesh_bvh(py::module_ &m) {
                      - distances (torch.Tensor): (Q,) float32 signed/unsigned distances.
 
              Example:
-                 >>> q_ids, tri_ids, prj_pts, dists = mesh_bvh.query_point(query_pts, verts, tris, return_sdf=True)
+                 >>> q_ids, tri_ids, prj_pts, dists = mesh_bvh.query_point(query_pts, verts, tris, return_sdf=True, sign_mode=5)
              )pbdoc")
         .def("build_winding_data", &MeshBVH::build_winding_data,
              py::arg("vertices"), py::arg("triangles"),
