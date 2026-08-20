@@ -104,7 +104,12 @@ class Digit3D(BaseMeshDataset):
                 return vertices_t, faces_t, label
                 
         f_path = self.all_files[idx]
-        label = int(os.path.basename(os.path.dirname(f_path)))
+        base_name = os.path.basename(f_path)
+        parent_name = os.path.basename(os.path.dirname(f_path))
+        if parent_name.isdigit():
+            label = int(parent_name)
+        else:
+            label = int(base_name.split('_')[0])
         
         with self._zip.open(f_path, 'r') as f_obj:
             content = f_obj.read().decode('utf-8')
