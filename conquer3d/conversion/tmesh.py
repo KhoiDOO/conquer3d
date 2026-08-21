@@ -20,7 +20,8 @@ def tmesh2voxel(
     chunk_size: int = 5000000,
     device: str = 'cuda',
     show_progress: bool = True,
-    sign_mode: int = 2
+    sign_mode: int = 2,
+    dilation_radius: Optional[int] = None
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Constructs a dense voxel grid from a TriangleMesh and evaluates its Signed Distance Field.
 
@@ -41,6 +42,9 @@ def tmesh2voxel(
             - 3: Volumetric 3D flood fill mask (dense).
             - 4: Hybrid WN + pseudonormals.
             - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
+            - 6: Hierarchical Boundary-Aware Dilated Flood Fill (< 15 MB VRAM, auto-seals holes).
+        dilation_radius (int, optional): Dilation radius k in voxels for sign_mode=6.
+            If None, dynamically derived via Strategy B mesh boundary loop analysis.
 
     Returns:
         Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -64,6 +68,8 @@ def tmesh2voxel(
         tm.build_flood_fill_data(grid_min, grid_max, res_list)
     elif sign_mode == 5:
         tm.build_flood_fill_cf_data(grid_min, grid_max, res_list)
+    elif sign_mode == 6:
+        tm.build_flood_fill_dilated_cf_data(grid_min, grid_max, res_list, dilation_radius=dilation_radius)
     if sign_mode in [2, 4]:
         tm.compute_triangle_normals()
         tm.compute_vertex_normals(1)
@@ -95,6 +101,7 @@ def tmesh2sparse(
     device: str = 'cuda',
     show_progress: bool = True,
     sign_mode: int = 2,
+    dilation_radius: Optional[int] = None,
     pad: int = 0,
     return_normals: bool = False,
     normal_mode: int = 0
@@ -123,6 +130,9 @@ def tmesh2sparse(
             - 3: Volumetric flood fill (dense).
             - 4: Hybrid WN + pseudonormals.
             - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
+            - 6: Hierarchical Boundary-Aware Dilated Flood Fill (< 15 MB VRAM, auto-seals holes).
+        dilation_radius (int, optional): Dilation radius k in voxels for sign_mode=6.
+            If None, dynamically derived via Strategy B mesh boundary loop analysis.
         pad (int, optional): Voxel layer dilation radius. Defaults to 0 (set `pad=1` for DMC / DC).
         return_normals (bool, optional): If True, returns surface normal vectors. Defaults to False.
         normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector).
@@ -165,6 +175,8 @@ def tmesh2sparse(
         tm.build_flood_fill_data(grid_min, grid_max, res_list)
     elif sign_mode == 5:
         tm.build_flood_fill_cf_data(grid_min, grid_max, res_list)
+    elif sign_mode == 6:
+        tm.build_flood_fill_dilated_cf_data(grid_min, grid_max, res_list, dilation_radius=dilation_radius)
     if sign_mode in [2, 4]:
         tm.compute_triangle_normals()
         tm.compute_vertex_normals(1)
