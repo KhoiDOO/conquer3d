@@ -2,11 +2,15 @@
 #include "../../data_structure/triangle_mesh.h"
 #include "../../ops/flood_fill.h"
 #include "../../ops/flood_fill_cf.h"
+#include "../../ops/flood_fill_dilated.h"
 #include "../../check.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <optional>
 #include <vector>
+#include <unordered_set>
+#include <unordered_map>
+#include <cmath>
 
 namespace py = pybind11;
 
@@ -507,6 +511,220 @@ void TriangleMesh::build_flood_fill_cf_data(
     this->flood_grid_res = res_vals;
 }
 
+float TriangleMesh::get_max_boundary_hole_diameter()
+{
+    this->compute_edges_to_triangle_map();
+    torch::Tensor edge_counts = this->get_edge_to_triangle_counts().cpu();
+    torch::Tensor unique_edges = this->get_edges().cpu();
+    
+    // Find boundary edges where triangle count == 1
+    auto mask = (edge_counts == 1);
+    auto boundary_edge_indices = mask.nonzero().squeeze(1);
+    int64_t num_boundary_edges = boundary_edge_indices.size(0);
+    if (num_boundary_edges == 0) {
+        return 0.0f; // Watertight mesh!
+    }
+    
+    auto boundary_edges = unique_edges.index_select(0, boundary_edge_indices);
+    auto b_edges_accessor = boundary_edges.accessor<int, 2>();
+    
+    torch::Tensor verts_cpu = this->vertices.cpu();
+    auto verts_accessor = verts_cpu.accessor<float, 2>();
+    int64_t num_verts = this->vertices.size(0);
+    
+    // Spatial quantization map: (gx, gy, gz) -> canonical spatial vertex ID
+    struct SpatialKey {
+        int64_t x, y, z;
+        bool operator==(const SpatialKey& o) const { return x == o.x && y == o.y && z == o.z; }
+    };
+    struct SpatialKeyHash {
+        size_t operator()(const SpatialKey& k) const {
+            return std::hash<int64_t>()(k.x) ^ (std::hash<int64_t>()(k.y) << 1) ^ (std::hash<int64_t>()(k.z) << 2);
+        }
+    };
+    
+    float tol = 1e-4f;
+    std::unordered_map<SpatialKey, int, SpatialKeyHash> pos2id;
+    std::vector<int> vert2spatial(num_verts);
+    std::vector<float3> spatial_coords;
+    
+    for (int64_t i = 0; i < num_verts; ++i) {
+        float vx = verts_accessor[i][0];
+        float vy = verts_accessor[i][1];
+        float vz = verts_accessor[i][2];
+        SpatialKey key{
+            (int64_t)std::floor(vx / tol),
+            (int64_t)std::floor(vy / tol),
+            (int64_t)std::floor(vz / tol)
+        };
+        auto it = pos2id.find(key);
+        if (it == pos2id.end()) {
+            int new_id = (int)spatial_coords.size();
+            pos2id[key] = new_id;
+            spatial_coords.push_back(make_float3(vx, vy, vz));
+            vert2spatial[i] = new_id;
+        } else {
+            vert2spatial[i] = it->second;
+        }
+    }
+    
+    // Count occurrences of spatial edges
+    struct SpatialEdge {
+        int u, v;
+        bool operator==(const SpatialEdge& o) const {
+            return (u == o.u && v == o.v) || (u == o.v && v == o.u);
+        }
+    };
+    struct SpatialEdgeHash {
+        size_t operator()(const SpatialEdge& e) const {
+            int mn = std::min(e.u, e.v);
+            int mx = std::max(e.u, e.v);
+            return std::hash<int>()(mn) ^ (std::hash<int>()(mx) << 1);
+        }
+    };
+    
+    std::unordered_map<SpatialEdge, int, SpatialEdgeHash> spatial_edge_counts;
+    for (int64_t i = 0; i < num_boundary_edges; ++i) {
+        int su = vert2spatial[b_edges_accessor[i][0]];
+        int sv = vert2spatial[b_edges_accessor[i][1]];
+        if (su != sv) {
+            spatial_edge_counts[SpatialEdge{su, sv}]++;
+        }
+    }
+    
+    // Genuine geometric boundary edges are those whose spatial edge count == 1 (not UV paired)
+    std::unordered_map<int, std::vector<int>> adj;
+    for (auto const& [edge, count] : spatial_edge_counts) {
+        if (count == 1) {
+            adj[edge.u].push_back(edge.v);
+            adj[edge.v].push_back(edge.u);
+        }
+    }
+    
+    if (adj.empty()) {
+        return 0.0f; // All boundary edges were UV seams!
+    }
+    
+    std::unordered_set<int> visited_nodes;
+    float max_hole_diameter = 0.0f;
+    
+    for (auto const& [start_node, neighbors] : adj) {
+        if (visited_nodes.find(start_node) != visited_nodes.end()) continue;
+        
+        std::vector<int> queue = {start_node};
+        visited_nodes.insert(start_node);
+        
+        float min_x = spatial_coords[start_node].x, max_x = min_x;
+        float min_y = spatial_coords[start_node].y, max_y = min_y;
+        float min_z = spatial_coords[start_node].z, max_z = min_z;
+        
+        size_t head = 0;
+        while (head < queue.size()) {
+            int curr = queue[head++];
+            float x = spatial_coords[curr].x;
+            float y = spatial_coords[curr].y;
+            float z = spatial_coords[curr].z;
+            
+            min_x = std::min(min_x, x); max_x = std::max(max_x, x);
+            min_y = std::min(min_y, y); max_y = std::max(max_y, y);
+            min_z = std::min(min_z, z); max_z = std::max(max_z, z);
+            
+            for (int neighbor : adj[curr]) {
+                if (visited_nodes.find(neighbor) == visited_nodes.end()) {
+                    visited_nodes.insert(neighbor);
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+        
+        float dx = max_x - min_x;
+        float dy = max_y - min_y;
+        float dz = max_z - min_z;
+        float loop_diameter = std::sqrt(dx * dx + dy * dy + dz * dz);
+        max_hole_diameter = std::max(max_hole_diameter, loop_diameter);
+    }
+    
+    return max_hole_diameter;
+}
+
+void TriangleMesh::build_flood_fill_dilated_cf_data(
+    std::optional<std::vector<float>> grid_min,
+    std::optional<std::vector<float>> grid_max,
+    std::optional<std::vector<int64_t>> res,
+    std::optional<int> dilation_radius,
+    int min_cavity_size,
+    std::optional<std::vector<int64_t>> block_size,
+    int connectivity)
+{
+    this->build_bvh();
+    std::vector<float> min_vals;
+    std::vector<float> max_vals;
+    if (grid_min.has_value()) {
+        min_vals = grid_min.value();
+    } else {
+        auto v_min = std::get<0>(torch::min(this->vertices, 0));
+        v_min = v_min - 0.05f;
+        min_vals = {v_min[0].item<float>(), v_min[1].item<float>(), v_min[2].item<float>()};
+    }
+    if (grid_max.has_value()) {
+        max_vals = grid_max.value();
+    } else {
+        auto v_max = std::get<0>(torch::max(this->vertices, 0));
+        v_max = v_max + 0.05f;
+        max_vals = {v_max[0].item<float>(), v_max[1].item<float>(), v_max[2].item<float>()};
+    }
+    std::vector<int64_t> res_vals;
+    if (res.has_value()) {
+        res_vals = res.value();
+    } else {
+        res_vals = {128, 128, 128};
+    }
+    std::vector<int64_t> bs_vals;
+    if (block_size.has_value()) {
+        bs_vals = block_size.value();
+    }
+
+    int k_radius = 0;
+    if (dilation_radius.has_value() && dilation_radius.value() >= 0) {
+        k_radius = dilation_radius.value();
+    } else {
+        // Strategy B: Automatic derivation from mesh boundary loop analysis
+        float d_max = this->get_max_boundary_hole_diameter();
+        float h = (max_vals[0] - min_vals[0]) / (float)res_vals[0];
+        if (d_max > 0.0f && h > 0.0f) {
+            k_radius = std::max(1, (int)std::ceil(d_max / (2.0f * h)));
+            k_radius = std::min(k_radius, 16); // Safe upper clamp
+        } else {
+            k_radius = 0; // Watertight mesh requires zero dilation
+        }
+    }
+
+    auto cf_res = ops::compute_flood_fill_dilated_cf(
+        this->vertices,
+        this->triangles,
+        this->bvh.value().aabb_mins,
+        this->bvh.value().aabb_maxs,
+        this->bvh.value().bvh_children,
+        this->bvh.value().object_ids,
+        min_vals,
+        max_vals,
+        res_vals,
+        k_radius,
+        min_cavity_size,
+        bs_vals,
+        connectivity
+    );
+
+    this->cf_coarse_mask = cf_res.coarse_mask;
+    this->cf_boundary_lookup = cf_res.boundary_block_lookup;
+    this->cf_fine_masks = cf_res.fine_boundary_masks;
+    this->cf_block_size = cf_res.block_size;
+    this->cf_coarse_res = cf_res.coarse_res;
+    this->flood_grid_min = min_vals;
+    this->flood_grid_max = max_vals;
+    this->flood_grid_res = res_vals;
+}
+
 torch::Tensor TriangleMesh::get_cf_coarse_mask()
 {
     if (!this->cf_coarse_mask.has_value()) {
@@ -578,6 +796,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleM
             this->build_flood_fill_data();
         } else if (sign_mode == 5 && !this->cf_coarse_mask.has_value()) {
             this->build_flood_fill_cf_data();
+        } else if (sign_mode == 6 && !this->cf_coarse_mask.has_value()) {
+            this->build_flood_fill_dilated_cf_data();
         }
         return this->bvh.value().query_point(
             query_pts,
@@ -590,14 +810,14 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleM
             (sign_mode == 2 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_vertex_normals(1)) : std::nullopt,
             (sign_mode == 2 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_edge_normals()) : std::nullopt,
             (sign_mode == 3) ? this->flood_fill_mask : std::nullopt,
-            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_min : std::nullopt,
-            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_max : std::nullopt,
-            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_res : std::nullopt,
-            (sign_mode == 5) ? this->cf_coarse_mask : std::nullopt,
-            (sign_mode == 5) ? this->cf_boundary_lookup : std::nullopt,
-            (sign_mode == 5) ? this->cf_fine_masks : std::nullopt,
-            (sign_mode == 5) ? this->cf_block_size : std::nullopt,
-            (sign_mode == 5) ? this->cf_coarse_res : std::nullopt);
+            (sign_mode == 3 || sign_mode == 5 || sign_mode == 6) ? this->flood_grid_min : std::nullopt,
+            (sign_mode == 3 || sign_mode == 5 || sign_mode == 6) ? this->flood_grid_max : std::nullopt,
+            (sign_mode == 3 || sign_mode == 5 || sign_mode == 6) ? this->flood_grid_res : std::nullopt,
+            (sign_mode == 5 || sign_mode == 6) ? this->cf_coarse_mask : std::nullopt,
+            (sign_mode == 5 || sign_mode == 6) ? this->cf_boundary_lookup : std::nullopt,
+            (sign_mode == 5 || sign_mode == 6) ? this->cf_fine_masks : std::nullopt,
+            (sign_mode == 5 || sign_mode == 6) ? this->cf_block_size : std::nullopt,
+            (sign_mode == 5 || sign_mode == 6) ? this->cf_coarse_res : std::nullopt);
     }
     else
     {
@@ -1215,7 +1435,35 @@ void bind_ds_triangle_mesh(py::module_ &m) {
              Example:
                  >>> mesh.build_flood_fill_cf_data([-1,-1,-1], [1,1,1], [1024,1024,1024])
              )pbdoc")
+        .def("get_max_boundary_hole_diameter", &TriangleMesh::get_max_boundary_hole_diameter,
+             R"pbdoc(
+             Computes the maximum open boundary hole diameter in world coordinates.
+
+             Returns:
+                 float: Maximum bounding diameter of all open boundary loops (0.0 if watertight).
+             )pbdoc")
+        .def("build_flood_fill_dilated_cf_data", &TriangleMesh::build_flood_fill_dilated_cf_data,
+             py::arg("grid_min") = py::none(), py::arg("grid_max") = py::none(),
+             py::arg("res") = py::none(), py::arg("dilation_radius") = py::none(),
+             py::arg("min_cavity_size") = 64, py::arg("block_size") = py::none(),
+             py::arg("connectivity") = 26,
+             R"pbdoc(
+             Pre-computes a 2-level Hierarchical Boundary-Aware Dilated Flood Fill structure (< 15 MB VRAM at 1024^3).
+
+             Args:
+                 grid_min (List[float], optional): Lower grid extents [x, y, z].
+                 grid_max (List[float], optional): Upper grid extents [x, y, z].
+                 res (List[int], optional): Fine grid resolution [rx, ry, rz].
+                 dilation_radius (int, optional): Dilation radius k. If None, auto-computed via Strategy B.
+                 min_cavity_size (int, optional): Minimum cavity volume to prune. Defaults to 64.
+                 block_size (List[int], optional): Macro-block size [bx, by, bz]. If omitted, dynamically computed.
+                 connectivity (int, optional): Neighborhood connectivity (6, 18, 26). Defaults to 26.
+
+             Example:
+                 >>> mesh.build_flood_fill_dilated_cf_data([-1,-1,-1], [1,1,1], [1024,1024,1024])
+             )pbdoc")
         .def_property_readonly("cf_coarse_mask", &TriangleMesh::get_cf_coarse_mask, "Coarse macro-block int8 status tensor.")
+        .def_property_readonly("cf_boundary_lookup", &TriangleMesh::get_cf_boundary_lookup, "Boundary block lookup tensor.")
         .def_property_readonly("cf_fine_masks", &TriangleMesh::get_cf_fine_masks, "Fine boundary macro-block int8 local masks.")
         .def("get_self_intersection", &TriangleMesh::get_self_intersection,
              R"pbdoc(
