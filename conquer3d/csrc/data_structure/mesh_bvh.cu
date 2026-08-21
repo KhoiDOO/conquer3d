@@ -497,7 +497,7 @@ namespace mesh_bvh
                     // Transition surface interface (0.25 < wn < 0.75) -> sub-voxel precision pseudonormal consensus
                     dist *= compute_pseudonormal_sign(p, best_pt, best_tri_id, vertices, triangles, pseudonormal_vertices, pseudonormal_edges, pseudonormal_faces);
                 }
-            } else if (sign_mode == 5) {
+            } else if (sign_mode == 5 || sign_mode == 6) {
                 int gi = roundf((p.x - flood_min.x) / flood_spacing.x);
                 int gj = roundf((p.y - flood_min.y) / flood_spacing.y);
                 int gk = roundf((p.z - flood_min.z) / flood_spacing.z);
@@ -514,20 +514,9 @@ namespace mesh_bvh
                     } else if (c_val == -1 || c_val == -2) {
                         // Guaranteed Interior -> strictly negative sign
                         dist = -dist;
-                    } else if (c_val == 1 && cf_boundary_lookup != nullptr && cf_fine_masks != nullptr) {
-                        int b_idx = cf_boundary_lookup[c_idx];
-                        if (b_idx >= 0) {
-                            int fi = gi % cf_block_size.x;
-                            int fj = gj % cf_block_size.y;
-                            int fk = gk % cf_block_size.z;
-                            int fine_idx = b_idx * (cf_block_size.x * cf_block_size.y * cf_block_size.z) + fi * (cf_block_size.y * cf_block_size.z) + fj * cf_block_size.z + fk;
-                            int fine_val = cf_fine_masks[fine_idx];
-                            if (fine_val != 2) {
-                                dist = -dist;
-                            }
-                        } else {
-                            dist = -dist;
-                        }
+                    } else if (c_val == 1) {
+                        // Boundary Macro-Block -> continuous angle pseudonormal for smooth sub-voxel zero-crossing
+                        dist *= compute_pseudonormal_sign(p, best_pt, best_tri_id, vertices, triangles, pseudonormal_vertices, pseudonormal_edges, pseudonormal_faces);
                     }
                 }
             }
