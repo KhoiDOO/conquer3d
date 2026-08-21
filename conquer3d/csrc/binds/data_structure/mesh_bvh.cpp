@@ -149,9 +149,9 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     std::optional<std::vector<int64_t>> cf_block_size,
     std::optional<std::vector<int64_t>> cf_coarse_res)
 {
-    if (sign_mode != 0 && sign_mode != 1 && sign_mode != 2 && sign_mode != 3 && sign_mode != 4 && sign_mode != 5)
+    if (sign_mode != 0 && sign_mode != 1 && sign_mode != 2 && sign_mode != 3 && sign_mode != 4 && sign_mode != 5 && sign_mode != 6)
     {
-        throw std::runtime_error("sign_mode must be 0 (ray casting), 1 (fast winding number), 2 (pseudonormals), 3 (flood fill), 4 (hybrid WN + pseudonormal), or 5 (coarse-to-fine flood fill)");
+        throw std::runtime_error("sign_mode must be 0 (ray casting), 1 (fast winding number), 2 (pseudonormals), 3 (flood fill), 4 (hybrid WN + pseudonormal), 5 (coarse-to-fine flood fill), or 6 (dilated flood fill)");
     }
 
     if ((sign_mode == 1 || sign_mode == 4) && !this->has_winding_data)
@@ -160,7 +160,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     }
 
     torch::Tensor use_tri_normals, use_vert_normals, use_edge_normals;
-    if (sign_mode == 2 || sign_mode == 4)
+    if (sign_mode == 2 || sign_mode == 4 || sign_mode == 6)
     {
         if (triangle_normals.has_value() && triangle_normals->defined()) {
             use_tri_normals = *triangle_normals;
@@ -250,11 +250,11 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
             (rz > 1) ? (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1) : 1.0f
         );
     }
-    else if (sign_mode == 5)
+    else if (sign_mode == 5 || sign_mode == 6)
     {
         if (!cf_coarse_mask.has_value() || !cf_coarse_mask->defined() || !flood_grid_min.has_value() || !flood_grid_max.has_value() || !flood_grid_res.has_value())
         {
-            throw std::runtime_error("For sign_mode == 5 (coarse-to-fine flood fill), CF flood fill data must be provided or built beforehand.");
+            throw std::runtime_error("For sign_mode == 5 or 6 (CF flood fill), CF flood fill data must be provided or built beforehand.");
         }
         p_cf_coarse_mask = cf_coarse_mask->data_ptr<int8_t>();
         if (cf_boundary_lookup.has_value() && cf_boundary_lookup->defined()) {
@@ -291,9 +291,9 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
         (const int2 *)this->bvh_children.data_ptr<int>(),
         this->object_ids.data_ptr<int>(),
         this->has_winding_data ? (const WindingData *)this->winding_data.data_ptr() : nullptr,
-        (sign_mode == 2 || sign_mode == 4) ? (const float3 *)use_vert_normals.data_ptr<float>() : nullptr,
-        (sign_mode == 2 || sign_mode == 4) ? (const float3 *)use_edge_normals.data_ptr<float>() : nullptr,
-        (sign_mode == 2 || sign_mode == 4) ? (const float3 *)use_tri_normals.data_ptr<float>() : nullptr,
+        (sign_mode == 2 || sign_mode == 4 || sign_mode == 6) ? (const float3 *)use_vert_normals.data_ptr<float>() : nullptr,
+        (sign_mode == 2 || sign_mode == 4 || sign_mode == 6) ? (const float3 *)use_edge_normals.data_ptr<float>() : nullptr,
+        (sign_mode == 2 || sign_mode == 4 || sign_mode == 6) ? (const float3 *)use_tri_normals.data_ptr<float>() : nullptr,
         out_query_ids.data_ptr<int64_t>(),
         out_object_ids.data_ptr<int64_t>(),
         return_prj_pts ? (float3 *)out_projected_pts.data_ptr<float>() : nullptr,
