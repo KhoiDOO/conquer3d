@@ -199,6 +199,23 @@ public:
     std::vector<int64_t> get_cf_block_size();
     std::vector<int64_t> get_cf_coarse_res();
 
+    /**
+     * @brief Computes maximum open boundary hole diameter in world coordinates (Strategy B).
+     */
+    float get_max_boundary_hole_diameter();
+
+    /**
+     * @brief Builds 2-Level Hierarchical Boundary-Aware Dilated Flood Fill data (< 15 MB VRAM at 1024^3).
+     */
+    void build_flood_fill_dilated_cf_data(
+        std::optional<std::vector<float>> grid_min = std::nullopt,
+        std::optional<std::vector<float>> grid_max = std::nullopt,
+        std::optional<std::vector<int64_t>> res = std::nullopt,
+        std::optional<int> dilation_radius = std::nullopt,
+        int min_cavity_size = 64,
+        std::optional<std::vector<int64_t>> block_size = std::nullopt,
+        int connectivity = 26);
+
     /** @brief Returns colliding triangle index pairs $(N, 2)$. */
     torch::Tensor get_self_intersection();
     /** @brief Checks if the mesh contains any self-intersecting faces. */
