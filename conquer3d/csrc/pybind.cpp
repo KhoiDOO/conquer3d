@@ -28,6 +28,7 @@ void bind_ops_mtg(py::module_& m);
 void bind_ops_chamfer(py::module_& m);
 void bind_ops_flood_fill(py::module_& m);
 void bind_ops_flood_fill_cf(py::module_& m);
+void bind_ops_flood_fill_dilated(py::module_& m);
 void bind_ops_volint(py::module_& m);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
@@ -58,5 +59,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     bind_ops_chamfer(m);
     bind_ops_flood_fill(m);
     bind_ops_flood_fill_cf(m);
+    bind_ops_flood_fill_dilated(m);
     bind_ops_volint(m);
 }
