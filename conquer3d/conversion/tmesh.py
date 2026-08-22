@@ -97,7 +97,8 @@ def tmesh2sparse(
     sign_mode: int = 2,
     pad: int = 0,
     return_normals: bool = False,
-    normal_mode: int = 0
+    normal_mode: int = 0,
+    drop_empty_vertex_voxels: bool = False
 ) -> Union[
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
@@ -126,6 +127,7 @@ def tmesh2sparse(
         pad (int, optional): Voxel layer dilation radius. Defaults to 0 (set `pad=1` for DMC / DC).
         return_normals (bool, optional): If True, returns surface normal vectors. Defaults to False.
         normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector).
+        drop_empty_vertex_voxels (bool, optional): If True, drops voxels containing no mesh vertices inside their bounding box. Defaults to False.
 
     Returns:
         Union[Tuple[torch.Tensor, torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
@@ -147,11 +149,11 @@ def tmesh2sparse(
         
     if return_normals:
         grid_vertices, active_voxels, unique_vert_ids, grid_normals = create_voxel_grid_from_tmesh(
-            grid_min, grid_max, res_list, tm, pad=pad, return_normals=True, normal_mode=normal_mode
+            grid_min, grid_max, res_list, tm, pad=pad, return_normals=True, normal_mode=normal_mode, drop_empty_vertex_voxels=drop_empty_vertex_voxels
         )
     else:
         grid_vertices, active_voxels, unique_vert_ids = create_voxel_grid_from_tmesh(
-            grid_min, grid_max, res_list, tm, pad=pad, return_normals=False
+            grid_min, grid_max, res_list, tm, pad=pad, return_normals=False, drop_empty_vertex_voxels=drop_empty_vertex_voxels
         )
     
     num_points = grid_vertices.shape[0]
