@@ -55,7 +55,8 @@ def create_voxel_grid_from_tmesh(
     return_unique_vert_ids: bool = True,
     pad: int = 0,
     return_normals: bool = False,
-    normal_mode: int = 0
+    normal_mode: int = 0,
+    drop_empty_vertex_voxels: bool = False
 ) -> Union[
     Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
     Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], torch.Tensor]
@@ -81,6 +82,8 @@ def create_voxel_grid_from_tmesh(
             - 0: Closest triangle face normal (preserves sharp CAD creases in Dual Contouring).
             - 1: Barycentric interpolated vertex normal (smooth shading).
             - 2: Normalized displacement vector (spatial SDF gradient).
+        drop_empty_vertex_voxels (bool, optional): If True, filters out voxels containing no mesh
+            vertices inside their 3D bounding box cell. Defaults to False.
             
     Returns:
         Union[Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], torch.Tensor]]:
@@ -90,7 +93,7 @@ def create_voxel_grid_from_tmesh(
                 `(sparse_grid_vertices, local_voxels, unique_vert_ids, grid_normals)`
     """
     res_tuple = _C.create_voxel_grid_from_tmesh(
-        list(grid_min), list(grid_max), list(res), tmesh, return_unique_vert_ids, pad, return_normals, normal_mode
+        list(grid_min), list(grid_max), list(res), tmesh, return_unique_vert_ids, pad, return_normals, normal_mode, drop_empty_vertex_voxels
     )
     if return_normals:
         return res_tuple[0], res_tuple[1], res_tuple[2], res_tuple[3]

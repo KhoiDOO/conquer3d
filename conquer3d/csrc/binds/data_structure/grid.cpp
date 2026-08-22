@@ -155,7 +155,8 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::opti
     bool return_unique_vert_ids = true,
     int pad = 0,
     bool return_normals = false,
-    int normal_mode = 0
+    int normal_mode = 0,
+    bool drop_empty_vertex_voxels = false
 ) {
     TORCH_CHECK(grid_min.size() == 3, "grid_min must have 3 elements.");
     TORCH_CHECK(grid_max.size() == 3, "grid_max must have 3 elements.");
@@ -208,6 +209,18 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::opti
         }
         auto all_dilated = torch::cat(dilated_list);
         active_voxel_ids = std::get<0>(torch::_unique2(all_dilated, true, false, false));
+    }
+
+    if (drop_empty_vertex_voxels) {
+        active_voxel_ids = grid::filter_voxels_containing_vertices(active_voxel_ids, vertices, grid_min, grid_max, res);
+        if (active_voxel_ids.size(0) == 0) {
+            return std::make_tuple(
+                torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device())),
+                torch::empty({0, 8}, torch::TensorOptions().dtype(torch::kInt32).device(vertices.device())),
+                return_unique_vert_ids ? std::make_optional(torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(vertices.device()))) : std::nullopt,
+                return_normals ? std::make_optional(torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device()))) : std::nullopt
+            );
+        }
     }
 
     auto vi = active_voxel_ids.div((ry - 1) * (rz - 1), "trunc");
@@ -480,6 +493,7 @@ void bind_ds_grid(py::module_& m) {
           py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"),
           py::arg("return_unique_vert_ids") = true, py::arg("pad") = 0,
           py::arg("return_normals") = false, py::arg("normal_mode") = 0,
+          py::arg("drop_empty_vertex_voxels") = false,
           R"pbdoc(
           Creates a memory-efficient sparse 3D voxel grid strictly intersecting or bordering the input triangle mesh.
 
@@ -492,6 +506,7 @@ void bind_ds_grid(py::module_& m) {
               pad (int, optional): Voxel layer dilation radius. Defaults to 0.
               return_normals (bool, optional): Return surface normals at sparse vertices. Defaults to False.
               normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector). Defaults to 0.
+              drop_empty_vertex_voxels (bool, optional): If True, drops voxels containing no mesh vertices inside their 3D bounding box. Defaults to False.
 
           Returns:
               Tuple: Sparse grid vertices, remapped voxels, and optional vertex IDs/normals.

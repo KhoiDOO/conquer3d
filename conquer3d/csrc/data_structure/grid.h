@@ -41,4 +41,21 @@ namespace grid {
         bool activate_neighbor,
         float trunc_margin
     );
+    /**
+     * @brief Filters active voxel IDs to retain only voxels containing mesh vertices inside their 3D cell bounds.
+     * 
+     * @param[in] active_voxel_ids  (M,) int64 active sparse voxel IDs.
+     * @param[in] vertices          (V, 3) float32 mesh vertex coordinates.
+     * @param[in] grid_min          Lower 3D bounds float3.
+     * @param[in] grid_max          Upper 3D bounds float3.
+     * @param[in] res               Grid resolution int3 (rx, ry, rz).
+     * @return torch.Tensor: Filtered active voxel IDs containing at least 1 mesh vertex.
+     */
+    torch::Tensor filter_voxels_containing_vertices(
+        const torch::Tensor& active_voxel_ids,
+        const torch::Tensor& vertices,
+        std::vector<float> grid_min,
+        std::vector<float> grid_max,
+        std::vector<int64_t> res
+    );
 }

@@ -111,4 +111,81 @@ namespace grid {
             trunc_margin
         );
     }
+
+    __global__ void quantize_vertices_to_voxel_ids_kernel(
+        const float3* __restrict__ vertices,
+        int num_vertices,
+        float3 grid_min,
+        float3 grid_spacing,
+        int3 num_cells,
+        int64_t* __restrict__ out_voxel_ids
+    ) {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_vertices) return;
+
+        float3 v = vertices[idx];
+        int vi = floorf((v.x - grid_min.x) / grid_spacing.x);
+        int vj = floorf((v.y - grid_min.y) / grid_spacing.y);
+        int vk = floorf((v.z - grid_min.z) / grid_spacing.z);
+
+        if (vi >= 0 && vi < num_cells.x && vj >= 0 && vj < num_cells.y && vk >= 0 && vk < num_cells.z) {
+            int64_t voxel_id = (int64_t)vi * num_cells.y * num_cells.z + (int64_t)vj * num_cells.z + (int64_t)vk;
+            out_voxel_ids[idx] = voxel_id;
+        } else {
+            out_voxel_ids[idx] = -1;
+        }
+    }
+
+    torch::Tensor filter_voxels_containing_vertices(
+        const torch::Tensor& active_voxel_ids,
+        const torch::Tensor& vertices,
+        std::vector<float> grid_min,
+        std::vector<float> grid_max,
+        std::vector<int64_t> res
+    ) {
+        if (active_voxel_ids.size(0) == 0 || vertices.size(0) == 0) {
+            return active_voxel_ids;
+        }
+
+        int num_vertices = static_cast<int>(vertices.size(0));
+        int64_t rx = res[0];
+        int64_t ry = res[1];
+        int64_t rz = res[2];
+
+        float3 f_min = make_float3(grid_min[0], grid_min[1], grid_min[2]);
+        float3 f_spacing = make_float3(
+            (rx > 1) ? (grid_max[0] - grid_min[0]) / (rx - 1) : 1.0f,
+            (ry > 1) ? (grid_max[1] - grid_min[1]) / (ry - 1) : 1.0f,
+            (rz > 1) ? (grid_max[2] - grid_min[2]) / (rz - 1) : 1.0f
+        );
+        int3 num_cells = make_int3(
+            static_cast<int>(rx - 1),
+            static_cast<int>(ry - 1),
+            static_cast<int>(rz - 1)
+        );
+
+        auto options = torch::TensorOptions().device(vertices.device()).dtype(torch::kInt64);
+        auto raw_vids = torch::empty({num_vertices}, options);
+
+        int threads = 256;
+        int blocks = (num_vertices + threads - 1) / threads;
+
+        quantize_vertices_to_voxel_ids_kernel<<<blocks, threads>>>(
+            (const float3*)vertices.data_ptr<float>(),
+            num_vertices,
+            f_min,
+            f_spacing,
+            num_cells,
+            raw_vids.data_ptr<int64_t>()
+        );
+
+        auto valid_vids = raw_vids.masked_select(raw_vids >= 0);
+        if (valid_vids.size(0) == 0) {
+            return torch::empty({0}, options);
+        }
+
+        auto unique_vids = std::get<0>(torch::_unique2(valid_vids, true, false, false));
+        auto is_contained = torch::isin(active_voxel_ids, unique_vids);
+        return active_voxel_ids.masked_select(is_contained);
+    }
 }
