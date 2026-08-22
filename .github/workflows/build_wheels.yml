@@ -43,9 +43,9 @@ jobs:
           sudo apt-get install -y build-essential pkg-config libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev
 
       - name: Install CUDA Toolkit
-        uses: jimmywei/setup-cuda@v2
+        uses: Jimver/cuda-toolkit@v0.2.21
         with:
-          cuda-version: ${{ matrix.cuda-version }}
+          cuda: '12.4.0'
 
       - name: Install PyTorch & Build Tools
         run: |
