@@ -1,4 +1,5 @@
 name: Build Prebuilt CUDA Wheels
+run-name: "Build Wheels for target tag: ${{ github.event.inputs.release_tag || github.ref_name }}"
 
 on:
   workflow_dispatch:
@@ -16,17 +17,15 @@ permissions:
 
 jobs:
   build_wheels:
-    name: Build wheel (Python ${{ matrix.python-version }}, CUDA ${{ matrix.cuda-version }})
+    name: Build wheel (Python ${{ matrix.python-version }}, CUDA ${{ matrix.cuda-pair.cuda-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11"]
-        cuda-version: ["12.4"]
-        include:
-          - cuda-version: "12.4"
-            torch-version: "2.5.1"
-            cuda-whl-tag: "cu124"
+        cuda-pair:
+          - { cuda-version: "12.4.0", torch-version: "2.5.1", cuda-whl-tag: "cu124" }
+          - { cuda-version: "12.8.2", torch-version: "2.8.0", cuda-whl-tag: "cu128" }
 
     steps:
       - name: Checkout Repository
@@ -43,14 +42,14 @@ jobs:
           sudo apt-get install -y build-essential pkg-config libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev
 
       - name: Install CUDA Toolkit
-        uses: Jimver/cuda-toolkit@v0.2.21
+        uses: Jimver/cuda-toolkit@v0.2.36
         with:
-          cuda: '12.4.0'
+          cuda: ${{ matrix.cuda-pair.cuda-version }}
 
       - name: Install PyTorch & Build Tools
         run: |
           python -m pip install --upgrade pip setuptools wheel ninja
-          pip install torch==${{ matrix.torch-version }} --index-url https://download.pytorch.org/whl/${{ matrix.cuda-whl-tag }}
+          pip install torch==${{ matrix.cuda-pair.torch-version }} --index-url https://download.pytorch.org/whl/${{ matrix.cuda-pair.cuda-whl-tag }}
 
       - name: Build CUDA Wheel
         env:
@@ -59,11 +58,18 @@ jobs:
           TORCH_CUDA_ARCH_LIST: "7.0 7.5 8.0 8.6 8.9 9.0+PTX"
         run: |
           python setup.py bdist_wheel --dist-dir dist
+          TORCH_TAG=$(echo "${{ matrix.cuda-pair.torch-version }}" | tr -d '.')
+          for f in dist/*.whl; do
+            if [[ "$f" != *"+pt"* ]]; then
+              new_f=$(echo "$f" | sed "s/-cp/+pt${TORCH_TAG}${{ matrix.cuda-pair.cuda-whl-tag }}-cp/")
+              mv "$f" "$new_f"
+            fi
+          done
 
       - name: Upload Wheel Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: conquer3d-whl-py${{ matrix.python-version }}-${{ matrix.cuda-whl-tag }}
+          name: conquer3d-whl-py${{ matrix.python-version }}-pt${{ matrix.cuda-pair.torch-version }}-${{ matrix.cuda-pair.cuda-whl-tag }}
           path: dist/*.whl
 
       - name: Attach Wheels to GitHub Release
