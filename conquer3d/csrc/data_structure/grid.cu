@@ -188,4 +188,65 @@ namespace grid {
         auto is_contained = torch::isin(active_voxel_ids, unique_vids);
         return active_voxel_ids.masked_select(is_contained);
     }
+
+    __global__ void create_voxel_cloud_corners_kernel(
+        const float3* __restrict__ vertices,
+        int num_vertices,
+        float3 voxel_spacing,
+        float3* __restrict__ out_corners
+    ) {
+        int idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_vertices) return;
+
+        float3 v = vertices[idx];
+        float hx = 0.5f * voxel_spacing.x;
+        float hy = 0.5f * voxel_spacing.y;
+        float hz = 0.5f * voxel_spacing.z;
+
+        int base_idx = idx * 8;
+        out_corners[base_idx + 0] = make_float3(v.x - hx, v.y - hy, v.z - hz);
+        out_corners[base_idx + 1] = make_float3(v.x + hx, v.y - hy, v.z - hz);
+        out_corners[base_idx + 2] = make_float3(v.x + hx, v.y + hy, v.z - hz);
+        out_corners[base_idx + 3] = make_float3(v.x - hx, v.y + hy, v.z - hz);
+        out_corners[base_idx + 4] = make_float3(v.x - hx, v.y - hy, v.z + hz);
+        out_corners[base_idx + 5] = make_float3(v.x + hx, v.y - hy, v.z + hz);
+        out_corners[base_idx + 6] = make_float3(v.x + hx, v.y + hy, v.z + hz);
+        out_corners[base_idx + 7] = make_float3(v.x - hx, v.y + hy, v.z + hz);
+    }
+
+    std::tuple<torch::Tensor, torch::Tensor> create_voxel_cloud_corners(
+        const torch::Tensor& vertices,
+        std::vector<float> grid_min,
+        std::vector<float> grid_max,
+        std::vector<int64_t> res
+    ) {
+        int num_vertices = static_cast<int>(vertices.size(0));
+        int64_t rx = res[0];
+        int64_t ry = res[1];
+        int64_t rz = res[2];
+
+        float3 f_spacing = make_float3(
+            (rx > 1) ? (grid_max[0] - grid_min[0]) / (rx - 1) : 1.0f,
+            (ry > 1) ? (grid_max[1] - grid_min[1]) / (ry - 1) : 1.0f,
+            (rz > 1) ? (grid_max[2] - grid_min[2]) / (rz - 1) : 1.0f
+        );
+
+        auto options = torch::TensorOptions().device(vertices.device()).dtype(torch::kFloat32);
+        auto raw_corners = torch::empty({num_vertices * 8, 3}, options);
+
+        if (num_vertices > 0) {
+            int threads = 256;
+            int blocks = (num_vertices + threads - 1) / threads;
+
+            create_voxel_cloud_corners_kernel<<<blocks, threads>>>(
+                (const float3*)vertices.data_ptr<float>(),
+                num_vertices,
+                f_spacing,
+                (float3*)raw_corners.data_ptr<float>()
+            );
+        }
+
+        auto spacing_tensor = torch::tensor({f_spacing.x, f_spacing.y, f_spacing.z}, options);
+        return std::make_tuple(raw_corners, spacing_tensor);
+    }
 }
