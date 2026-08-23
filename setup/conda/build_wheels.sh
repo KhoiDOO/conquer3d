@@ -16,11 +16,11 @@ WHEELS_DIR="${REPO_ROOT}/wheels"
 
 # Target matrix configuration
 PYTHON_VERSIONS=(
-    "3.10" 
+    # "3.10" 
     "3.11" 
-    "3.12" 
-    "3.13" 
-    "3.14"
+    # "3.12" 
+    # "3.13" 
+    # "3.14"
 )
 TORCH_CUDA_PAIRS=(
     # "2.8.0:cu128"
@@ -78,7 +78,7 @@ for pyver in "${PYTHON_VERSIONS[@]}"; do
         echo "============================================================"
         
         # Build wheel inside target conda environment
-        FORCE_CUDA=1 MAX_JOBS=8 TORCH_CUDA_ARCH_LIST="7.0 7.5 8.0 8.6 8.9 9.0+PTX" \
+        FORCE_CUDA=1 MAX_JOBS=8 TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9;9.0+PTX" \
         conda run -n "${env_name}" python setup.py bdist_wheel --dist-dir "${WHEELS_DIR}"
         
         # Rename newly built wheel: conquer3d-<ver>-cp... -> c3d-<ver>+pt<torch_tag><cuda_whl_tag>-cp...
