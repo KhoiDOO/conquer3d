@@ -41,6 +41,7 @@ namespace grid {
         bool activate_neighbor,
         float trunc_margin
     );
+    
     /**
      * @brief Filters active voxel IDs to retain only voxels containing mesh vertices inside their 3D cell bounds.
      * 
@@ -53,6 +54,22 @@ namespace grid {
      */
     torch::Tensor filter_voxels_containing_vertices(
         const torch::Tensor& active_voxel_ids,
+        const torch::Tensor& vertices,
+        std::vector<float> grid_min,
+        std::vector<float> grid_max,
+        std::vector<int64_t> res
+    );
+
+    /**
+     * @brief Generates 8 vertex-centered 3D voxel corner coordinates for each mesh vertex on GPU.
+     * 
+     * @param[in] vertices  (N, 3) float32 mesh vertex tensor on CUDA.
+     * @param[in] grid_min  Lower 3D bounds float3.
+     * @param[in] grid_max  Upper 3D bounds float3.
+     * @param[in] res       Grid resolution int3 (rx, ry, rz).
+     * @return std::tuple<torch::Tensor, torch::Tensor>: Tuple of (raw_corners (N*8, 3), spacing_tensor (3,)).
+     */
+    std::tuple<torch::Tensor, torch::Tensor> create_voxel_cloud_corners(
         const torch::Tensor& vertices,
         std::vector<float> grid_min,
         std::vector<float> grid_max,
