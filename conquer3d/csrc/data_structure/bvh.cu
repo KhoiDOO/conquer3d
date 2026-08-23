@@ -13,6 +13,8 @@
 #include <thrust/transform_reduce.h>
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/execution_policy.h>
+#include <ATen/cuda/ThrustAllocator.h>
+#include <c10/cuda/CUDAStream.h>
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <cfloat>
@@ -218,13 +220,16 @@ namespace bvh
         int *__restrict__ bvh_parents,           
         int *__restrict__ object_ids)
     {
+        at::cuda::ThrustAllocator allocator;
+        auto policy = thrust::cuda::par(allocator).on(at::cuda::getCurrentCUDAStream());
+
         thrust::counting_iterator<int> iter(0);
         Node init_node;
         init_node.min_pt = make_float3(FLT_MAX, FLT_MAX, FLT_MAX);
         init_node.max_pt = make_float3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 
         Node scene_bounds = thrust::transform_reduce(
-            thrust::device,
+            policy,
             iter, iter + num_objects,
             Transform(in_aabb_mins, in_aabb_maxs),
             init_node,
@@ -236,7 +241,7 @@ namespace bvh
         uint32_t threads = NTHREADS;
         uint32_t blocks = (num_objects + threads - 1) / threads;
 
-        compute_morton_codes_kernel<<<blocks, threads>>>(
+        compute_morton_codes_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
             num_objects,
             in_aabb_mins,
             in_aabb_maxs,
@@ -247,18 +252,18 @@ namespace bvh
         );
 
         thrust::sort_by_key(
-            thrust::device,
+            policy,
             morton_codes.begin(),
             morton_codes.end(),
             thrust::device_pointer_cast(object_ids)
         );
 
-        cudaMemset(bvh_parents, -1, sizeof(int) * num_nodes);
+        cudaMemsetAsync(bvh_parents, -1, sizeof(int) * num_nodes, at::cuda::getCurrentCUDAStream());
 
         uint32_t internal_threads = NTHREADS;
         uint32_t internal_blocks = (num_objects - 1 + internal_threads - 1) / internal_threads;
 
-        karras_emit_hierarchy_kernel<<<internal_blocks, internal_threads>>>(
+        karras_emit_hierarchy_kernel<<<internal_blocks, internal_threads, 0, at::cuda::getCurrentCUDAStream()>>>(
             num_objects,
             thrust::raw_pointer_cast(morton_codes.data()),
             bvh_children,
