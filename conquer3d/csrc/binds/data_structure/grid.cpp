@@ -498,7 +498,7 @@ torch::Tensor get_active_voxel_ids_from_depth_py(
     int max_neighbors = activate_neighbor ? ((2 * max_pad_x + 1) * (2 * max_pad_y + 1) * (2 * max_pad_z + 1)) : 1;
     
     int64_t max_voxels = (int64_t)num_pixels * max_neighbors;
-    auto options = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kInt64);
+    auto options = torch::TensorOptions().device(depth_image.device()).dtype(torch::kInt64);
     auto out_voxel_ids = torch::empty({max_voxels}, options);
     
     auto valid_counter_tensor = torch::zeros({1}, options);
