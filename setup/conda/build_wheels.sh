@@ -23,7 +23,7 @@ PYTHON_VERSIONS=(
     "3.14"
 )
 TORCH_CUDA_PAIRS=(
-    "2.8.0:cu128"
+    # "2.8.0:cu128"
     "2.11.0:cu128"
 )
 
