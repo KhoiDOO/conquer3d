@@ -3,6 +3,7 @@
 #include "../../ops/flood_fill.h"
 #include "../../ops/flood_fill_cf.h"
 #include "../../check.h"
+#include <c10/cuda/CUDAFunctions.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <optional>
@@ -50,6 +51,9 @@ TriangleMesh::TriangleMesh(
 
 void TriangleMesh::compute_triangle_normals()
 {
+    if (this->vertices.is_cuda()) {
+        ::c10::cuda::set_device(this->vertices.get_device());
+    }
     this->triangle_normals = torch::empty({static_cast<int64_t>(this->num_triangles), 3}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
     triangle_mesh::compute_triangle_normals(
         this->num_triangles,
@@ -60,6 +64,9 @@ void TriangleMesh::compute_triangle_normals()
 
 void TriangleMesh::compute_vertex_normals(int mode)
 {
+    if (this->vertices.is_cuda()) {
+        ::c10::cuda::set_device(this->vertices.get_device());
+    }
     uint32_t num_vertices = this->vertices.size(0);
     this->vertex_normals = torch::zeros({static_cast<int64_t>(num_vertices), 3}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
 
@@ -77,6 +84,9 @@ void TriangleMesh::compute_vertex_normals(int mode)
 
 void TriangleMesh::compute_edge_normals()
 {
+    if (this->triangles.is_cuda()) {
+        ::c10::cuda::set_device(this->triangles.get_device());
+    }
     this->edge_normals = torch::empty({static_cast<int64_t>(this->num_triangles) * 3, 3}, torch::dtype(torch::kFloat32).device(this->triangles.device()));
     triangle_mesh::compute_edge_normals(
         this->num_triangles,
@@ -97,6 +107,9 @@ torch::Tensor TriangleMesh::get_vertex_normals(int mode)
 void TriangleMesh::compute_vertex_degrees()
 {
     if (this->vertex_degrees.defined()) return;
+    if (this->vertices.is_cuda()) {
+        ::c10::cuda::set_device(this->vertices.get_device());
+    }
 
     if (!this->edges.defined()) {
         this->compute_edges_to_triangle_map();
@@ -130,8 +143,6 @@ float TriangleMesh::get_valence_567_percentage()
     float count = mask.sum().item<float>();
     return (count / degrees.numel()) * 100.0f;
 }
-
-#include <c10/cuda/CUDAFunctions.h>
 
 void TriangleMesh::compute_vertex_lb_uniform()
 {
@@ -214,6 +225,9 @@ torch::Tensor TriangleMesh::get_principal_curvatures(bool signed_curvature) {
 void TriangleMesh::compute_voronoi_areas()
 {
     if (this->voronoi_areas.defined()) return;
+    if (this->vertices.is_cuda()) {
+        ::c10::cuda::set_device(this->vertices.get_device());
+    }
     
     uint32_t num_vertices = this->vertices.size(0);
     this->voronoi_areas = torch::zeros({static_cast<int64_t>(num_vertices)}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
@@ -229,6 +243,9 @@ void TriangleMesh::compute_voronoi_areas()
 void TriangleMesh::compute_gaussian_curvature()
 {
     if (this->gaussian_curvature.defined()) return;
+    if (this->vertices.is_cuda()) {
+        ::c10::cuda::set_device(this->vertices.get_device());
+    }
     
     if (!this->voronoi_areas.defined()) {
         this->compute_voronoi_areas();
@@ -261,6 +278,9 @@ torch::Tensor TriangleMesh::get_gaussian_curvature()
 void TriangleMesh::compute_vertex_lb_cotangent()
 {
     if (this->vertex_lb_cotangent.defined()) return;
+    if (this->vertices.is_cuda()) {
+        ::c10::cuda::set_device(this->vertices.get_device());
+    }
 
     if (!this->voronoi_areas.defined()) {
         this->compute_voronoi_areas();
@@ -833,6 +853,10 @@ torch::Tensor TriangleMesh::get_angle_deviation() {
 
 void TriangleMesh::compute_edges_to_triangle_map()
 {
+    if (this->triangles.is_cuda()) {
+        ::c10::cuda::set_device(this->triangles.get_device());
+    }
+
     if (this->num_triangles == 0)
     {
         auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(this->triangles.device());
@@ -995,6 +1019,9 @@ void TriangleMesh::compute_vertices_to_triangle_map()
 {
     if (this->vertex_to_triangle_offsets.defined())
         return;
+    if (this->triangles.is_cuda()) {
+        ::c10::cuda::set_device(this->triangles.get_device());
+    }
 
     uint32_t num_vertices = this->vertices.size(0);
     triangle_mesh::build_vertices_to_triangle_map(
