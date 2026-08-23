@@ -6,12 +6,8 @@ on:
     inputs:
       release_tag:
         description: 'Target GitHub Release tag (e.g. v0.6.7) to download and publish wheels'
-        required: false
-        default: ''
-  workflow_run:
-    workflows: ["Build Prebuilt CUDA Wheels"]
-    types:
-      - completed
+        required: true
+        default: 'v0.6.7'
 
 permissions:
   id-token: write
@@ -21,21 +17,15 @@ jobs:
   publish_pypi:
     name: Publish Wheels to PyPI (OIDC Trusted Publisher)
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     steps:
-      - name: Download Wheel Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: conquer3d-whl-*
-          path: dist/
-          merge-multiple: true
-          run-id: ${{ github.event.workflow_run.id || github.run_id }}
-
-      - name: Verify Wheel Files
+      - name: Download Prebuilt Wheels from GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p dist
+          TAG="${{ github.event.inputs.release_tag || github.ref_name }}"
+          echo "Downloading prebuilt .whl assets from GitHub Release tag: $TAG"
+          gh release download "$TAG" --dir dist --pattern "*.whl"
           ls -la dist/
 
       - name: Publish Package Distributions to PyPI
