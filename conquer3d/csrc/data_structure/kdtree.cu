@@ -11,6 +11,8 @@
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/tuple.h>
 #include <thrust/execution_policy.h>
+#include <ATen/cuda/ThrustAllocator.h>
+#include <c10/cuda/CUDAStream.h>
 
 #include <cfloat>
 
@@ -118,17 +120,20 @@ namespace kdtree
         uint32_t threads = NTHREADS;
         uint32_t blocks = (num_points + threads - 1) / threads;
 
-        for (int l = 0; l < deepestLevel; l++) {
-            thrust::sort(thrust::device, zip_begin, zip_end, ZipCompare(l % 3));
+        at::cuda::ThrustAllocator allocator;
+        auto policy = thrust::cuda::par(allocator).on(at::cuda::getCurrentCUDAStream());
 
-            update_tags<<<blocks, threads>>>(
+        for (int l = 0; l < deepestLevel; l++) {
+            thrust::sort(policy, zip_begin, zip_end, ZipCompare(l % 3));
+
+            update_tags<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
                 thrust::raw_pointer_cast(tags.data()),
                 num_points,
                 l
             );
         }
 
-        thrust::sort(thrust::device, zip_begin, zip_end, ZipCompare(deepestLevel % 3));
+        thrust::sort(policy, zip_begin, zip_end, ZipCompare(deepestLevel % 3));
     }
 
     __global__ void query_kdtree_kernel(
