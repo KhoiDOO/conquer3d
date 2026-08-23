@@ -6,6 +6,7 @@
 #include "mc.h"
 #include "../maths/maths.h"
 #include <cuda_runtime.h>
+#include <c10/cuda/CUDAFunctions.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
 #include <thrust/device_ptr.h>
@@ -295,7 +296,7 @@ namespace mc
         thrust::device_ptr<uint8_t> d_codes(voxel_codes);
         auto active_flag_iter = thrust::make_transform_iterator(d_codes, is_active_voxel());
 
-        auto temp_buffer_t = torch::empty({(int64_t)num_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        auto temp_buffer_t = torch::empty({(int64_t)num_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
         uint32_t *__restrict__ temp_buffer = (uint32_t*)temp_buffer_t.data_ptr<int32_t>();
         thrust::device_ptr<uint32_t> d_prefix_sum(temp_buffer);
 
@@ -358,7 +359,7 @@ namespace mc
 
         num_unique_edges = thrust::distance(d_active_edges, unique_end);
 
-        auto unique_edges_t = torch::empty({(int64_t)(num_unique_edges * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        auto unique_edges_t = torch::empty({(int64_t)(num_unique_edges * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         Edge *__restrict__ unique_edges = (Edge*)unique_edges_t.data_ptr<uint8_t>();
 
         thrust::device_ptr<Edge> d_unique_edges(unique_edges);
@@ -484,7 +485,7 @@ namespace mc
         bool return_unique_edges
     )
     {
-        auto voxel_codes_t = torch::empty({(int64_t)num_voxels}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        auto voxel_codes_t = torch::empty({(int64_t)num_voxels}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         uint8_t *__restrict__ voxel_codes = voxel_codes_t.data_ptr<uint8_t>();
         
         compute_active_voxels(num_voxels, voxels, voxel_values, iso, voxel_codes);
@@ -506,14 +507,14 @@ namespace mc
             );
         }
 
-        auto used_voxel_index_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        auto used_voxel_index_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
         uint32_t *__restrict__ used_voxel_index = (uint32_t*)used_voxel_index_t.data_ptr<int32_t>();
         
-        auto used_voxel_codes_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        auto used_voxel_codes_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         uint8_t *__restrict__ used_voxel_codes = used_voxel_codes_t.data_ptr<uint8_t>();
         compact_active_voxels(num_voxels, voxel_codes, used_voxel_index, used_voxel_codes);
 
-        auto active_edges_t = torch::empty({(int64_t)(num_active_voxels * 12 * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        auto active_edges_t = torch::empty({(int64_t)(num_active_voxels * 12 * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         Edge *__restrict__ active_edges = (Edge*)active_edges_t.data_ptr<uint8_t>();
         compute_active_edges(num_active_voxels, voxels, used_voxel_index, used_voxel_codes, active_edges);
 
@@ -521,7 +522,7 @@ namespace mc
         auto unique_edges_t = compute_unique_active_edges(num_active_voxels, active_edges, out_num_vertices);
         Edge *__restrict__ unique_edges = (Edge*)unique_edges_t.data_ptr<uint8_t>();
 
-        auto voxel_edge_to_vert_idx_t = torch::empty({(int64_t)(num_active_voxels * 12)}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        auto voxel_edge_to_vert_idx_t = torch::empty({(int64_t)(num_active_voxels * 12)}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
         uint32_t *__restrict__ voxel_edge_to_vert_idx = (uint32_t*)voxel_edge_to_vert_idx_t.data_ptr<int32_t>();
         build_edge_map(num_active_voxels, out_num_vertices, voxels, used_voxel_index, used_voxel_codes, unique_edges, voxel_edge_to_vert_idx);
 
@@ -547,7 +548,7 @@ namespace mc
         interpolate_vertices(out_num_vertices, unique_edges, grid_vertices, voxel_values, grid_normals, grid_colors, iso, p_out_vertices, p_out_normals, p_out_colors);
 
         uint32_t out_num_triangles;
-        auto voxel_triangle_prefix_sums_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        auto voxel_triangle_prefix_sums_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
         uint32_t *__restrict__ voxel_triangle_prefix_sums = (uint32_t*)voxel_triangle_prefix_sums_t.data_ptr<int32_t>();
         compute_number_triangles(num_active_voxels, used_voxel_codes, out_num_triangles, voxel_triangle_prefix_sums);
 
