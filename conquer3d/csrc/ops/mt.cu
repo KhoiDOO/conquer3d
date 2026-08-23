@@ -6,6 +6,7 @@
 #include "mt.h"
 #include "../maths/maths.h"
 #include <cuda_runtime.h>
+#include <c10/cuda/CUDAFunctions.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
 #include <thrust/device_ptr.h>
@@ -303,7 +304,7 @@ namespace mt
         thrust::device_ptr<uint8_t> d_codes(tet_codes);
         auto active_flag_iter = thrust::make_transform_iterator(d_codes, is_active_tet());
 
-        auto temp_buffer_t = torch::empty({(int64_t)num_tets}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        auto temp_buffer_t = torch::empty({(int64_t)num_tets}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
         uint32_t *__restrict__ temp_buffer = (uint32_t*)temp_buffer_t.data_ptr<int32_t>();
         thrust::device_ptr<uint32_t> d_prefix_sum(temp_buffer);
 
@@ -376,7 +377,7 @@ namespace mt
 
         num_unique_edges = thrust::distance(d_active_edges, unique_end);
 
-        auto unique_edges_t = torch::empty({(int64_t)(num_unique_edges * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        auto unique_edges_t = torch::empty({(int64_t)(num_unique_edges * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         Edge *__restrict__ unique_edges = (Edge*)unique_edges_t.data_ptr<uint8_t>();
 
         thrust::device_ptr<Edge> d_unique_edges(unique_edges);
@@ -464,7 +465,7 @@ namespace mt
         bool return_unique_edges
     )
     {
-        auto tet_codes_t = torch::empty({(int64_t)num_tets}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        auto tet_codes_t = torch::empty({(int64_t)num_tets}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         uint8_t *__restrict__ tet_codes = tet_codes_t.data_ptr<uint8_t>();
 
         compute_active_tets(num_tets, tets, vert_values, iso, tet_codes);
@@ -486,14 +487,14 @@ namespace mt
             );
         }
 
-        auto used_tet_index_t = torch::empty({(int64_t)num_active_tets}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        auto used_tet_index_t = torch::empty({(int64_t)num_active_tets}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
         uint32_t *__restrict__ used_tet_index = (uint32_t*)used_tet_index_t.data_ptr<int32_t>();
 
-        auto used_tet_codes_t = torch::empty({(int64_t)num_active_tets}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        auto used_tet_codes_t = torch::empty({(int64_t)num_active_tets}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         uint8_t *__restrict__ used_tet_codes = used_tet_codes_t.data_ptr<uint8_t>();
         compact_active_tets(num_tets, tet_codes, used_tet_index, used_tet_codes);
 
-        auto active_edges_t = torch::empty({(int64_t)(num_active_tets * 6 * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA));
+        auto active_edges_t = torch::empty({(int64_t)(num_active_tets * 6 * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         Edge *__restrict__ active_edges = (Edge*)active_edges_t.data_ptr<uint8_t>();
         compute_active_edges(num_active_tets, tets, used_tet_index, used_tet_codes, active_edges);
 
@@ -501,7 +502,7 @@ namespace mt
         auto unique_edges_t = compute_unique_active_edges(num_active_tets, active_edges, out_num_vertices);
         Edge *__restrict__ unique_edges = (Edge*)unique_edges_t.data_ptr<uint8_t>();
 
-        auto tet_edge_to_vert_idx_t = torch::empty({(int64_t)(num_active_tets * 6)}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        auto tet_edge_to_vert_idx_t = torch::empty({(int64_t)(num_active_tets * 6)}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
         uint32_t *__restrict__ tet_edge_to_vert_idx = (uint32_t*)tet_edge_to_vert_idx_t.data_ptr<int32_t>();
         build_edge_map(num_active_tets, out_num_vertices, tets, used_tet_index, used_tet_codes, unique_edges, tet_edge_to_vert_idx);
 
@@ -527,7 +528,7 @@ namespace mt
         interpolate_vertices(out_num_vertices, unique_edges, grid_vertices, vert_values, grid_normals, grid_colors, iso, p_out_vertices, p_out_normals, p_out_colors);
 
         uint32_t out_num_triangles;
-        auto tet_triangle_prefix_sums_t = torch::empty({(int64_t)num_active_tets}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA));
+        auto tet_triangle_prefix_sums_t = torch::empty({(int64_t)num_active_tets}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
         uint32_t *__restrict__ tet_triangle_prefix_sums = (uint32_t*)tet_triangle_prefix_sums_t.data_ptr<int32_t>();
         compute_number_triangles(num_active_tets, used_tet_codes, out_num_triangles, tet_triangle_prefix_sums);
 
