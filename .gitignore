@@ -376,3 +376,6 @@ data/digit3d/*.zip
 *.pt
 *.ply
 *.xyz
+
+# Wheels export folder
+wheels/
