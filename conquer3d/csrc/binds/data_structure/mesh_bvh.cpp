@@ -200,7 +200,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
             use_edge_normals = torch::empty({num_tri * 3, 3}, options_f32);
             triangle_mesh::compute_edge_normals(
                 num_tri,
-                (const int3 *)triangles.data_ptr<int>(),
+                triangles,
                 (const float3 *)use_tri_normals.data_ptr<float>(),
                 (float3 *)use_edge_normals.data_ptr<float>());
         }
