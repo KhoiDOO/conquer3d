@@ -8,7 +8,7 @@ via GPU-accelerated BVH queries, pseudonormals, or volumetric flood filling.
 from typing import Tuple, List, Union, Optional, Any
 import torch
 import tqdm
-from conquer3d.data_structure.grid import create_voxel_grid
+from conquer3d.data_structure.grid import create_voxel_grid, create_voxel_cloud_from_tmesh
 from conquer3d.data_structure import create_voxel_grid_from_tmesh
 
 
@@ -91,7 +91,6 @@ def tmesh2sparse(
     grid_min: Optional[List[float]] = None,
     grid_max: Optional[List[float]] = None,
     chunk_size: int = 5000000,
-    iso: float = 0.0,
     device: str = 'cuda',
     show_progress: bool = True,
     sign_mode: int = 2,
@@ -114,7 +113,6 @@ def tmesh2sparse(
         grid_min (List[float], optional): Minimum `(x, y, z)` bounds. Defaults to `[-1.0, -1.0, -1.0]`.
         grid_max (List[float], optional): Maximum `(x, y, z)` bounds. Defaults to `[1.0, 1.0, 1.0]`.
         chunk_size (int, optional): Chunk size for batch SDF querying. Defaults to 5,000,000.
-        iso (float, optional): Isolevel threshold. Defaults to 0.0.
         device (str, optional): Computation device. Defaults to `'cuda'`.
         show_progress (bool, optional): Whether to display a progress bar. Defaults to True.
         sign_mode (int, optional): Sign evaluation mode:
@@ -184,6 +182,94 @@ def tmesh2sparse(
         _, _, _, chunk_sdf = tm.query_points(chunk_points, return_sdf=True, return_prj_pts=False, sign_mode=sign_mode)
         sdfs[i:end] = chunk_sdf
         
+    if return_normals:
+        return grid_vertices, active_voxels.to(torch.int64), sdfs, grid_normals
+    return grid_vertices, active_voxels.to(torch.int64), sdfs
+
+
+def tmesh2voxelcloud(
+    tm: Any,
+    res: Union[int, List[int], Tuple[int, int, int]],
+    grid_min: Optional[List[float]] = None,
+    grid_max: Optional[List[float]] = None,
+    chunk_size: int = 5000000,
+    device: str = 'cuda',
+    show_progress: bool = True,
+    sign_mode: int = 2,
+    return_normals: bool = False,
+    normal_mode: int = 0
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+]:
+    """Computes Signed Distance Fields on non-rigid 3D voxel clouds centered directly at mesh vertices.
+
+    Calculates voxel cell dimensions from resolution and spatial bounds, constructs an overlapping voxel box
+    centered on each mesh vertex, deduplicates corner coordinates, and queries the Signed Distance Field.
+
+    Args:
+        tm (TriangleMesh): Input TriangleMesh GPU object.
+        res (Union[int, List[int], Tuple[int, int, int]]): Resolution along each axis.
+        grid_min (List[float], optional): Minimum `(x, y, z)` bounds. Defaults to `[-1.0, -1.0, -1.0]`.
+        grid_max (List[float], optional): Maximum `(x, y, z)` bounds. Defaults to `[1.0, 1.0, 1.0]`.
+        chunk_size (int, optional): Chunk size for batch SDF querying. Defaults to 5,000,000.
+        device (str, optional): Computation device. Defaults to `'cuda'`.
+        show_progress (bool, optional): Whether to display a progress bar. Defaults to True.
+        sign_mode (int, optional): Sign evaluation mode (0: Ray casting, 1: FWN, 2: Pseudonormals, 5: CF Flood Fill).
+        return_normals (bool, optional): If True, returns surface normal vectors. Defaults to False.
+        normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector).
+
+    Returns:
+        Union[Tuple[torch.Tensor, torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+            - If `return_normals=False`: `(sparse_grid_vertices, active_voxels, sdfs)`
+            - If `return_normals=True`: `(sparse_grid_vertices, active_voxels, sdfs, grid_normals)`
+    """
+    if grid_min is None:
+        grid_min = [-1.0, -1.0, -1.0]
+    if grid_max is None:
+        grid_max = [1.0, 1.0, 1.0]
+
+    if isinstance(res, int):
+        res_list = [res, res, res]
+    else:
+        res_list = list(res)
+
+    if tm.bvh is None:
+        tm.build_bvh()
+
+    if return_normals:
+        grid_vertices, active_voxels, unique_vert_ids, grid_normals = create_voxel_cloud_from_tmesh(
+            grid_min, grid_max, res_list, tm, return_normals=True, normal_mode=normal_mode
+        )
+    else:
+        grid_vertices, active_voxels, unique_vert_ids = create_voxel_cloud_from_tmesh(
+            grid_min, grid_max, res_list, tm, return_normals=False
+        )
+
+    num_points = grid_vertices.shape[0]
+    if num_points == 0:
+        empty_sdfs = torch.empty((0,), dtype=torch.float32, device=device)
+        if return_normals:
+            return grid_vertices, active_voxels.to(torch.int64), empty_sdfs, grid_normals
+        return grid_vertices, active_voxels.to(torch.int64), empty_sdfs
+
+    if sign_mode in [2, 4]:
+        tm.compute_triangle_normals()
+        tm.compute_vertex_normals(1)
+        tm.compute_edge_normals()
+
+    sdfs = torch.empty(num_points, dtype=torch.float32, device=device)
+
+    iterator = range(0, num_points, chunk_size)
+    if show_progress:
+        iterator = tqdm.tqdm(iterator, desc="Computing Voxel Cloud SDF")
+
+    for i in iterator:
+        end = min(i + chunk_size, num_points)
+        chunk_points = grid_vertices[i:end]
+        _, _, _, chunk_sdf = tm.query_points(chunk_points, return_sdf=True, return_prj_pts=False, sign_mode=sign_mode)
+        sdfs[i:end] = chunk_sdf
+
     if return_normals:
         return grid_vertices, active_voxels.to(torch.int64), sdfs, grid_normals
     return grid_vertices, active_voxels.to(torch.int64), sdfs
