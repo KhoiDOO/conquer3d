@@ -67,15 +67,13 @@ def get_extensions():
         sources += source_cuda
         define_macros += [("WITH_CUDA", None)]
         nvcc_flags = os.getenv("NVCC_FLAGS", "")
-        if nvcc_flags == "":
-            try:
-                major, minor = torch.cuda.get_device_capability()
-                nvcc_flags = [f"-arch=sm_{major}{minor}"]
-            except Exception:
-                # If no GPU is available during build, rely on TORCH_CUDA_ARCH_LIST or defaults
-                nvcc_flags = []
-        else:
+        if nvcc_flags != "":
             nvcc_flags = nvcc_flags.split(" ")
+        else:
+            nvcc_flags = []
+            if "TORCH_CUDA_ARCH_LIST" not in os.environ:
+                # Universal architecture coverage: Volta (7.0), Turing/T4 (7.5), Ampere (8.0, 8.6), Ada (8.9), Hopper (9.0) + PTX
+                os.environ["TORCH_CUDA_ARCH_LIST"] = "7.0;7.5;8.0;8.6;8.9;9.0+PTX"
         
         # Suppress harmless nvcc warnings (like conda's compiler-bindir redefinition)
         nvcc_flags.append("-w")
