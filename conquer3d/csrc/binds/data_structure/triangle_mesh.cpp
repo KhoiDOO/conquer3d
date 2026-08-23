@@ -4,6 +4,8 @@
 #include "../../ops/flood_fill_cf.h"
 #include "../../check.h"
 #include <c10/cuda/CUDAFunctions.h>
+#include <c10/cuda/CUDAGuard.h>
+#include <c10/cuda/CUDAStream.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <optional>
@@ -51,9 +53,7 @@ TriangleMesh::TriangleMesh(
 
 void TriangleMesh::compute_triangle_normals()
 {
-    if (this->vertices.is_cuda()) {
-        ::c10::cuda::set_device(this->vertices.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
     this->triangle_normals = torch::empty({static_cast<int64_t>(this->num_triangles), 3}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
     triangle_mesh::compute_triangle_normals(
         this->num_triangles,
@@ -64,9 +64,7 @@ void TriangleMesh::compute_triangle_normals()
 
 void TriangleMesh::compute_vertex_normals(int mode)
 {
-    if (this->vertices.is_cuda()) {
-        ::c10::cuda::set_device(this->vertices.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
     uint32_t num_vertices = this->vertices.size(0);
     this->vertex_normals = torch::zeros({static_cast<int64_t>(num_vertices), 3}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
 
@@ -84,13 +82,11 @@ void TriangleMesh::compute_vertex_normals(int mode)
 
 void TriangleMesh::compute_edge_normals()
 {
-    if (this->triangles.is_cuda()) {
-        ::c10::cuda::set_device(this->triangles.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->triangles.device());
     this->edge_normals = torch::empty({static_cast<int64_t>(this->num_triangles) * 3, 3}, torch::dtype(torch::kFloat32).device(this->triangles.device()));
     triangle_mesh::compute_edge_normals(
         this->num_triangles,
-        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
+        this->triangles,
         reinterpret_cast<const float3 *>(this->get_triangle_normals().data_ptr<float>()),
         reinterpret_cast<float3 *>(this->edge_normals.data_ptr<float>()));
 }
@@ -107,9 +103,7 @@ torch::Tensor TriangleMesh::get_vertex_normals(int mode)
 void TriangleMesh::compute_vertex_degrees()
 {
     if (this->vertex_degrees.defined()) return;
-    if (this->vertices.is_cuda()) {
-        ::c10::cuda::set_device(this->vertices.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
 
     if (!this->edges.defined()) {
         this->compute_edges_to_triangle_map();
@@ -147,9 +141,7 @@ float TriangleMesh::get_valence_567_percentage()
 void TriangleMesh::compute_vertex_lb_uniform()
 {
     if (this->vertex_lb_uniform.defined()) return;
-    if (this->vertices.is_cuda()) {
-        ::c10::cuda::set_device(this->vertices.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
 
     if (!this->edges.defined()) {
         this->compute_edges_to_triangle_map();
@@ -181,9 +173,7 @@ torch::Tensor TriangleMesh::get_vertex_lb_uniform()
 }
 
 torch::Tensor TriangleMesh::compute_laplacian(int mode) {
-    if (this->vertices.is_cuda()) {
-        ::c10::cuda::set_device(this->vertices.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
     if (mode == 0) {
         return this->get_vertex_lb_uniform();
     } else if (mode == 1) {
@@ -225,9 +215,7 @@ torch::Tensor TriangleMesh::get_principal_curvatures(bool signed_curvature) {
 void TriangleMesh::compute_voronoi_areas()
 {
     if (this->voronoi_areas.defined()) return;
-    if (this->vertices.is_cuda()) {
-        ::c10::cuda::set_device(this->vertices.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
     
     uint32_t num_vertices = this->vertices.size(0);
     this->voronoi_areas = torch::zeros({static_cast<int64_t>(num_vertices)}, torch::dtype(torch::kFloat32).device(this->vertices.device()));
@@ -243,9 +231,7 @@ void TriangleMesh::compute_voronoi_areas()
 void TriangleMesh::compute_gaussian_curvature()
 {
     if (this->gaussian_curvature.defined()) return;
-    if (this->vertices.is_cuda()) {
-        ::c10::cuda::set_device(this->vertices.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
     
     if (!this->voronoi_areas.defined()) {
         this->compute_voronoi_areas();
@@ -278,9 +264,7 @@ torch::Tensor TriangleMesh::get_gaussian_curvature()
 void TriangleMesh::compute_vertex_lb_cotangent()
 {
     if (this->vertex_lb_cotangent.defined()) return;
-    if (this->vertices.is_cuda()) {
-        ::c10::cuda::set_device(this->vertices.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
 
     if (!this->voronoi_areas.defined()) {
         this->compute_voronoi_areas();
@@ -853,9 +837,7 @@ torch::Tensor TriangleMesh::get_angle_deviation() {
 
 void TriangleMesh::compute_edges_to_triangle_map()
 {
-    if (this->triangles.is_cuda()) {
-        ::c10::cuda::set_device(this->triangles.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->triangles.device());
 
     if (this->num_triangles == 0)
     {
@@ -869,7 +851,7 @@ void TriangleMesh::compute_edges_to_triangle_map()
 
     triangle_mesh::compute_edges_to_triangle_map(
         this->num_triangles,
-        reinterpret_cast<int3 *>(this->triangles.data_ptr<int>()),
+        this->triangles,
         this->edges,
         this->edge_to_triangle_offsets,
         this->edge_to_triangle_counts,
@@ -1019,9 +1001,7 @@ void TriangleMesh::compute_vertices_to_triangle_map()
 {
     if (this->vertex_to_triangle_offsets.defined())
         return;
-    if (this->triangles.is_cuda()) {
-        ::c10::cuda::set_device(this->triangles.get_device());
-    }
+    at::cuda::CUDAGuard device_guard(this->triangles.device());
 
     uint32_t num_vertices = this->vertices.size(0);
     triangle_mesh::build_vertices_to_triangle_map(
