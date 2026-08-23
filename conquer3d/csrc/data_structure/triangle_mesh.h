@@ -301,7 +301,7 @@ namespace triangle_mesh
 
     __host__ void compute_edge_normals(
         const uint32_t num_triangles,
-        const int3 *__restrict__ triangles,
+        const torch::Tensor &triangles,
         const float3 *__restrict__ triangle_normals,
         float3 *__restrict__ edge_normals);
 
@@ -357,7 +357,7 @@ namespace triangle_mesh
 
     __host__ void compute_edges_to_triangle_map(
         const uint32_t num_triangles,
-        const int3 *__restrict__ triangles,
+        const torch::Tensor &triangles,
         torch::Tensor &out_unique_edges,
         torch::Tensor &out_offsets,
         torch::Tensor &out_counts,
