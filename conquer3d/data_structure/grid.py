@@ -100,6 +100,45 @@ def create_voxel_grid_from_tmesh(
     return res_tuple[0], res_tuple[1], res_tuple[2]
 
 
+def create_voxel_cloud_from_tmesh(
+    grid_min: Union[List[float], Tuple[float, float, float]],
+    grid_max: Union[List[float], Tuple[float, float, float]],
+    res: Union[List[int], Tuple[int, int, int]],
+    tmesh: '_C.TriangleMesh',
+    return_unique_vert_ids: bool = True,
+    return_normals: bool = False,
+    normal_mode: int = 0
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
+    Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], torch.Tensor]
+]:
+    """Creates an overlapping 3D voxel cloud where each voxel cell is centered directly at a mesh vertex.
+
+    Calculates voxel dimensions from grid extents and resolution, and constructs non-rigid, overlapping
+    3D voxel boxes centered on each mesh vertex. Corner coordinates across overlapping voxels are deduplicated.
+
+    Args:
+        grid_min (Union[List[float], Tuple[float, float, float]]): Minimum `(x, y, z)` bounding coordinates.
+        grid_max (Union[List[float], Tuple[float, float, float]]): Maximum `(x, y, z)` bounding coordinates.
+        res (Union[List[int], Tuple[int, int, int]]): Grid resolution `(rx, ry, rz)`.
+        tmesh (TriangleMesh): Input TriangleMesh GPU data structure.
+        return_unique_vert_ids (bool, optional): Return original vertex indices. Defaults to True.
+        return_normals (bool, optional): Return surface normals at sparse corner vertices. Defaults to False.
+        normal_mode (int, optional): Normal mode (0: face, 1: interp vertex, 2: disp vector). Defaults to 0.
+
+    Returns:
+        Union[Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], torch.Tensor]]:
+            - If `return_normals=False`: `(sparse_grid_vertices, local_voxels, unique_vert_ids)`
+            - If `return_normals=True`: `(sparse_grid_vertices, local_voxels, unique_vert_ids, grid_normals)`
+    """
+    res_tuple = _C.create_voxel_cloud_from_tmesh(
+        list(grid_min), list(grid_max), list(res), tmesh, return_unique_vert_ids, return_normals, normal_mode
+    )
+    if return_normals:
+        return res_tuple[0], res_tuple[1], res_tuple[2], res_tuple[3]
+    return res_tuple[0], res_tuple[1], res_tuple[2]
+
+
 def get_active_voxel_ids_from_depth(
     depth_image: torch.Tensor,
     c2w: torch.Tensor,
