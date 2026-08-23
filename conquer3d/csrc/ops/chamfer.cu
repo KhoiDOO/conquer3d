@@ -6,6 +6,7 @@
 #include "../data_structure/kdtree.h"
 
 #include <torch/extension.h>
+#include <c10/cuda/CUDAFunctions.h>
 #include <cstdint>
 #include <cfloat>
 
@@ -103,8 +104,8 @@ void one_sided_chamfer_distance(
     }
 
     // Allocate PyTorch-backed memory for cloned points and permutation indices (zero cudaMalloc overhead)
-    auto opt_f = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kFloat32);
-    auto opt_i = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kInt64);
+    auto opt_f = torch::TensorOptions().device(torch::kCUDA, ::c10::cuda::current_device()).dtype(torch::kFloat32);
+    auto opt_i = torch::TensorOptions().device(torch::kCUDA, ::c10::cuda::current_device()).dtype(torch::kInt64);
 
     auto cloned_ref_tensor = torch::empty({(int64_t)num_reference_points, 3}, opt_f);
     cudaMemcpyAsync(
