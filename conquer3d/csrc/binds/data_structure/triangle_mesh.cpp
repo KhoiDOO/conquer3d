@@ -131,9 +131,14 @@ float TriangleMesh::get_valence_567_percentage()
     return (count / degrees.numel()) * 100.0f;
 }
 
+#include <c10/cuda/CUDAFunctions.h>
+
 void TriangleMesh::compute_vertex_lb_uniform()
 {
     if (this->vertex_lb_uniform.defined()) return;
+    if (this->vertices.is_cuda()) {
+        ::c10::cuda::set_device(this->vertices.get_device());
+    }
 
     if (!this->edges.defined()) {
         this->compute_edges_to_triangle_map();
@@ -165,6 +170,9 @@ torch::Tensor TriangleMesh::get_vertex_lb_uniform()
 }
 
 torch::Tensor TriangleMesh::compute_laplacian(int mode) {
+    if (this->vertices.is_cuda()) {
+        ::c10::cuda::set_device(this->vertices.get_device());
+    }
     if (mode == 0) {
         return this->get_vertex_lb_uniform();
     } else if (mode == 1) {
