@@ -528,10 +528,9 @@ namespace triangle_mesh
         torch::Tensor &out_sorted_triangle_indices)
     {
         if (num_triangles == 0) return;
-        ::c10::cuda::set_device(out_unique_edges.get_device());
 
-        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(out_unique_edges.device());
-        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(out_unique_edges.device());
+        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA, ::c10::cuda::current_device());
+        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, ::c10::cuda::current_device());
 
         uint32_t num_edges = num_triangles * 3;
         
