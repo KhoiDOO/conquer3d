@@ -342,6 +342,125 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::opti
     );
 }
 
+std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>> create_voxel_cloud_from_tmesh(
+    std::vector<float> grid_min,
+    std::vector<float> grid_max,
+    std::vector<int64_t> res,
+    TriangleMesh &tmesh,
+    bool return_unique_vert_ids = true,
+    bool return_normals = false,
+    int normal_mode = 0
+) {
+    TORCH_CHECK(grid_min.size() == 3, "grid_min must have 3 elements.");
+    TORCH_CHECK(grid_max.size() == 3, "grid_max must have 3 elements.");
+    TORCH_CHECK(res.size() == 3, "res must have 3 elements.");
+
+    auto vertices = tmesh.get_vertices();
+    auto triangles = tmesh.get_triangles();
+
+    if (vertices.size(0) == 0) {
+        return std::make_tuple(
+            torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device())),
+            torch::empty({0, 8}, torch::TensorOptions().dtype(torch::kInt32).device(vertices.device())),
+            return_unique_vert_ids ? std::make_optional(torch::empty({0}, torch::TensorOptions().dtype(torch::kInt64).device(vertices.device()))) : std::nullopt,
+            return_normals ? std::make_optional(torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device()))) : std::nullopt
+        );
+    }
+
+    // 1. Generate 8 vertex-centered corner coordinates on GPU using custom CUDA kernel
+    torch::Tensor raw_corners, spacing_tensor;
+    std::tie(raw_corners, spacing_tensor) = grid::create_voxel_cloud_corners(vertices, grid_min, grid_max, res);
+
+    // 2. Deduplicate 3D corner positions and re-index voxel cell corner connectivity
+    torch::Tensor unique_grid_vertices, inverse_indices, counts;
+    std::tie(unique_grid_vertices, inverse_indices, counts) = at::unique_dim(raw_corners, 0, true, true, false);
+
+    auto remapped_voxels = inverse_indices.view({-1, 8}).to(torch::kInt32);
+
+    // 3. Optional Surface Normal Evaluation
+    std::optional<torch::Tensor> grid_normals = std::nullopt;
+    if (return_normals) {
+        if (unique_grid_vertices.size(0) > 0) {
+            MeshBVH bvh = tmesh.build_bvh();
+            if (normal_mode == 0) {
+                auto query_res = bvh.query_point(
+                    unique_grid_vertices, vertices, triangles,
+                    false, false, 0
+                );
+                auto closest_tri_ids = std::get<1>(query_res);
+                auto tri_normals = tmesh.get_triangle_normals();
+                grid_normals = tri_normals.index_select(0, closest_tri_ids);
+            } else if (normal_mode == 1) {
+                auto query_res = bvh.query_point(
+                    unique_grid_vertices, vertices, triangles,
+                    false, true, 0
+                );
+                auto closest_tri_ids = std::get<1>(query_res);
+                auto prj_pts = std::get<2>(query_res);
+                auto vert_normals = tmesh.get_vertex_normals(1);
+
+                auto tri_indices = triangles.index_select(0, closest_tri_ids);
+                auto i0 = tri_indices.select(1, 0).to(torch::kInt64);
+                auto i1 = tri_indices.select(1, 1).to(torch::kInt64);
+                auto i2 = tri_indices.select(1, 2).to(torch::kInt64);
+
+                auto p0 = vertices.index_select(0, i0);
+                auto p1 = vertices.index_select(0, i1);
+                auto p2 = vertices.index_select(0, i2);
+
+                auto n0 = vert_normals.index_select(0, i0);
+                auto n1 = vert_normals.index_select(0, i1);
+                auto n2 = vert_normals.index_select(0, i2);
+
+                auto e0 = p1 - p0;
+                auto e1 = p2 - p0;
+                auto e2 = prj_pts - p0;
+
+                auto d00 = (e0 * e0).sum(-1, true);
+                auto d01 = (e0 * e1).sum(-1, true);
+                auto d11 = (e1 * e1).sum(-1, true);
+                auto d20 = (e2 * e0).sum(-1, true);
+                auto d21 = (e2 * e1).sum(-1, true);
+
+                auto denom = (d00 * d11 - d01 * d01).clamp_min(1e-8f);
+                auto v_coord = ((d11 * d20 - d01 * d21) / denom).clamp(0.0f, 1.0f);
+                auto w_coord = ((d00 * d21 - d01 * d20) / denom).clamp(0.0f, 1.0f);
+                auto u_coord = (1.0f - v_coord - w_coord).clamp(0.0f, 1.0f);
+                auto sum_coord = (u_coord + v_coord + w_coord).clamp_min(1e-8f);
+                u_coord = u_coord / sum_coord;
+                v_coord = v_coord / sum_coord;
+                w_coord = w_coord / sum_coord;
+
+                auto interp_normals = u_coord * n0 + v_coord * n1 + w_coord * n2;
+                auto norm_len = interp_normals.norm(2, -1, true).clamp_min(1e-8f);
+                grid_normals = interp_normals / norm_len;
+            } else if (normal_mode == 2) {
+                auto query_res = bvh.query_point(
+                    unique_grid_vertices, vertices, triangles,
+                    false, true, 0
+                );
+                auto prj_pts = std::get<2>(query_res);
+                auto disp = prj_pts - unique_grid_vertices;
+                auto dist = disp.norm(2, -1, true).clamp_min(1e-8f);
+                grid_normals = disp / dist;
+            } else {
+                throw std::runtime_error("Unknown normal_mode. Supported modes are 0, 1, 2.");
+            }
+        } else {
+            grid_normals = torch::empty({0, 3}, torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device()));
+        }
+    }
+
+    auto vert_ids = torch::arange(vertices.size(0), torch::TensorOptions().device(vertices.device()).dtype(torch::kInt64));
+
+    return std::make_tuple(
+        unique_grid_vertices,
+        remapped_voxels,
+        return_unique_vert_ids ? std::make_optional(vert_ids) : std::nullopt,
+        return_normals ? grid_normals : std::nullopt
+    );
+}
+
 torch::Tensor get_active_voxel_ids_from_depth_py(
     torch::Tensor depth_image,
     torch::Tensor c2w_tensor,
@@ -513,6 +632,28 @@ void bind_ds_grid(py::module_& m) {
 
           Example:
               >>> sparse_verts, voxels, vert_ids = create_voxel_grid_from_tmesh([-1,-1,-1], [1,1,1], [128,128,128], tmesh)
+          )pbdoc");
+    m.def("create_voxel_cloud_from_tmesh", &create_voxel_cloud_from_tmesh,
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("res"), py::arg("tmesh"),
+          py::arg("return_unique_vert_ids") = true,
+          py::arg("return_normals") = false, py::arg("normal_mode") = 0,
+          R"pbdoc(
+          Creates an overlapping 3D voxel cloud where each 3D voxel cell is centered directly at a mesh vertex.
+
+          Args:
+              grid_min (List[float]): Lower bounding coordinates [x_min, y_min, z_min].
+              grid_max (List[float]): Upper bounding coordinates [x_max, y_max, z_max].
+              res (List[int]): Grid resolution [rx, ry, rz].
+              tmesh (TriangleMesh): Input TriangleMesh GPU structure.
+              return_unique_vert_ids (bool, optional): Return original linear vertex IDs. Defaults to True.
+              return_normals (bool, optional): Return surface normals at sparse vertices. Defaults to False.
+              normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector). Defaults to 0.
+
+          Returns:
+              Tuple: Sparse grid vertices, remapped voxels, and optional vertex IDs/normals.
+
+          Example:
+              >>> cloud_verts, voxels, vert_ids = create_voxel_cloud_from_tmesh([-1,-1,-1], [1,1,1], [128,128,128], tmesh)
           )pbdoc");
     m.def("compute_grid_normal", &compute_grid_normal,
           py::arg("sdf"), py::arg("grid_vertices"), py::arg("idx_grids"), py::arg("res"),
