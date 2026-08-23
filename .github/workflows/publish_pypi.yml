@@ -18,9 +18,13 @@ jobs:
     name: Publish Wheels to PyPI (OIDC Trusted Publisher)
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Download Prebuilt Wheels from GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           mkdir -p dist
           TAG="${{ github.event.inputs.release_tag || github.ref_name }}"
