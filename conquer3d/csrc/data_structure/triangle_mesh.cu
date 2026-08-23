@@ -8,6 +8,9 @@
 #include "../primitive/edge.h"
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAFunctions.h>
+#include <c10/cuda/CUDAGuard.h>
+#include <c10/cuda/CUDAStream.h>
+#include <ATen/cuda/ThrustAllocator.h>
 #include <thrust/sort.h>
 #include <thrust/reduce.h>
 #include <thrust/scan.h>
@@ -448,11 +451,15 @@ namespace triangle_mesh
 
     __host__ void compute_edge_normals(
         const uint32_t num_triangles,
-        const int3 *__restrict__ triangles,
+        const torch::Tensor &triangles,
         const float3 *__restrict__ triangle_normals,
         float3 *__restrict__ edge_normals)
     {
         if (num_triangles == 0) return;
+
+        at::cuda::CUDAGuard device_guard(triangles.device());
+        auto allocator = at::cuda::ThrustAllocator();
+        auto policy = thrust::cuda::par(allocator).on(at::cuda::getCurrentCUDAStream());
 
         int threads = NTHREADS;
         int blocks_tri = (num_triangles + threads - 1) / threads;
@@ -460,24 +467,24 @@ namespace triangle_mesh
         uint32_t num_edges = num_triangles * 3;
         int blocks_edge = (num_edges + threads - 1) / threads;
 
-        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA, ::c10::cuda::current_device());
-        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, ::c10::cuda::current_device());
+        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(triangles.device());
+        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(triangles.device());
 
         torch::Tensor edge_keys = torch::empty({static_cast<int64_t>(num_edges)}, options_i64);
         torch::Tensor edge_indices = torch::empty({static_cast<int64_t>(num_edges)}, options_i32);
 
-        extract_edge_slots_kernel<<<blocks_tri, threads>>>(
-            num_triangles, triangles,
+        extract_edge_slots_kernel<<<blocks_tri, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
+            num_triangles, (const int3*)triangles.data_ptr<int>(),
             reinterpret_cast<Edge *>(edge_keys.data_ptr<int64_t>()),
             edge_indices.data_ptr<int>());
 
         thrust::sort_by_key(
-            thrust::device,
+            policy,
             reinterpret_cast<Edge *>(edge_keys.data_ptr<int64_t>()),
             reinterpret_cast<Edge *>(edge_keys.data_ptr<int64_t>()) + num_edges,
             edge_indices.data_ptr<int>());
 
-        compute_edge_normals_kernel<<<blocks_edge, threads>>>(
+        compute_edge_normals_kernel<<<blocks_edge, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
             num_edges,
             reinterpret_cast<const Edge *>(edge_keys.data_ptr<int64_t>()),
             edge_indices.data_ptr<int>(),
@@ -521,7 +528,7 @@ namespace triangle_mesh
 
     __host__ void compute_edges_to_triangle_map(
         const uint32_t num_triangles,
-        const int3 *__restrict__ triangles,
+        const torch::Tensor &triangles,
         torch::Tensor &out_unique_edges,
         torch::Tensor &out_offsets,
         torch::Tensor &out_counts,
@@ -529,8 +536,12 @@ namespace triangle_mesh
     {
         if (num_triangles == 0) return;
 
-        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA, ::c10::cuda::current_device());
-        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, ::c10::cuda::current_device());
+        at::cuda::CUDAGuard device_guard(triangles.device());
+        auto allocator = at::cuda::ThrustAllocator();
+        auto policy = thrust::cuda::par(allocator).on(at::cuda::getCurrentCUDAStream());
+
+        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(triangles.device());
+        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(triangles.device());
 
         uint32_t num_edges = num_triangles * 3;
         
@@ -539,13 +550,13 @@ namespace triangle_mesh
 
         int threads = NTHREADS;
         int blocks = (num_triangles + threads - 1) / threads;
-        extract_edges_kernel<<<blocks, threads>>>(
-            num_triangles, triangles, 
+        extract_edges_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
+            num_triangles, (const int3*)triangles.data_ptr<int>(), 
             (Edge*)edge_keys.data_ptr<int64_t>(), 
             out_sorted_triangle_indices.data_ptr<int>());
 
         thrust::sort_by_key(
-            thrust::device,
+            policy,
             (Edge*)edge_keys.data_ptr<int64_t>(),
             (Edge*)edge_keys.data_ptr<int64_t>() + num_edges,
             out_sorted_triangle_indices.data_ptr<int>()
@@ -556,7 +567,7 @@ namespace triangle_mesh
         torch::Tensor ones = torch::ones({num_edges}, options_i32);
 
         auto new_end = thrust::reduce_by_key(
-            thrust::device,
+            policy,
             (Edge*)edge_keys.data_ptr<int64_t>(),
             (Edge*)edge_keys.data_ptr<int64_t>() + num_edges,
             ones.data_ptr<int>(),
@@ -571,7 +582,7 @@ namespace triangle_mesh
 
         out_offsets = torch::empty({num_unique_edges}, options_i32);
         thrust::exclusive_scan(
-            thrust::device,
+            policy,
             out_counts.data_ptr<int>(),
             out_counts.data_ptr<int>() + num_unique_edges,
             out_offsets.data_ptr<int>()
@@ -580,7 +591,7 @@ namespace triangle_mesh
         out_unique_edges = torch::empty({num_unique_edges, 2}, options_i32);
         int blocks2 = (num_unique_edges + threads - 1) / threads;
         if (blocks2 > 0) {
-            unpack_edges_kernel<<<blocks2, threads>>>(
+            unpack_edges_kernel<<<blocks2, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
                 num_unique_edges,
                 (Edge*)unique_keys.data_ptr<int64_t>(),
                 out_unique_edges.data_ptr<int>()
@@ -630,22 +641,25 @@ namespace triangle_mesh
     {
         if (num_triangles == 0 || num_vertices == 0) return;
 
+        at::cuda::CUDAGuard device_guard(triangles.device());
+        auto allocator = at::cuda::ThrustAllocator();
+        auto policy = thrust::cuda::par(allocator).on(at::cuda::getCurrentCUDAStream());
+
         auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(triangles.device());
         out_counts = torch::zeros({num_vertices}, options_i32);
         
         int threads = NTHREADS;
         int blocks = (num_triangles + threads - 1) / threads;
 
-        compute_vertex_triangle_counts_kernel<<<blocks, threads>>>(
+        compute_vertex_triangle_counts_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
             num_triangles,
             (const int3*)triangles.data_ptr<int>(),
             out_counts.data_ptr<int>()
         );
 
-
         out_offsets = torch::empty({num_vertices}, options_i32);
         thrust::exclusive_scan(
-            thrust::device,
+            policy,
             out_counts.data_ptr<int>(),
             out_counts.data_ptr<int>() + num_vertices,
             out_offsets.data_ptr<int>()
@@ -655,7 +669,7 @@ namespace triangle_mesh
         torch::Tensor current_offsets = out_offsets.clone();
         out_indices = torch::empty({num_triangles * 3}, options_i32);
 
-        compute_vertex_triangle_indices_kernel<<<blocks, threads>>>(
+        compute_vertex_triangle_indices_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
             num_triangles,
             (const int3*)triangles.data_ptr<int>(),
             current_offsets.data_ptr<int>(),
