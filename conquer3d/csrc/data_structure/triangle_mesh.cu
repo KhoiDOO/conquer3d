@@ -7,7 +7,7 @@
 #include "../primitive/triangle.h"
 #include "../primitive/edge.h"
 #include <cuda_runtime.h>
-#include <cuda_runtime.h>
+#include <c10/cuda/CUDAFunctions.h>
 #include <thrust/sort.h>
 #include <thrust/reduce.h>
 #include <thrust/scan.h>
@@ -453,14 +453,15 @@ namespace triangle_mesh
         float3 *__restrict__ edge_normals)
     {
         if (num_triangles == 0) return;
+
         int threads = NTHREADS;
         int blocks_tri = (num_triangles + threads - 1) / threads;
 
         uint32_t num_edges = num_triangles * 3;
         int blocks_edge = (num_edges + threads - 1) / threads;
 
-        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA);
-        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA);
+        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA, ::c10::cuda::current_device());
+        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, ::c10::cuda::current_device());
 
         torch::Tensor edge_keys = torch::empty({static_cast<int64_t>(num_edges)}, options_i64);
         torch::Tensor edge_indices = torch::empty({static_cast<int64_t>(num_edges)}, options_i32);
@@ -527,9 +528,10 @@ namespace triangle_mesh
         torch::Tensor &out_sorted_triangle_indices)
     {
         if (num_triangles == 0) return;
+        ::c10::cuda::set_device(out_unique_edges.get_device());
 
-        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA);
-        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA);
+        auto options_i64 = torch::TensorOptions().dtype(torch::kInt64).device(out_unique_edges.device());
+        auto options_i32 = torch::TensorOptions().dtype(torch::kInt32).device(out_unique_edges.device());
 
         uint32_t num_edges = num_triangles * 3;
         
@@ -1329,7 +1331,7 @@ namespace triangle_mesh
                 d_next_frontier = tmp;
             }
             
-            auto vol_options = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kFloat32);
+            auto vol_options = torch::TensorOptions().device(torch::kCUDA, ::c10::cuda::current_device()).dtype(torch::kFloat32);
             torch::Tensor volumes = torch::empty({component_size}, vol_options);
             
             int vol_blocks = (component_size + NTHREADS - 1) / NTHREADS;
