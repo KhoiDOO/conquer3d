@@ -8,6 +8,10 @@ import multiprocessing
 num_cpus = multiprocessing.cpu_count()
 os.environ["MAX_JOBS"] = str(max(1, num_cpus // 2))
 
+# Ensure comprehensive multi-architecture support: Turing/T4 (7.5), Ampere (8.0, 8.6), Ada (8.9), Hopper (9.0) + PTX
+if not os.environ.get("TORCH_CUDA_ARCH_LIST"):
+    os.environ["TORCH_CUDA_ARCH_LIST"] = "7.5;8.0;8.6;8.9;9.0+PTX"
+
 import torch
 from setuptools import find_packages, setup
 from torch.utils.cpp_extension import (
