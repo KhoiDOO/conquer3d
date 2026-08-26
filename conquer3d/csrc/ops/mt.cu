@@ -7,6 +7,7 @@
 #include "../maths/maths.h"
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAFunctions.h>
+#include <thrust/distance.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
 #include <thrust/device_ptr.h>
