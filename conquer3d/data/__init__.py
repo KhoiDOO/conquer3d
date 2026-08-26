@@ -12,7 +12,7 @@ from . import dataset
 from . import transform
 from . import collate
 
-from .dataset import BaseMeshDataset, MeshDataset, MeshFolderDataset, ToyMeshDataset, Digit3D, PointDigit3D
+from .dataset import BaseMeshDataset, MeshDataset, MeshFolderDataset, ToyMeshDataset, Digit3D, PointDigit3D, Digit3DMV
 
 __all__ = [
     'assets', 
@@ -25,4 +25,5 @@ __all__ = [
     'ToyMeshDataset',
     'Digit3D',
     'PointDigit3D',
+    'Digit3DMV',
 ]
