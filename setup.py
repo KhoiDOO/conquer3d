@@ -101,6 +101,9 @@ def get_extensions():
         conda_inc = os.path.join(cuda_home, "include")
         if os.path.isdir(conda_inc) and conda_inc not in include_dirs:
             include_dirs.append(conda_inc)
+        cccl_inc = os.path.join(cuda_home, "targets", "x86_64-linux", "include", "cccl")
+        if os.path.isdir(cccl_inc) and cccl_inc not in include_dirs:
+            include_dirs.append(cccl_inc)
     
     # Ensure torch libraries are in the RPATH
     torch_lib_path = os.path.join(os.path.dirname(torch.__file__), "lib")
