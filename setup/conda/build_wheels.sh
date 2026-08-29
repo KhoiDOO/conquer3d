@@ -16,11 +16,11 @@ WHEELS_DIR="${REPO_ROOT}/wheels"
 
 # Target matrix configuration
 PYTHON_VERSIONS=(
-    # "3.10" 
+    "3.10" 
     "3.11" 
-    # "3.12" 
-    # "3.13" 
-    # "3.14"
+    "3.12" 
+    "3.13" 
+    "3.14"
 )
 TORCH_CUDA_PAIRS=(
     # "2.8.0:cu128"
