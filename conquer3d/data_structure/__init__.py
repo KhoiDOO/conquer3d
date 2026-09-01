@@ -24,7 +24,8 @@ from .grid import (
     compute_active_voxels, 
     create_voxel_grid_from_tmesh,
     get_active_voxel_ids_from_depth,
-    build_sparse_grid_from_active_voxels
+    build_sparse_grid_from_active_voxels,
+    create_random_points_ball
 )
 from .sort import z_curve_sort
 
@@ -37,6 +38,7 @@ grid_data_structures = [
     'create_voxel_grid_from_tmesh',
     'get_active_voxel_ids_from_depth',
     'build_sparse_grid_from_active_voxels',
+    'create_random_points_ball',
 ]
 sort_data_structures = ['z_curve_sort']
 
