@@ -8,6 +8,7 @@ from tqdm import tqdm
 
 import conquer3d as c3d
 import conquer3d.data_structure as ds
+from conquer3d.data_structure import create_random_points_ball
 from conquer3d.io.obj import write_obj
 from conquer3d.ops import diff_marching_cubes, marching_tetrahedra, tetrahedralize, dpsr
 from conquer3d.ops.dpsr import grid_interp
@@ -35,7 +36,7 @@ def dpsr_to_mesh(
         points (torch.Tensor): Oriented point coordinates `(N, 3)` or `(1, N, 3)`.
         normals (torch.Tensor): Outward normal vectors `(N, 3)` or `(1, N, 3)`.
         tet_points (torch.Tensor, optional): Spatial query vertices used to construct Delaunay triangulation.
-            If None, generated within `[grid_min, grid_max]`.
+            If None, sampled inside a ball of radius 1.0.
         tets (torch.Tensor, optional): Precomputed Delaunay tetrahedron simplices `(M, 4)`.
             If None, computed via `tetrahedralize(tet_points)`.
         res (int, optional): Grid resolution for DPSR Poisson indicator field. Defaults to 64.
@@ -60,7 +61,7 @@ def dpsr_to_mesh(
 
     # 2. Delaunay Triangulation (Tetrahedralization)
     if tet_points is None:
-        tet_points = torch.rand(2000, 3, device=device) * (g_max - g_min) + g_min
+        tet_points = create_random_points_ball(n_points=4000, radius=1.0, device=device)
     if tets is None:
         tets = tetrahedralize(tet_points)
 
@@ -88,8 +89,9 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=0.01, help="Learning rate for Adam optimizer.")
     parser.add_argument("--res", type=int, default=128, help="Resolution of the voxel grid.")
     parser.add_argument("--device", type=str, default="cuda", help="Compute device ('cuda' or 'cpu').")
-    parser.add_argument("--method", type=str, default="mc", choices=["mc", "dpsr"],
-                        help="Differentiable meshing method. Options: 'mc', 'dpsr'.")
+    parser.add_argument("--method", type=str, default="mt", choices=["mt", "mc", "dpsr"],
+                        help="Differentiable meshing method. Options: 'mt', 'mc', 'dpsr'.")
+    parser.add_argument("--use_color", action="store_true", help="Enable differentiable vertex color learning with RGB loss.")
     parser.add_argument("--out_dir", type=str, default="./output", help="Output directory to save results.")
 
     args = parser.parse_args()
@@ -111,10 +113,37 @@ if __name__ == "__main__":
 
     tm = ds.TriangleMesh(vertices, faces)
     tm.fix_normals()
-    gt_mesh = kal.rep.SurfaceMesh(vertices=tm.vertices, faces=tm.triangles)
+
+    if args.use_color:
+        # Sample smooth 3D rainbow color map across normalized ground truth bounding box coordinates
+        v_min_mesh, v_max_mesh = tm.vertices.min(dim=0)[0], tm.vertices.max(dim=0)[0]
+        gt_colors = torch.clamp((tm.vertices - v_min_mesh) / (v_max_mesh - v_min_mesh + 1e-7), 0.0, 1.0)
+        gt_mesh = kal.rep.SurfaceMesh(vertices=tm.vertices, faces=tm.triangles, vertex_colors=gt_colors)
+    else:
+        gt_mesh = kal.rep.SurfaceMesh(vertices=tm.vertices, faces=tm.triangles)
 
     # 2. Method Setup & Parameter Initialization
-    if args.method == "mc":
+    if args.method == "mt":
+        num_pts = 100000
+        tet_points = create_random_points_ball(n_points=num_pts, radius=1.2, device=device)
+        tets = tetrahedralize(tet_points)
+        sdfs = torch.rand_like(tet_points[:,0]) - 0.1
+        
+        tet_points = torch.nn.Parameter(tet_points.clone().detach(), requires_grad=True)
+        sdfs = torch.nn.Parameter(sdfs.clone().detach(), requires_grad=True)
+
+        if args.use_color:
+            colors = torch.rand((tet_points.shape[0], 3), device=device) * 0.5 + 0.25
+            colors = torch.nn.Parameter(colors.clone().detach(), requires_grad=True)
+            optimizer = torch.optim.Adam([
+                {"params": [sdfs], "lr": args.learning_rate},
+                {"params": [colors], "lr": args.learning_rate * 2.0}
+            ])
+        else:
+            colors = None
+            optimizer = torch.optim.Adam([sdfs], lr=args.learning_rate)
+
+    elif args.method == "mc":
         grid_vertices, voxels, _ = c3d.data_structure.create_voxel_grid(
             grid_min=[-1.0, -1.0, -1.0],
             grid_max=[1.0, 1.0, 1.0],
@@ -124,35 +153,25 @@ if __name__ == "__main__":
         sdf = torch.rand_like(grid_vertices[:, 0]) - 0.1
         sdf = torch.nn.Parameter(sdf.clone().detach(), requires_grad=True)
         optimizer = torch.optim.Adam([sdf], lr=args.learning_rate)
-    elif args.method == "dpsr":
-        # Initialize trainable point cloud and normal vectors on initial sphere
-        N_pts = 3000
-        phi_angle = torch.rand(N_pts, device=device) * 2.0 * 3.14159265
-        theta_angle = torch.acos(torch.rand(N_pts, device=device) * 2.0 - 1.0)
-        r = 0.6
-        init_pts = torch.stack([
-            r * torch.sin(theta_angle) * torch.cos(phi_angle),
-            r * torch.sin(theta_angle) * torch.sin(phi_angle),
-            r * torch.cos(theta_angle)
-        ], dim=-1)
-        points = torch.nn.Parameter(init_pts.clone().detach(), requires_grad=True)
-        normals = torch.nn.Parameter((init_pts / r).clone().detach(), requires_grad=True)
 
-        # Delaunay tetrahedralization background query points
-        tet_res = max(16, args.res // 2)
-        tet_grid, _, _ = c3d.data_structure.create_voxel_grid(
-            grid_min=[-1.0, -1.0, -1.0],
-            grid_max=[1.0, 1.0, 1.0],
-            res=[tet_res, tet_res, tet_res],
-            device=device
-        )
-        tets = tetrahedralize(tet_grid)
+    elif args.method == "dpsr":
+        # Initialize trainable point cloud and normal vectors sampled in a ball
+        init_pts = create_random_points_ball(n_points=3000, radius=0.6, device=device)
+        points = torch.nn.Parameter(init_pts.clone().detach(), requires_grad=True)
+        normals = torch.nn.Parameter((init_pts / (init_pts.norm(dim=-1, keepdim=True) + 1e-7)).clone().detach(), requires_grad=True)
+
+        # Delaunay tetrahedralization background query points sampled in a ball
+        num_tet_pts = 100000
+        tet_points = create_random_points_ball(n_points=num_tet_pts, radius=1.0, device=device)
+        tets = tetrahedralize(tet_points)
         optimizer = torch.optim.Adam([points, normals], lr=args.learning_rate)
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: lr_schedule(x))
 
     # 3. Optimization Loop
-    pbar = tqdm(range(args.iter), desc=f"Optimizing ({args.method.upper()})")
+    pbar = tqdm(range(args.iter), desc=f"Optimizing ({args.method.upper()}{'+Color' if args.use_color else ''})")
+    return_types = ["mask", "depth", "colors"] if args.use_color else ["mask", "depth"]
+
     for it in pbar:
         optimizer.zero_grad()
 
@@ -160,47 +179,88 @@ if __name__ == "__main__":
         cameras = render.get_random_camera_batch(args.batch, iter_res=args.train_res, device=device)
 
         # Render ground truth mesh from sampled views
-        target = render.render_mesh(glctx, gt_mesh, cameras, args.train_res, return_types=["mask", "depth"])
+        target = render.render_mesh(glctx, gt_mesh, cameras, args.train_res, return_types=return_types)
 
         # Extract differentiable isosurface mesh
-        if args.method == "mc":
+        if args.method == "mt":
+            if args.use_color:
+                mc_vertices, mc_faces, mc_colors = marching_tetrahedra(
+                    tet_points,
+                    tets,
+                    sdfs,
+                    colors=colors,
+                    iso=0.0
+                )
+                if mc_vertices.shape[0] == 0:
+                    continue
+                extracted_mesh = kal.rep.SurfaceMesh(
+                    vertices=mc_vertices,
+                    faces=mc_faces.int(),
+                    vertex_colors=torch.clamp(mc_colors, 0.0, 1.0)
+                )
+            else:
+                mc_vertices, mc_faces = marching_tetrahedra(
+                    tet_points,
+                    tets,
+                    sdfs,
+                    iso=0.0
+                )
+                if mc_vertices.shape[0] == 0:
+                    continue
+                extracted_mesh = kal.rep.SurfaceMesh(
+                    vertices=mc_vertices,
+                    faces=mc_faces.int()
+                )
+
+        elif args.method == "mc":
             mc_vertices, mc_faces = diff_marching_cubes(
                 grid_vertices,
                 voxels,
                 sdf,
                 iso=0.0
             )[:2]
+            if mc_vertices.shape[0] == 0:
+                continue
+            extracted_mesh = kal.rep.SurfaceMesh(vertices=mc_vertices, faces=mc_faces.int())
+
         elif args.method == "dpsr":
             mc_vertices, mc_faces = dpsr_to_mesh(
                 points,
                 normals,
-                tet_points=tet_grid,
+                tet_points=tet_points,
                 tets=tets,
                 res=args.res,
                 iso=0.0
             )
+            if mc_vertices.shape[0] == 0:
+                continue
+            extracted_mesh = kal.rep.SurfaceMesh(vertices=mc_vertices, faces=mc_faces.int())
 
-        if mc_vertices.shape[0] == 0:
-            continue
-
-        extracted_mesh = kal.rep.SurfaceMesh(vertices=mc_vertices, faces=mc_faces.int())
-        buffers = render.render_mesh(glctx, extracted_mesh, cameras, args.train_res, return_types=["mask", "depth"])
+        buffers = render.render_mesh(glctx, extracted_mesh, cameras, args.train_res, return_types=return_types)
 
         # Multi-view Silhouette Mask & Depth Losses
         mask_loss = (buffers["mask"] - target["mask"]).abs().mean()
         depth_loss = ((((buffers["depth"] - target["depth"]) * target["mask"]) ** 2).sum(-1) + 1e-8).sqrt().mean() * 10.0
-
         total_loss = mask_loss + depth_loss
+
+        # Optional Differentiable RGB Color Loss
+        if args.use_color and "colors" in buffers and "colors" in target:
+            rgb_loss = ((buffers["colors"] - target["colors"]).abs() * target["mask"]).mean() * 10.0
+            total_loss = total_loss + rgb_loss
+
         total_loss.backward()
         optimizer.step()
         scheduler.step()
 
         if (it + 1) % 100 == 0 or it == args.iter - 1:
-            pbar.set_postfix({
+            postfix = {
                 "mask_loss": f"{mask_loss.item():.4f}",
                 "depth_loss": f"{depth_loss.item():.4f}",
                 "total_loss": f"{total_loss.item():.4f}"
-            })
+            }
+            if args.use_color and "colors" in buffers and "colors" in target:
+                postfix["rgb_loss"] = f"{rgb_loss.item():.4f}"
+            pbar.set_postfix(postfix)
 
     # 4. Export Output Artifacts
     os.makedirs(args.out_dir, exist_ok=True)
@@ -208,7 +268,20 @@ if __name__ == "__main__":
 
     # Save state as .pt file
     save_path = os.path.join(args.out_dir, f"{save_name}.pt")
-    if args.method == "mc":
+    if args.method == "mt":
+        state_dict = {
+            "sdfs": sdfs.detach().cpu(),
+            "tet_points": tet_points.detach().cpu(),
+            "tets": tets.detach().cpu(),
+            "res": args.res,
+            "method": "mt",
+            "use_color": args.use_color,
+        }
+        if args.use_color:
+            state_dict["colors"] = colors.detach().cpu()
+        torch.save(state_dict, save_path)
+
+    elif args.method == "mc":
         torch.save(
             {
                 "sdf": sdf.detach().cpu(),
@@ -224,7 +297,7 @@ if __name__ == "__main__":
             {
                 "points": points.detach().cpu(),
                 "normals": normals.detach().cpu(),
-                "tet_points": tet_grid.detach().cpu(),
+                "tet_points": tet_points.detach().cpu(),
                 "tets": tets.detach().cpu(),
                 "res": args.res,
                 "method": "dpsr",
@@ -235,7 +308,25 @@ if __name__ == "__main__":
 
     # Extract final reconstructed mesh and export as .obj file
     with torch.no_grad():
-        if args.method == "mc":
+        final_colors = None
+        if args.method == "mt":
+            if args.use_color:
+                final_verts, final_faces, final_colors = marching_tetrahedra(
+                    tet_points,
+                    tets,
+                    sdfs,
+                    colors=colors,
+                    iso=0.0
+                )
+                final_colors = torch.clamp(final_colors, 0.0, 1.0)
+            else:
+                final_verts, final_faces = marching_tetrahedra(
+                    tet_points,
+                    tets,
+                    sdfs,
+                    iso=0.0
+                )
+        elif args.method == "mc":
             final_verts, final_faces = diff_marching_cubes(
                 grid_vertices,
                 voxels,
@@ -246,12 +337,15 @@ if __name__ == "__main__":
             final_verts, final_faces = dpsr_to_mesh(
                 points,
                 normals,
-                tet_points=tet_grid,
+                tet_points=tet_points,
                 tets=tets,
                 res=args.res,
                 iso=0.0
             )
 
     obj_save_path = os.path.join(args.out_dir, f"{save_name}.obj")
-    write_obj(obj_save_path, final_verts.contiguous(), final_faces.contiguous().int())
+    if final_colors is not None:
+        write_obj(obj_save_path, final_verts.contiguous(), final_faces.contiguous().int(), colors=final_colors.contiguous())
+    else:
+        write_obj(obj_save_path, final_verts.contiguous(), final_faces.contiguous().int())
     print(f"Exported reconstructed 3D mesh ({final_verts.shape[0]:,} vertices, {final_faces.shape[0]:,} faces) to: {obj_save_path}")
