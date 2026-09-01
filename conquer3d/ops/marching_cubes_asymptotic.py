@@ -20,72 +20,50 @@ import torch
 from .. import _C
 
 
-class DiffMarchingCubesAsymptotic(torch.autograd.Function):
-    """PyTorch autograd Function for Topologically Consistent Marching Cubes on CUDA."""
-
-    @staticmethod
-    def forward(
-        ctx,
-        grid_vertices: torch.Tensor,
-        voxels: torch.Tensor,
-        sdf: torch.Tensor,
-        colors: Optional[torch.Tensor] = None,
-        iso: float = 0.0
-    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-        """Forward pass extracting watertight isosurface triangles.
-
-        Args:
-            ctx: PyTorch autograd context object.
-            grid_vertices (torch.Tensor): Float32 tensor of shape `(N, 3)` containing 3D grid
-                vertex coordinates on CUDA.
-            voxels (torch.Tensor): Int32 tensor of shape `(M, 8)` containing 8 corner vertex
-                indices per voxel cell in counter-clockwise convention on CUDA.
-            sdf (torch.Tensor): Float32 tensor of shape `(N,)` containing scalar SDF values on CUDA.
-            colors (torch.Tensor, optional): Float32 tensor of shape `(N, C)` containing vertex
-                colors or feature embeddings on CUDA. Defaults to None.
-            iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-                - extracted_vertices: Float32 tensor of shape `(V, 3)` with surface vertex positions.
-                - extracted_faces: Int32 tensor of shape `(F, 3)` with surface triangle indices.
-                - extracted_colors: Float32 tensor of shape `(V, C)` or None if colors was None.
-
-        Raises:
-            RuntimeError: If `grid_vertices`, `voxels`, or `sdf` are not on CUDA.
-        """
-        if not grid_vertices.is_cuda or not voxels.is_cuda or not sdf.is_cuda:
-            raise RuntimeError("marching_cubes_asymptotic requires CUDA tensors")
-
-        grid_vertices = grid_vertices.contiguous().float()
-        voxels = voxels.contiguous().int()
-        sdf = sdf.contiguous().float()
-        if colors is not None:
-            colors = colors.contiguous().float()
-
-        verts, faces, out_colors = _C.marching_cubes_asymptotic(
-            grid_vertices, voxels, sdf, colors, iso
-        )
-
-        ctx.save_for_backward(grid_vertices, voxels, sdf, colors, verts, faces)
-        ctx.iso = iso
-        ctx.has_colors = colors is not None
-
-        return verts, faces, out_colors
-
-    @staticmethod
-    def backward(ctx, grad_verts, grad_faces, grad_colors):
-        """Backward pass evaluating analytical adjoint gradients w.r.t. input SDF and colors."""
-        grid_vertices, voxels, sdf, colors, verts, faces = ctx.saved_tensors
-        iso = ctx.iso
-
-        if not sdf.requires_grad and (colors is None or not colors.requires_grad):
-            return None, None, None, None, None
-
-        grad_sdf = torch.zeros_like(sdf)
-        grad_colors_in = torch.zeros_like(colors) if colors is not None else None
-
-        return None, None, grad_sdf, grad_colors_in, None
+# NOTE: Differentiable autograd functionality is currently disabled/commented out.
+# class DiffMarchingCubesAsymptotic(torch.autograd.Function):
+#     """PyTorch autograd Function for Topologically Consistent Marching Cubes on CUDA."""
+# 
+#     @staticmethod
+#     def forward(
+#         ctx,
+#         grid_vertices: torch.Tensor,
+#         voxels: torch.Tensor,
+#         sdf: torch.Tensor,
+#         colors: Optional[torch.Tensor] = None,
+#         iso: float = 0.0
+#     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+#         if not grid_vertices.is_cuda or not voxels.is_cuda or not sdf.is_cuda:
+#             raise RuntimeError("marching_cubes_asymptotic requires CUDA tensors")
+# 
+#         grid_vertices = grid_vertices.contiguous().float()
+#         voxels = voxels.contiguous().int()
+#         sdf = sdf.contiguous().float()
+#         if colors is not None:
+#             colors = colors.contiguous().float()
+# 
+#         verts, faces, out_colors = _C.marching_cubes_asymptotic(
+#             grid_vertices, voxels, sdf, colors, iso
+#         )
+# 
+#         ctx.save_for_backward(grid_vertices, voxels, sdf, colors, verts, faces)
+#         ctx.iso = iso
+#         ctx.has_colors = colors is not None
+# 
+#         return verts, faces, out_colors
+# 
+#     @staticmethod
+#     def backward(ctx, grad_verts, grad_faces, grad_colors):
+#         grid_vertices, voxels, sdf, colors, verts, faces = ctx.saved_tensors
+#         iso = ctx.iso
+# 
+#         if not sdf.requires_grad and (colors is None or not colors.requires_grad):
+#             return None, None, None, None, None
+# 
+#         grad_sdf = torch.zeros_like(sdf)
+#         grad_colors_in = torch.zeros_like(colors) if colors is not None else None
+# 
+#         return None, None, grad_sdf, grad_colors_in, None
 
 
 def marching_cubes_asymptotic(
