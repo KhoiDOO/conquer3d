@@ -958,6 +958,7 @@ void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
 void TriangleMesh::fix_normals()
 {
     if (this->num_triangles == 0) return;
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
     
     if (!this->vertex_to_triangle_offsets.defined()) {
         this->compute_vertices_to_triangle_map();
