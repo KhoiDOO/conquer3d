@@ -23,6 +23,7 @@ from .diff_marching_tetrahedra_grid import diff_marching_tetrahedra_grid
 
 from .distance import one_sided_chamfer_distance, chamfer_distance, one_sided_hausdorff_distance, hausdorff_distance
 from .volint import single_view_volume_integral
+from .dpsr import dpsr, DPSR
 
 __all__ = [
     "marching_cubes",
@@ -33,6 +34,8 @@ __all__ = [
     "dual_marching_cubes",
     "dmc",
     "diff_marching_cubes",
+    "dpsr",
+    "DPSR",
     "one_sided_chamfer_distance",
     "chamfer_distance",
     "one_sided_hausdorff_distance",
