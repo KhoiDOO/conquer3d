@@ -20,111 +20,71 @@ import torch
 from .. import _C
 
 
-class DiffDualMarchingCubes(torch.autograd.Function):
-    """PyTorch autograd Function for Differentiable Dual Marching Cubes on CUDA.
-
-    Executes forward surface extraction with independent cell contours and Newton-Raphson
-    level-set projections, with analytical backward gradient propagation with respect to
-    input scalar SDF values and vertex colors.
-    """
-
-    @staticmethod
-    def forward(
-        ctx,
-        grid_vertices: torch.Tensor,
-        voxels: torch.Tensor,
-        sdf: torch.Tensor,
-        colors: Optional[torch.Tensor] = None,
-        voxel_vertices: Optional[torch.Tensor] = None,
-        iso: float = 0.0,
-        quad_split: bool = True,
-        project_iters: int = 5
-    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-        """Forward pass extracting manifold dual vertices and faces.
-
-        Args:
-            ctx: PyTorch autograd context object.
-            grid_vertices (torch.Tensor): Float32 tensor of shape `(N, 3)` containing 3D grid
-                vertex coordinates on CUDA.
-            voxels (torch.Tensor): Int32 tensor of shape `(M, 8)` containing 8 corner vertex
-                indices per voxel cell in counter-clockwise convention on CUDA.
-            sdf (torch.Tensor): Float32 tensor of shape `(N,)` containing scalar SDF values on CUDA.
-            colors (torch.Tensor, optional): Float32 tensor of shape `(N, C)` containing vertex
-                colors or feature embeddings on CUDA. Defaults to None.
-            voxel_vertices (torch.Tensor, optional): Float32 tensor of shape `(M, 3)` containing
-                precomputed inside-voxel vertex coordinates on CUDA. Defaults to None.
-            iso (float, optional): Isosurface extraction threshold. Defaults to 0.0.
-            quad_split (bool, optional): If True, splits dual quadrilaterals into 2 triangles
-                using optimal Delaunay angle criteria; if False, returns quads `(Q, 4)`.
-                Defaults to True.
-            project_iters (int, optional): Number of Newton-Raphson iterations to project dual
-                vertices onto the exact trilinear zero-isosurface. Defaults to 5.
-
-        Returns:
-            Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-                - extracted_vertices: Float32 tensor of shape `(V, 3)` with surface vertex positions.
-                - extracted_faces: Int32 tensor of shape `(F, 3)` (triangles) or `(Q, 4)` (quads).
-                - extracted_colors: Float32 tensor of shape `(V, C)` or None if colors was None.
-
-        Raises:
-            RuntimeError: If `grid_vertices`, `voxels`, or `sdf` are not on CUDA.
-        """
-        if not grid_vertices.is_cuda or not voxels.is_cuda or not sdf.is_cuda:
-            raise RuntimeError("dual_marching_cubes requires CUDA tensors")
-
-        grid_vertices = grid_vertices.contiguous().float()
-        voxels = voxels.contiguous().int()
-        sdf = sdf.contiguous().float()
-
-        if colors is not None:
-            colors = colors.contiguous().float()
-        if voxel_vertices is not None:
-            voxel_vertices = voxel_vertices.contiguous().float()
-
-        verts, faces, out_colors = _C.dual_marching_cubes(
-            grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters
-        )
-
-        ctx.save_for_backward(grid_vertices, voxels, sdf, colors)
-        ctx.iso = iso
-        ctx.project_iters = project_iters
-        ctx.has_colors = colors is not None
-
-        return verts, faces, out_colors
-
-    @staticmethod
-    def backward(ctx, grad_verts, grad_faces, grad_colors):
-        """Backward pass evaluating analytical adjoint gradients w.r.t. input SDF and colors.
-
-        Args:
-            ctx: PyTorch autograd context object containing saved forward tensors.
-            grad_verts (torch.Tensor): Float32 tensor of shape `(V, 3)` containing upstream vertex gradients.
-            grad_faces (torch.Tensor): Upstream face gradients (unused, non-differentiable discrete topology).
-            grad_colors (torch.Tensor, optional): Float32 tensor of shape `(V, C)` containing upstream color gradients.
-
-        Returns:
-            Tuple[None, None, torch.Tensor, Optional[torch.Tensor], None, None, None, None]:
-                Gradients corresponding to (grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters).
-        """
-        grid_vertices, voxels, sdf, colors = ctx.saved_tensors
-        iso = ctx.iso
-        project_iters = ctx.project_iters
-
-        if not sdf.requires_grad and (colors is None or not colors.requires_grad):
-            return None, None, None, None, None, None, None, None
-
-        grad_sdf, grad_colors_in = _C.dual_marching_cubes_backward(
-            grad_verts.contiguous(),
-            grad_colors.contiguous() if grad_colors is not None else None,
-            grid_vertices,
-            voxels,
-            sdf,
-            colors,
-            iso,
-            project_iters
-        )
-
-        return None, None, grad_sdf, grad_colors_in, None, None, None, None
+# NOTE: Differentiable autograd functionality is currently disabled/commented out.
+# class DiffDualMarchingCubes(torch.autograd.Function):
+#     """PyTorch autograd Function for Differentiable Dual Marching Cubes on CUDA.
+# 
+#     Executes forward surface extraction with independent cell contours and Newton-Raphson
+#     level-set projections, with analytical backward gradient propagation with respect to
+#     input scalar SDF values and vertex colors.
+#     """
+# 
+#     @staticmethod
+#     def forward(
+#         ctx,
+#         grid_vertices: torch.Tensor,
+#         voxels: torch.Tensor,
+#         sdf: torch.Tensor,
+#         colors: Optional[torch.Tensor] = None,
+#         voxel_vertices: Optional[torch.Tensor] = None,
+#         iso: float = 0.0,
+#         quad_split: bool = True,
+#         project_iters: int = 5
+#     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+#         if not grid_vertices.is_cuda or not voxels.is_cuda or not sdf.is_cuda:
+#             raise RuntimeError("dual_marching_cubes requires CUDA tensors")
+# 
+#         grid_vertices = grid_vertices.contiguous().float()
+#         voxels = voxels.contiguous().int()
+#         sdf = sdf.contiguous().float()
+# 
+#         if colors is not None:
+#             colors = colors.contiguous().float()
+#         if voxel_vertices is not None:
+#             voxel_vertices = voxel_vertices.contiguous().float()
+# 
+#         verts, faces, out_colors = _C.dual_marching_cubes(
+#             grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters
+#         )
+# 
+#         ctx.save_for_backward(grid_vertices, voxels, sdf, colors)
+#         ctx.iso = iso
+#         ctx.project_iters = project_iters
+#         ctx.has_colors = colors is not None
+# 
+#         return verts, faces, out_colors
+# 
+#     @staticmethod
+#     def backward(ctx, grad_verts, grad_faces, grad_colors):
+#         grid_vertices, voxels, sdf, colors = ctx.saved_tensors
+#         iso = ctx.iso
+#         project_iters = ctx.project_iters
+# 
+#         if not sdf.requires_grad and (colors is None or not colors.requires_grad):
+#             return None, None, None, None, None, None, None, None
+# 
+#         grad_sdf, grad_colors_in = _C.dual_marching_cubes_backward(
+#             grad_verts.contiguous(),
+#             grad_colors.contiguous() if grad_colors is not None else None,
+#             grid_vertices,
+#             voxels,
+#             sdf,
+#             colors,
+#             iso,
+#             project_iters
+#         )
+# 
+#         return None, None, grad_sdf, grad_colors_in, None, None, None, None
 
 
 def dual_marching_cubes(
@@ -195,14 +155,14 @@ def dual_marching_cubes(
             raise ValueError(f"voxel_vertices must have shape (M, 3) matching voxels ({voxels.shape[0]}, 3), got {voxel_vertices.shape}")
         voxel_vertices = voxel_vertices.contiguous()
 
-    if sdf.requires_grad or (colors is not None and colors.requires_grad):
-        verts, faces, out_colors = DiffDualMarchingCubes.apply(
-            grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters
-        )
-    else:
-        verts, faces, out_colors = _C.dual_marching_cubes(
-            grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters
-        )
+    # if sdf.requires_grad or (colors is not None and colors.requires_grad):
+    #     verts, faces, out_colors = DiffDualMarchingCubes.apply(
+    #         grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters
+    #     )
+    # else:
+    verts, faces, out_colors = _C.dual_marching_cubes(
+        grid_vertices, voxels, sdf, colors, voxel_vertices, iso, quad_split, project_iters
+    )
 
     if colors is None:
         return verts, faces
