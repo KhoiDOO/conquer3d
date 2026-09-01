@@ -97,15 +97,17 @@ def tmesh2sparse(
     pad: int = 0,
     return_normals: bool = False,
     normal_mode: int = 0,
-    drop_empty_vertex_voxels: bool = False
+    drop_empty_vertex_voxels: bool = False,
+    return_sdf: bool = True
 ) -> Union[
+    Tuple[torch.Tensor, torch.Tensor],
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 ]:
     """Computes Signed Distance Fields on sparse voxel grids strictly near the surface.
 
     Completely bypasses dense $O(R^3)$ volume allocation by querying the mesh BVH,
-    re-indexing sparse active vertices, and evaluating SDF solely on active points.
+    re-indexing sparse active vertices, and optionally evaluating SDF solely on active points.
 
     Args:
         tm (TriangleMesh): Input TriangleMesh GPU object.
@@ -126,11 +128,19 @@ def tmesh2sparse(
         return_normals (bool, optional): If True, returns surface normal vectors. Defaults to False.
         normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector).
         drop_empty_vertex_voxels (bool, optional): If True, drops voxels containing no mesh vertices inside their bounding box. Defaults to False.
+        return_sdf (bool, optional): If True, queries and returns the Signed Distance Field on sparse grid vertices.
+            If False, skips SDF evaluation entirely. Defaults to True.
 
     Returns:
-        Union[Tuple[torch.Tensor, torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
-            - If `return_normals=False`: `(sparse_grid_vertices, active_voxels, sdfs)`
-            - If `return_normals=True`: `(sparse_grid_vertices, active_voxels, sdfs, grid_normals)`
+        Union[
+            Tuple[torch.Tensor, torch.Tensor],
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+        ]:
+            - If `return_sdf=True` and `return_normals=False`: `(sparse_grid_vertices, active_voxels, sdfs)`
+            - If `return_sdf=True` and `return_normals=True`: `(sparse_grid_vertices, active_voxels, sdfs, grid_normals)`
+            - If `return_sdf=False` and `return_normals=False`: `(sparse_grid_vertices, active_voxels)`
+            - If `return_sdf=False` and `return_normals=True`: `(sparse_grid_vertices, active_voxels, grid_normals)`
     """
     if grid_min is None:
         grid_min = [-1.0, -1.0, -1.0]
@@ -155,6 +165,11 @@ def tmesh2sparse(
         )
     
     num_points = grid_vertices.shape[0]
+    if not return_sdf:
+        if return_normals:
+            return grid_vertices, active_voxels.to(torch.int64), grid_normals
+        return grid_vertices, active_voxels.to(torch.int64)
+
     if num_points == 0:
         sdfs = torch.empty(0, dtype=torch.float32, device=device)
         if return_normals:
