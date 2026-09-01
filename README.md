@@ -34,6 +34,7 @@
 - **Dual Marching Cubes (`dmc`)**: High-throughput manifold surface extraction with pure quad $(Q, 4)$ or triangle $(F, 3)$ outputs (~1.0B faces/s).
 - **Dual Contouring (`dc`)**: Sharp CAD crease and mechanical corner preservation via GPU Quadratic Error Function (QEF) solving.
 - **Marching Cubes Asymptotic (`mca`)**: Decider-enhanced Marching Cubes resolving topological face ambiguities on-the-fly.
+- **Differentiable Poisson Surface Reconstruction (`dpsr`, `DPSR`)**: Differentiable spectral Fourier Poisson indicator field solving directly from oriented point clouds.
 - **Differentiable Marching Cubes (`diff_marching_cubes`)**: PyTorch autograd gradient backpropagation through levelsets into SDF and color fields.
 - **Marching Tetrahedra (`marching_tetrahedra`, `marching_tetrahedra_grid`)**: Consistent isosurface extraction across unstructured meshes and regular cubic tetrahedral grids.
 
