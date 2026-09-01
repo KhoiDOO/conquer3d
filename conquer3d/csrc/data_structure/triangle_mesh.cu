@@ -580,13 +580,11 @@ namespace triangle_mesh
         unique_keys = unique_keys.slice(0, 0, num_unique_edges);
         out_counts = out_counts.slice(0, 0, num_unique_edges);
 
-        out_offsets = torch::empty({num_unique_edges}, options_i32);
-        thrust::exclusive_scan(
-            policy,
-            out_counts.data_ptr<int>(),
-            out_counts.data_ptr<int>() + num_unique_edges,
-            out_offsets.data_ptr<int>()
-        );
+        out_offsets = torch::zeros({num_unique_edges}, options_i32);
+        if (num_unique_edges > 1) {
+            torch::Tensor cumsum = torch::cumsum(out_counts.slice(0, 0, num_unique_edges - 1), 0, torch::kInt32);
+            out_offsets.slice(0, 1, num_unique_edges).copy_(cumsum);
+        }
 
         out_unique_edges = torch::empty({num_unique_edges, 2}, options_i32);
         int blocks2 = (num_unique_edges + threads - 1) / threads;
@@ -657,13 +655,11 @@ namespace triangle_mesh
             out_counts.data_ptr<int>()
         );
 
-        out_offsets = torch::empty({num_vertices}, options_i32);
-        thrust::exclusive_scan(
-            policy,
-            out_counts.data_ptr<int>(),
-            out_counts.data_ptr<int>() + num_vertices,
-            out_offsets.data_ptr<int>()
-        );
+        out_offsets = torch::zeros({num_vertices}, options_i32);
+        if (num_vertices > 1) {
+            torch::Tensor cumsum = torch::cumsum(out_counts.slice(0, 0, num_vertices - 1), 0, torch::kInt32);
+            out_offsets.slice(0, 1, num_vertices).copy_(cumsum);
+        }
 
         // We need a temporary copy of offsets to use as sliding pointers
         torch::Tensor current_offsets = out_offsets.clone();
@@ -1290,6 +1286,7 @@ namespace triangle_mesh
         const torch::Tensor &v2t_indices,
         int3 *__restrict__ triangles)
     {
+        at::cuda::CUDAGuard device_guard(v2t_offsets.device());
         auto options = torch::TensorOptions().device(v2t_offsets.device()).dtype(torch::kInt32);
         torch::Tensor visited = torch::zeros({num_triangles}, options);
         torch::Tensor frontier = torch::empty({num_triangles}, options);
@@ -1301,66 +1298,68 @@ namespace triangle_mesh
         int *d_next_frontier = next_frontier.data_ptr<int>();
         int *d_component_faces = component_faces.data_ptr<int>();
         
-        int *d_seed; cudaMalloc(&d_seed, sizeof(int));
-        int *d_found; cudaMalloc(&d_found, sizeof(int));
-        int *d_next_frontier_size; cudaMalloc(&d_next_frontier_size, sizeof(int));
+        torch::Tensor seed_t = torch::zeros({1}, options);
+        torch::Tensor found_t = torch::zeros({1}, options);
+        torch::Tensor next_frontier_size_t = torch::zeros({1}, options);
+        int *d_seed = seed_t.data_ptr<int>();
+        int *d_found = found_t.data_ptr<int>();
+        int *d_next_frontier_size = next_frontier_size_t.data_ptr<int>();
         
         int h_found = 0;
         int h_seed = 0;
         
         while (true) {
-            cudaMemset(d_found, 0, sizeof(int));
+            cudaMemsetAsync(d_found, 0, sizeof(int), at::cuda::getCurrentCUDAStream());
             int blocks = (num_triangles + NTHREADS - 1) / NTHREADS;
-            find_unvisited_kernel<<<blocks, NTHREADS>>>(num_triangles, d_visited, d_seed, d_found);
-            cudaMemcpy(&h_found, d_found, sizeof(int), cudaMemcpyDeviceToHost);
+            find_unvisited_kernel<<<blocks, NTHREADS, 0, at::cuda::getCurrentCUDAStream()>>>(num_triangles, d_visited, d_seed, d_found);
+            cudaMemcpyAsync(&h_found, d_found, sizeof(int), cudaMemcpyDeviceToHost, at::cuda::getCurrentCUDAStream());
+            c10::cuda::getCurrentCUDAStream().synchronize();
             
             if (h_found == 0) break;
             
-            cudaMemcpy(&h_seed, d_seed, sizeof(int), cudaMemcpyDeviceToHost);
+            cudaMemcpyAsync(&h_seed, d_seed, sizeof(int), cudaMemcpyDeviceToHost, at::cuda::getCurrentCUDAStream());
+            c10::cuda::getCurrentCUDAStream().synchronize();
             
             int h_one = 1;
-            cudaMemcpy(&d_visited[h_seed], &h_one, sizeof(int), cudaMemcpyHostToDevice);
-            cudaMemcpy(&d_frontier[0], &h_seed, sizeof(int), cudaMemcpyHostToDevice);
+            cudaMemcpyAsync(&d_visited[h_seed], &h_one, sizeof(int), cudaMemcpyHostToDevice, at::cuda::getCurrentCUDAStream());
+            cudaMemcpyAsync(&d_frontier[0], &h_seed, sizeof(int), cudaMemcpyHostToDevice, at::cuda::getCurrentCUDAStream());
             
             int frontier_size = 1;
             int component_size = 0;
             
             while (frontier_size > 0) {
-                cudaMemcpy(&d_component_faces[component_size], d_frontier, frontier_size * sizeof(int), cudaMemcpyDeviceToDevice);
+                cudaMemcpyAsync(&d_component_faces[component_size], d_frontier, frontier_size * sizeof(int), cudaMemcpyDeviceToDevice, at::cuda::getCurrentCUDAStream());
                 component_size += frontier_size;
                 
-                cudaMemset(d_next_frontier_size, 0, sizeof(int));
+                cudaMemsetAsync(d_next_frontier_size, 0, sizeof(int), at::cuda::getCurrentCUDAStream());
                 
                 int bfs_blocks = (frontier_size + NTHREADS - 1) / NTHREADS;
-                fix_winding_bfs_kernel<<<bfs_blocks, NTHREADS>>>(
+                fix_winding_bfs_kernel<<<bfs_blocks, NTHREADS, 0, at::cuda::getCurrentCUDAStream()>>>(
                     num_triangles, triangles, 
                     v2t_offsets.data_ptr<int>(), v2t_counts.data_ptr<int>(), v2t_indices.data_ptr<int>(),
                     d_visited, d_frontier, frontier_size, d_next_frontier, d_next_frontier_size);
                     
-                cudaMemcpy(&frontier_size, d_next_frontier_size, sizeof(int), cudaMemcpyDeviceToHost);
+                cudaMemcpyAsync(&frontier_size, d_next_frontier_size, sizeof(int), cudaMemcpyDeviceToHost, at::cuda::getCurrentCUDAStream());
+                c10::cuda::getCurrentCUDAStream().synchronize();
                 
                 int *tmp = d_frontier;
                 d_frontier = d_next_frontier;
                 d_next_frontier = tmp;
             }
             
-            auto vol_options = torch::TensorOptions().device(torch::kCUDA, ::c10::cuda::current_device()).dtype(torch::kFloat32);
+            auto vol_options = torch::TensorOptions().device(v2t_offsets.device()).dtype(torch::kFloat32);
             torch::Tensor volumes = torch::empty({component_size}, vol_options);
             
             int vol_blocks = (component_size + NTHREADS - 1) / NTHREADS;
-            component_signed_volume_kernel<<<vol_blocks, NTHREADS>>>(
+            component_signed_volume_kernel<<<vol_blocks, NTHREADS, 0, at::cuda::getCurrentCUDAStream()>>>(
                 component_size, d_component_faces, vertices, triangles, volumes.data_ptr<float>());
                 
             float comp_volume = volumes.sum().item<float>();
             
             if (comp_volume < 0.0f) {
-                invert_component_kernel<<<vol_blocks, NTHREADS>>>(
+                invert_component_kernel<<<vol_blocks, NTHREADS, 0, at::cuda::getCurrentCUDAStream()>>>(
                     component_size, d_component_faces, triangles);
             }
         }
-        
-        cudaFree(d_seed);
-        cudaFree(d_found);
-        cudaFree(d_next_frontier_size);
     }
 }
