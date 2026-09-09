@@ -227,6 +227,12 @@ FIGURES = [
         "Every quality metric a mesh reports, drawn on the mesh with its mean value.",
         False,
     ),
+    (
+        "fig-kdtree", "Nearest neighbours", "Search",
+        "Five query points in a 24,000-point cloud sampled from the bunny, with "
+        "one neighbourhood shown close up as k grows.",
+        False,
+    ),
 ]
 
 

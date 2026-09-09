@@ -1142,6 +1142,105 @@ def fig_quality(rnd):
     )
 
 
+KDT_POINTS = 24_000
+AZ_KDT = 215
+
+
+def fig_kdtree(rnd):
+    """k nearest neighbours on a sampled point set, whole and close up."""
+    from conquer3d._C import KDTree
+
+    tmesh = load_mesh(_asset("StanfordBunny"))
+    tmesh.fix_normals()
+    # A point set, not the mesh: the KD-tree indexes points, and drawing the
+    # surface would suggest it knows about connectivity it never sees.
+    pts = R.normalize_mesh(tmesh.sample_points(KDT_POINTS)[0].contiguous())
+    tree = KDTree(pts)
+
+    # Queries on the camera-facing side, spread apart, so no neighbourhood ends
+    # up hidden behind the cloud.
+    a_r, e_r = math.radians(AZ_KDT), math.radians(14.0)
+    eye = torch.tensor([math.cos(e_r) * math.sin(a_r), math.sin(e_r),
+                        math.cos(e_r) * math.cos(a_r)], device=DEV)
+    cand = ((torch.nn.functional.normalize(pts, dim=-1) @ eye) > 0.4)
+    cand = cand.nonzero(as_tuple=False).reshape(-1)
+    picks = [cand[0]]
+    for _ in range(4):
+        d = torch.cdist(pts[cand], pts[torch.stack(picks)]).min(1).values
+        picks.append(cand[int(d.argmax())])
+    picks = torch.stack(picks)
+    queries = pts[picks].contiguous()
+
+    QUERY_COLS = torch.tensor([[0.13, 0.83, 0.93], [0.46, 0.73, 0.00],
+                               [0.65, 0.55, 0.98], [0.98, 0.75, 0.14],
+                               [0.98, 0.44, 0.52]], device=DEV)
+    CLOUD = torch.tensor([0.78, 0.81, 0.86], device=DEV)
+
+    # exclude_self reserves a slot internally, so k = 32 raises with it set even
+    # though the documented ceiling is MAX_K = 32; 31 is the usable maximum.
+    KS = (4, 12, 31)
+    results = {k: tree.query(queries, k=k, exclude_self=True) for k in KS}
+
+    def paint(k):
+        dist, idx = results[k]
+        idx = idx.long()
+        cols = CLOUD[None, :].expand(pts.shape[0], 3).clone()
+        sizes = torch.full((pts.shape[0], 1), POINT_SIZE * 0.72, device=DEV)
+        for q in range(queries.shape[0]):
+            cols[idx[q]] = QUERY_COLS[q]
+        sizes[idx.reshape(-1)] = POINT_SIZE * 1.45
+        cols[picks] = QUERY_COLS[: picks.shape[0]] * 0.5
+        sizes[picks] = POINT_SIZE * 2.3
+        # Distances come back squared, so a radius needs the square root.
+        return cols, sizes, float(dist.max().sqrt())
+
+    panels, labels, subs = [], [], []
+
+    # --- the whole cloud, for context --------------------------------------
+    cols, sizes, radius = paint(KS[-1])
+    panels.append(point_cloud(rnd, pts, cols, azimuth=AZ_KDT, elevation=14,
+                              size=sizes, rim_strength=0.12))
+    labels.append("Point cloud")
+    subs.append(f"{pts.shape[0]:,} points · 5 queries")
+
+    # --- one neighbourhood, close up, as k grows ---------------------------
+    # The zoom is on the query whose neighbourhood is densest, so the growth
+    # from k = 4 to k = 31 is visible rather than lost in the sampling noise.
+    _, widest = results[KS[-1]]
+    focus = int(results[KS[-1]][0].max(dim=1).values.argmin())
+    target = queries[focus].tolist()
+    span = float(results[KS[-1]][0][focus].max().sqrt())
+
+    # Only the points around the query are drawn. Rendering the whole cloud at
+    # this magnification turns every unrelated point into a foreground block
+    # that hides the neighbourhood behind it.
+    ball = span * 3.2
+    near = ((pts - queries[focus]).norm(dim=-1) < ball)
+    near = near.nonzero(as_tuple=False).reshape(-1)
+
+    for k in KS:
+        cols, sizes, radius = paint(k)
+        panels.append(point_cloud(rnd, pts[near], cols[near], azimuth=AZ_KDT,
+                                  elevation=14, size=sizes[near] * 0.42,
+                                  target=target, fit_radius=ball,
+                                  rim_strength=0.12))
+        labels.append(f"k = {k}")
+        subs.append(f"radius {radius:.3f}")
+        print(f"    k={k:<3} {queries.shape[0]} queries  {results[k][1].numel():>4} "
+              f"neighbours  max radius {radius:.4f}")
+
+    # Not trimmed: the zoomed panels fill their frame, so a shared crop box
+    # would be the whole frame and the context panel would keep every pixel of
+    # its margin while the zooms keep none. Two columns keeps the figure squarish
+    # for the gallery rather than four panels wide and unreadable.
+    compose.save(
+        compose.grid(panels, labels, sublabels=subs, cols=2,
+                     accents=[(150, 158, 176), (34, 211, 238),
+                              (118, 185, 0), (167, 139, 250)]),
+        OUT / "fig-kdtree.png",
+    )
+
+
 def _asset(name):
     import conquer3d.data.assets as assets
 
@@ -1162,6 +1261,7 @@ FIGURES = [
     ("normals", fig_normals, True),
     ("hermite", fig_hermite, True),
     ("quality", fig_quality, True),
+    ("kdtree", fig_kdtree, True),
 ]
 
 
