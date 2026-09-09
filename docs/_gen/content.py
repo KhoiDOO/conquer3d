@@ -71,6 +71,21 @@ TITLE_COMPLETIONS = {
 }
 
 
+def by_year(entries: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Bibliography entries oldest first.
+
+    Sorted here rather than in the markdown so an entry added anywhere in the
+    file lands in the right place. The sort is stable, so entries sharing a year
+    keep the order they were written in, and anything undated goes last rather
+    than being dropped or sorted as year zero.
+    """
+    def key(entry: Dict[str, str]) -> tuple:
+        digits = re.sub(r"\D", "", entry.get("year", ""))[:4]
+        return (1, 0) if not digits else (0, int(digits))
+
+    return sorted(entries, key=key)
+
+
 def _citation(entry: Dict[str, str]) -> str:
     authors = entry.get("author", "")
     if authors:
@@ -702,8 +717,8 @@ def about(version: str, ack_dir: Path, stats: Dict[str, int]) -> str:
         path = ack_dir / name
         return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
 
-    papers = parse_bibtex(read("REFERENCE.md"))
-    books = parse_bibtex(read("BOOK.md"))
+    papers = by_year(parse_bibtex(read("REFERENCE.md")))
+    books = by_year(parse_bibtex(read("BOOK.md")))
     repos = parse_links(read("REPOSITORY.md"))
     posts = parse_links(read("BLOG_POST.md"))
 
