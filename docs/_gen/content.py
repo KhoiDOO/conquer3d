@@ -769,10 +769,15 @@ def about(version: str, ack_dir: Path, stats: Dict[str, int]) -> str:
 </section>
 
 <section class="section wrap">
-  <div class="section-head"><span class="kicker">Bibliography</span><h2>Blog posts &amp; repositories</h2>
-  <p>Practical GPU traversal and construction writing, and the open-source implementations this
-  project learned from.</p></div>
-  <div class="bib-grid">{link_cards(posts, "Blog")}{link_cards(repos, "Repository")}</div>
+  <div class="section-head"><span class="kicker">Bibliography</span><h2>Blog posts</h2>
+  <p>Practical writing on GPU traversal and parallel construction.</p></div>
+  <div class="bib-grid">{link_cards(posts, "Blog")}</div>
+</section>
+
+<section class="section wrap">
+  <div class="section-head"><span class="kicker">Bibliography</span><h2>Repositories</h2>
+  <p>The open-source implementations this project learned from.</p></div>
+  <div class="bib-grid">{link_cards(repos, "Repository")}</div>
 </section>
 
 <section class="section wrap" style="border-bottom:none">
