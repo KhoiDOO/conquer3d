@@ -1,10 +1,9 @@
 """Narrative pages: showcase, documentation, and about.
 
-Content is derived from the repository's own sources -- ``README.md`` for the
-feature taxonomy, benchmarks and quickstarts, and ``acknowledgement/*.md`` for
-the bibliography -- so the site stays truthful to what the project actually
-claims about itself. The BibTeX and link lists are parsed rather than retyped,
-which keeps the References section in step with the repo.
+The bibliography is parsed from ``docs/acknowledgement/*.md`` rather than
+retyped, so the References section stays in step with the author's own notes.
+Those files live under ``docs/`` because they are a source for this site and
+nothing else consumes them.
 """
 
 from __future__ import annotations

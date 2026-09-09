@@ -570,7 +570,7 @@ def main() -> int:
             base="",
             active="about.html",
             version=version,
-            body=content.about(version, ROOT / "acknowledgement", stats),
+            body=content.about(version, DOCS / "acknowledgement", stats),
             wide=True,
         ),
         encoding="utf-8",
