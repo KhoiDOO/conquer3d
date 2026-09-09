@@ -1,10 +1,9 @@
 """Narrative pages: showcase, documentation, and about.
 
-Content is derived from the repository's own sources -- ``README.md`` for the
-feature taxonomy, benchmarks and quickstarts, and ``acknowledgement/*.md`` for
-the bibliography -- so the site stays truthful to what the project actually
-claims about itself. The BibTeX and link lists are parsed rather than retyped,
-which keeps the References section in step with the repo.
+The bibliography is parsed from ``docs/acknowledgement/*.md`` rather than
+retyped, so the References section stays in step with the author's own notes.
+Those files live under ``docs/`` because they are a source for this site and
+nothing else consumes them.
 """
 
 from __future__ import annotations
@@ -72,6 +71,26 @@ TITLE_COMPLETIONS = {
 }
 
 
+def _host(url: str) -> str:
+    """Domain of a URL, for a compact 'where does this lead' line."""
+    return re.sub(r"^https?://(www\.)?", "", url).split("/")[0]
+
+
+def by_year(entries: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Bibliography entries oldest first.
+
+    Sorted here rather than in the markdown so an entry added anywhere in the
+    file lands in the right place. The sort is stable, so entries sharing a year
+    keep the order they were written in, and anything undated goes last rather
+    than being dropped or sorted as year zero.
+    """
+    def key(entry: Dict[str, str]) -> tuple:
+        digits = re.sub(r"\D", "", entry.get("year", ""))[:4]
+        return (1, 0) if not digits else (0, int(digits))
+
+    return sorted(entries, key=key)
+
+
 def _citation(entry: Dict[str, str]) -> str:
     authors = entry.get("author", "")
     if authors:
@@ -96,11 +115,7 @@ def _citation(entry: Dict[str, str]) -> str:
         title = f'<a href="{esc(url)}">{title}</a>'
 
     meta = " · ".join(p for p in (esc(authors), esc(venue), esc(year)) if p)
-    kind = "Book" if entry.get("_type") == "book" else "Paper"
-    return (
-        f'<div class="card"><span class="idx">{kind}</span>'
-        f"<h3>{title}</h3><p>{meta}</p></div>"
-    )
+    return f'<div class="bib"><h3>{title}</h3><p>{meta}</p></div>'
 
 
 # --------------------------------------------------------------------------- #
@@ -703,16 +718,17 @@ def about(version: str, ack_dir: Path, stats: Dict[str, int]) -> str:
         path = ack_dir / name
         return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
 
-    papers = parse_bibtex(read("REFERENCE.md"))
-    books = parse_bibtex(read("BOOK.md"))
+    papers = by_year(parse_bibtex(read("REFERENCE.md")))
+    books = by_year(parse_bibtex(read("BOOK.md")))
     repos = parse_links(read("REPOSITORY.md"))
     posts = parse_links(read("BLOG_POST.md"))
 
     def link_cards(items: List[Dict[str, str]], kind: str) -> str:
+        # The title carries the link, so spelling the URL out again only costs
+        # height; the host is the part that says where it leads.
         return "".join(
-            f'<div class="card"><span class="idx">{kind}</span>'
-            f'<h3><a href="{esc(i["url"])}">{esc(i["title"])}</a></h3>'
-            f'<p style="font-size:.8rem;word-break:break-all">{esc(i["url"])}</p></div>'
+            f'<div class="bib"><h3><a href="{esc(i["url"])}">{esc(i["title"])}</a></h3>'
+            f'<p><span class="bib-tag">{esc(kind)}</span> {esc(_host(i["url"]))}</p></div>'
             for i in items
         )
 
@@ -744,19 +760,24 @@ def about(version: str, ack_dir: Path, stats: Dict[str, int]) -> str:
 <section class="section wrap">
   <div class="section-head"><span class="kicker">Bibliography</span><h2>Research papers</h2>
   <p>The algorithms implemented here come from published work. These are the primary sources.</p></div>
-  <div class="grid grid-2">{papers_html}</div>
+  <div class="bib-grid">{papers_html}</div>
 </section>
 
 <section class="section wrap">
   <div class="section-head"><span class="kicker">Bibliography</span><h2>Books</h2></div>
-  <div class="grid grid-2">{books_html}</div>
+  <div class="bib-grid">{books_html}</div>
 </section>
 
 <section class="section wrap">
-  <div class="section-head"><span class="kicker">Bibliography</span><h2>Blog posts &amp; repositories</h2>
-  <p>Practical GPU traversal and construction writing, and the open-source implementations this
-  project learned from.</p></div>
-  <div class="grid grid-3">{link_cards(posts, "Blog")}{link_cards(repos, "Repository")}</div>
+  <div class="section-head"><span class="kicker">Bibliography</span><h2>Blog posts</h2>
+  <p>Practical writing on GPU traversal and parallel construction.</p></div>
+  <div class="bib-grid">{link_cards(posts, "Blog")}</div>
+</section>
+
+<section class="section wrap">
+  <div class="section-head"><span class="kicker">Bibliography</span><h2>Repositories</h2>
+  <p>The open-source implementations this project learned from.</p></div>
+  <div class="bib-grid">{link_cards(repos, "Repository")}</div>
 </section>
 
 <section class="section wrap" style="border-bottom:none">
