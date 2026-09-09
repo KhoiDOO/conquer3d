@@ -621,19 +621,19 @@ html[data-theme="light"] .tok-fn { color: #0e7490; }
 /* Full-width figure cards are far wider than a comfortable measure, so the
    caption becomes two columns -- title on the left, prose on the right --
    rather than one paragraph stranded against the left edge. */
-.fig-grid--wide .fig-body p { max-width: none; }
+.fig--lead .fig-body p { max-width: none; }
 @media (min-width: 1000px) {
-  .fig-grid--wide .fig-body {
+  .fig--lead .fig-body {
     display: grid;
     grid-template-columns: minmax(190px, 0.42fr) minmax(0, 1fr);
     column-gap: 44px;
     align-items: start;
   }
-  .fig-grid--wide .fig-kicker { grid-column: 1; grid-row: 1; }
-  .fig-grid--wide .fig-body h3 { grid-column: 1; grid-row: 2; margin-bottom: 0; }
-  .fig-grid--wide .fig-body > p:not(.fig-note) { grid-column: 2; grid-row: 1 / span 3; }
-  .fig-grid--wide .fig-note { grid-column: 1; grid-row: 3; max-width: none; }
-  .fig-grid--wide .fig-meta { grid-column: 1 / -1; grid-row: 4; margin-top: 18px; }
+  .fig--lead .fig-kicker { grid-column: 1; grid-row: 1; }
+  .fig--lead .fig-body h3 { grid-column: 1; grid-row: 2; margin-bottom: 0; }
+  .fig--lead .fig-body > p:not(.fig-note) { grid-column: 2; grid-row: 1 / span 3; }
+  .fig--lead .fig-note { grid-column: 1; grid-row: 3; max-width: none; }
+  .fig--lead .fig-meta { grid-column: 1 / -1; grid-row: 4; margin-top: 18px; }
 }
 .fig-kicker {
   display: block; font: 600 12px/1 var(--mono); letter-spacing: .1em;
@@ -648,6 +648,17 @@ html[data-theme="light"] .tok-fn { color: #0e7490; }
 }
 
 .fig-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+
+/* The small figures differ a lot in image aspect and caption length. A grid row
+   stretches every card to the tallest in it, leaving dead space under the short
+   ones; column flow lets each card end where its content ends and the next one
+   begin there. */
+.fig-gallery { columns: 3 340px; column-gap: 18px; }
+.fig-gallery .fig {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  margin: 0 0 18px;
+}
 
 /* ------------------------------------------------------------- lightbox */
 
