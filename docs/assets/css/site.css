@@ -313,6 +313,27 @@ html[data-theme="light"] .btn-primary { color: #06210a; }
   opacity: 0; transition: opacity .18s;
 }
 .card:hover::before { opacity: 1; }
+/* Bibliography entries are one line of title and one of metadata, and there are
+   many of them. The general .card is padded for prose, so a denser card and a
+   narrower column minimum fit roughly twice as many on screen. */
+.bib-grid {
+  display: grid; gap: 10px;
+  /* auto-fill, not auto-fit: a section with only two entries should show two
+     normal-width cards, not two stretched across the whole row. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 265px), 1fr));
+}
+.bib {
+  border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px;
+  background: var(--surface); transition: border-color .18s;
+}
+.bib:hover { border-color: var(--line-strong); }
+.bib h3 { margin: 0 0 5px; font-size: .9rem; line-height: 1.35; font-weight: 600; }
+.bib p { margin: 0; color: var(--fg-dim); font-size: .795rem; line-height: 1.5; }
+.bib-tag {
+  font: 600 10px/1 var(--mono); text-transform: uppercase;
+  letter-spacing: .07em; color: var(--accent); margin-right: 5px;
+}
+
 .card h3 { margin-bottom: 9px; font-size: 1rem; }
 .card p { margin: 0; color: var(--fg-mid); font-size: .935rem; max-width: 68ch; }
 .card .idx { font: 600 10.5px/1 var(--mono); color: var(--fg-dim); margin-bottom: 13px; display: block; }
