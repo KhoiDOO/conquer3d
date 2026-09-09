@@ -233,6 +233,12 @@ FIGURES = [
         "one neighbourhood shown close up as k grows.",
         False,
     ),
+    (
+        "fig-fix-normals", "Orientation repair", "Repair",
+        "Half the triangle windings reversed at random, then recovered exactly "
+        "by `fix_normals`.",
+        False,
+    ),
 ]
 
 

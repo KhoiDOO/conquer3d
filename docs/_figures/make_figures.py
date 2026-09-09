@@ -1241,6 +1241,75 @@ def fig_kdtree(rnd):
     )
 
 
+AZ_FIX = 200
+
+
+def fig_fix_normals(rnd):
+    """Orientation destroyed at random, then recovered by fix_normals."""
+    from conquer3d.data_structure import TriangleMesh
+
+    tmesh = load_mesh(_asset("MaxPlanck"))
+    tmesh.fix_normals()                       # start from a consistent state
+    verts = R.normalize_mesh(tmesh.vertices).contiguous()
+    faces = tmesh.triangles.int().contiguous()
+    orig = faces.clone()
+    orig_n, _ = vertex_normals(tmesh)
+    orig_n = orig_n.clone()
+
+    # Destroy the orientation: reverse the winding of a random half of the
+    # faces, which is what an unreliable importer or a careless boolean leaves
+    # behind.
+    gen = torch.Generator(device="cpu").manual_seed(7)
+    flipped = (torch.rand(orig.shape[0], generator=gen) < 0.5).to(DEV)
+    broken = orig.clone()
+    broken[flipped] = broken[flipped][:, [0, 2, 1]]
+    n_broken = int(flipped.sum())
+
+    # TriangleMesh keeps a reference to the tensor it is given and fix_normals
+    # rewrites it in place, so the comparison needs an independent snapshot --
+    # measuring against the tensor that was handed over always reports zero.
+    snapshot = broken.clone()
+    mesh = TriangleMesh(verts, broken.int().contiguous())
+    bad_n, _ = vertex_normals(mesh)
+    bad_n = bad_n.clone()
+
+    mesh.fix_normals()
+    fixed_n, _ = vertex_normals(mesh)
+    reoriented = int((mesh.triangles != snapshot).any(dim=1).sum())
+    recovered = int((mesh.triangles == orig).all(dim=1).sum())
+    print(f"    {orig.shape[0]:,} faces; scrambled {n_broken:,}; "
+          f"fix_normals reoriented {reoriented:,}; "
+          f"winding recovered on {recovered:,}")
+
+    N = torch.nn.functional.normalize
+
+    def agreement(a, b):
+        c = (N(a, dim=-1) * N(b, dim=-1)).sum(-1)
+        c = c[torch.isfinite(c)]
+        return float((c > 0.9).float().mean())
+
+    shot = dict(flat=False, azimuth=AZ_FIX, elevation=12, rim_strength=0.12)
+    panels = [
+        rnd.render(verts, orig, colors=normal_rgb(orig_n), **shot),
+        rnd.render(verts, snapshot.int().contiguous(),
+                   colors=normal_rgb(bad_n), **shot),
+        rnd.render(verts, mesh.triangles.int().contiguous(),
+                   colors=normal_rgb(fixed_n), **shot),
+    ]
+    labels = ["As shipped", "Orientation destroyed", "fix_normals"]
+    subs = [f"{orig.shape[0]:,} faces",
+            f"{n_broken:,} windings reversed\n"
+            f"{100 * agreement(bad_n, orig_n):.0f}% of normals still agree",
+            f"{reoriented:,} reoriented\n"
+            f"{100 * agreement(fixed_n, orig_n):.0f}% of normals agree"]
+    accents = [(150, 158, 176), (251, 113, 133), (118, 185, 0)]
+
+    compose.save(
+        compose.grid(compose.trim(panels), labels, sublabels=subs, accents=accents),
+        OUT / "fig-fix-normals.png",
+    )
+
+
 def _asset(name):
     import conquer3d.data.assets as assets
 
@@ -1262,6 +1331,7 @@ FIGURES = [
     ("hermite", fig_hermite, True),
     ("quality", fig_quality, True),
     ("kdtree", fig_kdtree, True),
+    ("fix normals", fig_fix_normals, True),
 ]
 
 
