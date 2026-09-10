@@ -576,12 +576,13 @@ bool TriangleMesh::is_self_intersection()
     return self_int;
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleMesh::query_points(
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleMesh::query_points(
     const torch::Tensor &query_pts,
     bool return_sdf,
     bool return_prj_pts,
     int sign_mode,
-    int distance_mode)
+    int distance_mode,
+    bool return_occ)
 {
     if (distance_mode == 0)
     {
@@ -609,7 +610,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> TriangleM
             (sign_mode == 5) ? this->cf_boundary_lookup : std::nullopt,
             (sign_mode == 5) ? this->cf_fine_masks : std::nullopt,
             (sign_mode == 5) ? this->cf_block_size : std::nullopt,
-            (sign_mode == 5) ? this->cf_coarse_res : std::nullopt);
+            (sign_mode == 5) ? this->cf_coarse_res : std::nullopt,
+            return_occ);
     }
     else
     {
@@ -1281,9 +1283,20 @@ void bind_ds_triangle_mesh(py::module_ &m) {
              Example:
                  >>> ray_ids, tri_ids, pts = mesh.get_ray_intersection(origins, dirs)
              )pbdoc")
-        .def("query_points", &TriangleMesh::query_points,
+        .def("query_points", [](TriangleMesh &self, const torch::Tensor &query_pts,
+                                bool return_sdf, bool return_prj_pts,
+                                int sign_mode, int distance_mode, bool return_occ) -> py::object {
+                 auto result = self.query_points(query_pts, return_sdf, return_prj_pts,
+                                                 sign_mode, distance_mode, return_occ);
+                 if (return_occ) {
+                     return py::cast(result);
+                 } else {
+                     return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result),
+                                                     std::get<2>(result), std::get<3>(result)));
+                 }
+             },
              py::arg("query_pts"), py::arg("return_sdf") = false, py::arg("return_prj_pts") = true,
-             py::arg("sign_mode") = 0, py::arg("distance_mode") = 0,
+             py::arg("sign_mode") = 0, py::arg("distance_mode") = 0, py::arg("return_occ") = false,
              R"pbdoc(
              Finds closest triangles and computes Signed Distance Fields (SDF).
 
@@ -1300,16 +1313,24 @@ void bind_ds_triangle_mesh(py::module_ &m) {
                      - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
                      Defaults to 0.
                  distance_mode (int, optional): Distance algorithm (0: Ericson closest point, 1: projected normal). Defaults to 0.
+                 return_occ (bool, optional): If True, additionally returns binary occupancy defined as
+                     `distances < 0`. Only active when `return_sdf=True`; with an unsigned distance the
+                     occupancy slot is returned as None, since unsigned distances carry no inside/outside
+                     information. Points exactly on the surface classify as outside. Occupancy is exactly
+                     as reliable as the sign produced by `sign_mode`. Defaults to False.
 
              Returns:
-                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+                 Union[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
                      - query_ids (torch.Tensor): (Q,) int64 query point indices.
                      - triangle_ids (torch.Tensor): (Q,) int64 closest triangle indices.
                      - projected_points (torch.Tensor): (Q, 3) float32 closest surface coordinates.
                      - distances (torch.Tensor): (Q,) float32 signed/unsigned distances.
+                     - [occupancy] (torch.Tensor, optional): (Q,) bool inside mask, returned only when
+                       `return_occ=True`, and None unless `return_sdf=True` as well.
 
              Example:
                  >>> q_ids, tri_ids, prj_pts, dists = mesh.query_points(query_pts, return_sdf=True, sign_mode=5)
+                 >>> q_ids, tri_ids, prj_pts, dists, occ = mesh.query_points(query_pts, return_sdf=True, return_occ=True)
              )pbdoc")
         .def_property_readonly("edges", &TriangleMesh::get_edges, "Unique edges of the mesh (E, 2) int32.")
         .def_property_readonly("edge_to_triangle_offsets", &TriangleMesh::get_edge_to_triangle_offsets, "Edge to triangle CSR offsets.")

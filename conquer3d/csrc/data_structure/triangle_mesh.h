@@ -244,13 +244,25 @@ public:
 
     /**
      * @brief Queries closest point projections, distances, and SDF signs for arbitrary points.
+     *
+     * @param[in] query_pts      (Q, 3) float32 query coordinates.
+     * @param[in] return_sdf     If true, signs the returned distances.
+     * @param[in] return_prj_pts If true, returns closest surface projections.
+     * @param[in] sign_mode      Sign evaluation strategy (0-5).
+     * @param[in] distance_mode  Distance algorithm (only 0 is implemented).
+     * @param[in] return_occ     If true (and `return_sdf` is true), also returns binary occupancy
+     *                           `signed_distance < 0`. Ignored when `return_sdf` is false.
+     *
+     * @return Tuple of (query_ids, closest_triangle_ids, projected_points, distances, occupancy).
+     *         The occupancy tensor is undefined (Python `None`) unless `return_occ && return_sdf`.
      */
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> query_points(
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> query_points(
         const torch::Tensor &query_pts,
         bool return_sdf = false,
         bool return_prj_pts = true,
         int sign_mode = 0,
-        int distance_mode = 0);
+        int distance_mode = 0,
+        bool return_occ = false);
 
     /**
      * @brief Accelerated Ray-Mesh intersection queries (Möller-Trumbore).

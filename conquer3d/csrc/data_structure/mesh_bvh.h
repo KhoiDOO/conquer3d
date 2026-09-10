@@ -114,10 +114,16 @@ public:
      * @param[in] cf_fine_masks    Optional (N_boundary, Bx, By, Bz) int8 fine masks for sign_mode=5.
      * @param[in] cf_block_size     Optional macro-block size [Bx, By, Bz].
      * @param[in] cf_coarse_res     Optional coarse grid resolution [Cx, Cy, Cz].
+     * @param[in] return_occ        If true (and `return_sdf` is true), also returns binary
+     *                              occupancy `signed_distance < 0`. Ignored when `return_sdf`
+     *                              is false, since unsigned distances carry no inside/outside
+     *                              information.
      * 
-     * @return Tuple of (query_ids, closest_triangle_ids, projected_points, signed_distances).
+     * @return Tuple of (query_ids, closest_triangle_ids, projected_points, signed_distances,
+     *         occupancy). The occupancy tensor is undefined (Python `None`) unless
+     *         `return_occ && return_sdf`.
      */
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> query_point(
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> query_point(
         const torch::Tensor &query_points,
         const torch::Tensor &vertices,
         const torch::Tensor &triangles,
@@ -135,7 +141,8 @@ public:
         std::optional<torch::Tensor> cf_boundary_lookup = std::nullopt,
         std::optional<torch::Tensor> cf_fine_masks = std::nullopt,
         std::optional<std::vector<int64_t>> cf_block_size = std::nullopt,
-        std::optional<std::vector<int64_t>> cf_coarse_res = std::nullopt);
+        std::optional<std::vector<int64_t>> cf_coarse_res = std::nullopt,
+        bool return_occ = false);
 
     /**
      * @brief Performs triangle-box intersection tests against voxel cells.

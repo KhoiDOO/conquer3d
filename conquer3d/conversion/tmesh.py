@@ -20,8 +20,12 @@ def tmesh2voxel(
     chunk_size: int = 5000000,
     device: str = 'cuda',
     show_progress: bool = True,
-    sign_mode: int = 2
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    sign_mode: int = 2,
+    return_occ: bool = False
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+]:
     """Constructs a dense voxel grid from a TriangleMesh and evaluates its Signed Distance Field.
 
     Args:
@@ -41,13 +45,21 @@ def tmesh2voxel(
             - 3: Volumetric 3D flood fill mask (dense).
             - 4: Hybrid WN + pseudonormals.
             - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
+        return_occ (bool, optional): If True, additionally returns binary occupancy defined as
+            `sdfs < 0`. Points exactly on the surface classify as outside, and occupancy is exactly
+            as reliable as the sign produced by `sign_mode`. Defaults to False.
 
     Returns:
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        Union[
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+        ]:
             - grid_vertices (torch.Tensor): Dense float32 coordinates of shape `(N, 3)`.
             - voxels (torch.Tensor): Int32 tensor of shape `(V, 8)` containing voxel corner indices.
             - idx_grids (torch.Tensor): Int64 tensor of shape `(N, 3)` containing discrete 3D indices.
             - sdfs (torch.Tensor): Float32 tensor of shape `(N,)` with evaluated SDF values.
+            - occs (torch.Tensor, optional): Bool tensor of shape `(N,)` marking interior vertices,
+              returned only when `return_occ=True`.
     """
     if grid_min is None:
         grid_min = [-1.0, -1.0, -1.0]
@@ -71,6 +83,7 @@ def tmesh2voxel(
     
     num_points = grid_vertices.shape[0]
     sdfs = torch.empty(num_points, dtype=torch.float32, device=device)
+    occs = torch.empty(num_points, dtype=torch.bool, device=device) if return_occ else None
     
     iterator = range(0, num_points, chunk_size)
     if show_progress:
@@ -79,9 +92,13 @@ def tmesh2voxel(
     for i in iterator:
         end = min(i + chunk_size, num_points)
         chunk_points = grid_vertices[i:end]
-        _, _, _, chunk_sdf = tm.query_points(chunk_points, return_sdf=True, return_prj_pts=False, sign_mode=sign_mode)
-        sdfs[i:end] = chunk_sdf
+        chunk_res = tm.query_points(chunk_points, return_sdf=True, return_prj_pts=False, sign_mode=sign_mode, return_occ=return_occ)
+        sdfs[i:end] = chunk_res[3]
+        if return_occ:
+            occs[i:end] = chunk_res[4]
         
+    if return_occ:
+        return grid_vertices, voxels, idx_grids, sdfs, occs
     return grid_vertices, voxels, idx_grids, sdfs
 
 
@@ -98,11 +115,13 @@ def tmesh2sparse(
     return_normals: bool = False,
     normal_mode: int = 0,
     drop_empty_vertex_voxels: bool = False,
-    return_sdf: bool = True
+    return_sdf: bool = True,
+    return_occ: bool = False
 ) -> Union[
     Tuple[torch.Tensor, torch.Tensor],
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 ]:
     """Computes Signed Distance Fields on sparse voxel grids strictly near the surface.
 
@@ -130,17 +149,25 @@ def tmesh2sparse(
         drop_empty_vertex_voxels (bool, optional): If True, drops voxels containing no mesh vertices inside their bounding box. Defaults to False.
         return_sdf (bool, optional): If True, queries and returns the Signed Distance Field on sparse grid vertices.
             If False, skips SDF evaluation entirely. Defaults to True.
+        return_occ (bool, optional): If True, additionally returns binary occupancy defined as
+            `sdfs < 0`, placed immediately after `sdfs`. Only active when `return_sdf=True`; with
+            `return_sdf=False` it is silently ignored, since occupancy is undefined without a signed
+            field. Points exactly on the surface classify as outside, and occupancy is exactly as
+            reliable as the sign produced by `sign_mode`. Defaults to False.
 
     Returns:
         Union[
             Tuple[torch.Tensor, torch.Tensor],
             Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
         ]:
             - If `return_sdf=True` and `return_normals=False`: `(sparse_grid_vertices, active_voxels, sdfs)`
             - If `return_sdf=True` and `return_normals=True`: `(sparse_grid_vertices, active_voxels, sdfs, grid_normals)`
             - If `return_sdf=False` and `return_normals=False`: `(sparse_grid_vertices, active_voxels)`
             - If `return_sdf=False` and `return_normals=True`: `(sparse_grid_vertices, active_voxels, grid_normals)`
+            - With `return_occ=True` and `return_sdf=True`, a bool `occs` tensor is inserted directly
+              after `sdfs`, leaving `grid_normals` last.
     """
     if grid_min is None:
         grid_min = [-1.0, -1.0, -1.0]
@@ -172,9 +199,13 @@ def tmesh2sparse(
 
     if num_points == 0:
         sdfs = torch.empty(0, dtype=torch.float32, device=device)
+        occs = torch.empty(0, dtype=torch.bool, device=device)
+        head = (grid_vertices, active_voxels.to(torch.int64), sdfs)
+        if return_occ:
+            head = head + (occs,)
         if return_normals:
-            return grid_vertices, active_voxels.to(torch.int64), sdfs, grid_normals
-        return grid_vertices, active_voxels.to(torch.int64), sdfs
+            return head + (grid_normals,)
+        return head
 
     if sign_mode == 3:
         tm.build_flood_fill_data(grid_min, grid_max, res_list)
@@ -186,6 +217,7 @@ def tmesh2sparse(
         tm.compute_edge_normals()
     
     sdfs = torch.empty(num_points, dtype=torch.float32, device=device)
+    occs = torch.empty(num_points, dtype=torch.bool, device=device) if return_occ else None
     
     iterator = range(0, num_points, chunk_size)
     if show_progress:
@@ -194,12 +226,17 @@ def tmesh2sparse(
     for i in iterator:
         end = min(i + chunk_size, num_points)
         chunk_points = grid_vertices[i:end]
-        _, _, _, chunk_sdf = tm.query_points(chunk_points, return_sdf=True, return_prj_pts=False, sign_mode=sign_mode)
-        sdfs[i:end] = chunk_sdf
+        chunk_res = tm.query_points(chunk_points, return_sdf=True, return_prj_pts=False, sign_mode=sign_mode, return_occ=return_occ)
+        sdfs[i:end] = chunk_res[3]
+        if return_occ:
+            occs[i:end] = chunk_res[4]
         
+    head = (grid_vertices, active_voxels.to(torch.int64), sdfs)
+    if return_occ:
+        head = head + (occs,)
     if return_normals:
-        return grid_vertices, active_voxels.to(torch.int64), sdfs, grid_normals
-    return grid_vertices, active_voxels.to(torch.int64), sdfs
+        return head + (grid_normals,)
+    return head
 
 
 def tmesh2voxelcloud(
@@ -212,10 +249,12 @@ def tmesh2voxelcloud(
     show_progress: bool = True,
     sign_mode: int = 2,
     return_normals: bool = False,
-    normal_mode: int = 0
+    normal_mode: int = 0,
+    return_occ: bool = False
 ) -> Union[
     Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 ]:
     """Computes Signed Distance Fields on non-rigid 3D voxel clouds centered directly at mesh vertices.
 
@@ -233,11 +272,21 @@ def tmesh2voxelcloud(
         sign_mode (int, optional): Sign evaluation mode (0: Ray casting, 1: FWN, 2: Pseudonormals, 5: CF Flood Fill).
         return_normals (bool, optional): If True, returns surface normal vectors. Defaults to False.
         normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector).
+        return_occ (bool, optional): If True, additionally returns binary occupancy defined as
+            `sdfs < 0`, placed immediately after `sdfs`. Points exactly on the surface classify as
+            outside, and occupancy is exactly as reliable as the sign produced by `sign_mode`.
+            Defaults to False.
 
     Returns:
-        Union[Tuple[torch.Tensor, torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+        Union[
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+        ]:
             - If `return_normals=False`: `(sparse_grid_vertices, active_voxels, sdfs)`
             - If `return_normals=True`: `(sparse_grid_vertices, active_voxels, sdfs, grid_normals)`
+            - With `return_occ=True`, a bool `occs` tensor is inserted directly after `sdfs`,
+              leaving `grid_normals` last.
     """
     if grid_min is None:
         grid_min = [-1.0, -1.0, -1.0]
@@ -264,9 +313,13 @@ def tmesh2voxelcloud(
     num_points = grid_vertices.shape[0]
     if num_points == 0:
         empty_sdfs = torch.empty((0,), dtype=torch.float32, device=device)
+        empty_occs = torch.empty((0,), dtype=torch.bool, device=device)
+        head = (grid_vertices, active_voxels.to(torch.int64), empty_sdfs)
+        if return_occ:
+            head = head + (empty_occs,)
         if return_normals:
-            return grid_vertices, active_voxels.to(torch.int64), empty_sdfs, grid_normals
-        return grid_vertices, active_voxels.to(torch.int64), empty_sdfs
+            return head + (grid_normals,)
+        return head
 
     if sign_mode in [2, 4]:
         tm.compute_triangle_normals()
@@ -274,6 +327,7 @@ def tmesh2voxelcloud(
         tm.compute_edge_normals()
 
     sdfs = torch.empty(num_points, dtype=torch.float32, device=device)
+    occs = torch.empty(num_points, dtype=torch.bool, device=device) if return_occ else None
 
     iterator = range(0, num_points, chunk_size)
     if show_progress:
@@ -282,9 +336,14 @@ def tmesh2voxelcloud(
     for i in iterator:
         end = min(i + chunk_size, num_points)
         chunk_points = grid_vertices[i:end]
-        _, _, _, chunk_sdf = tm.query_points(chunk_points, return_sdf=True, return_prj_pts=False, sign_mode=sign_mode)
-        sdfs[i:end] = chunk_sdf
+        chunk_res = tm.query_points(chunk_points, return_sdf=True, return_prj_pts=False, sign_mode=sign_mode, return_occ=return_occ)
+        sdfs[i:end] = chunk_res[3]
+        if return_occ:
+            occs[i:end] = chunk_res[4]
 
+    head = (grid_vertices, active_voxels.to(torch.int64), sdfs)
+    if return_occ:
+        head = head + (occs,)
     if return_normals:
-        return grid_vertices, active_voxels.to(torch.int64), sdfs, grid_normals
-    return grid_vertices, active_voxels.to(torch.int64), sdfs
+        return head + (grid_normals,)
+    return head
