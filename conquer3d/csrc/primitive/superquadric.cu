@@ -16,15 +16,14 @@ namespace sq
 {
     /**
      * @brief Raises a value to a power while preserving its sign, as $\mathrm{sgn}(x)|x|^{p}$.
-     * @details The superquadric's parametric form takes fractional powers of cosines and sines
-     * that go negative over their range, so a plain `pow` would return NaN. Folding the sign back
-     * in afterwards is what keeps the surface defined over the whole angular domain.
+     * @details The parametric form takes fractional powers of cosines and sines that go
+     * negative, so a plain `pow` would return NaN; folding the sign back in keeps the surface
+     * defined over the whole angular domain.
      *
-     * A unit exponent returns the value untouched rather than going through `pow`. The device
-     * `pow` carries a two-ULP error bound and need not treat that case exactly, whereas the host
-     * one does; an exponent of exactly 1 is both the default initialisation and the ellipsoid
-     * case, and on a primitive with equal semi-axes the resulting asymmetry breaks the exact
-     * chord ties the sampler's budget split depends on.
+     * A unit exponent short-circuits rather than going through `pow`, whose device version has
+     * a two-ULP bound where the host version is exact. Exponent 1 is both the default and the
+     * ellipsoid case, and the resulting asymmetry would break the exact chord ties the
+     * sampler's budget split depends on.
      *
      * @param[in] value Base, of either sign.
      * @param[in] exponent Power to raise the magnitude to.
@@ -43,11 +42,9 @@ namespace sq
      *
      * The trigonometry is symmetrised by construction -- cosine of the magnitude, sine of the
      * magnitude with the sign restored -- rather than trusting the device library to be exactly
-     * even and odd. That symmetry is load-bearing: on a primitive with equal semi-axes the two
-     * halves of every interval are exact mirror images, so their chords are bitwise equal and the
-     * budget below splits on an exact halfway case. A single ULP of asymmetry in `sin` or `cos`
-     * breaks that tie and relays the whole subtree. Host `libm` is exactly even and odd, so this
-     * is a no-op against the reference while removing the device's freedom to differ.
+     * even and odd. On a primitive with equal semi-axes the two halves of every interval are
+     * exact mirror images, so their chords are bitwise equal and the budget splits on an exact
+     * halfway case; one ULP of asymmetry breaks that tie and relays the whole subtree.
      *
      * @param[in] theta Angle to evaluate at.
      * @param[in] semi_a Semi-axis along the first coordinate.
@@ -91,16 +88,14 @@ namespace sq
     /**
      * @brief Distributes `num` angles along a superellipse at approximately equal arc length.
      * @details Sweeping the angle uniformly bunches samples at the corners of a low-exponent
-     * superellipse and starves its flat sides. This bisects the angular interval and hands each
-     * half a share of the remaining budget proportional to its chord length, walking the resulting
-     * binary tree depth-first through an explicit stack.
+     * superellipse and starves its flat sides. This bisects the angular interval, hands each half
+     * a share of the budget proportional to its chord length, and walks the resulting binary tree
+     * depth-first through an explicit stack.
      *
-     * Two details are load-bearing for reproducing the reference implementation exactly. The chord
-     * is a plain square root rather than `hypot`, which is the more accurate of the two and
-     * therefore differs by one ULP often enough to tip the integer split below. And the split uses
-     * `rint`, which rounds halfway cases to even; `round` rounds them away from zero, and a
-     * symmetric primitive puts the split *exactly* on a halfway case, so the two disagree
-     * routinely rather than rarely.
+     * Two choices are load-bearing for reproducing the reference bitwise: the chord is a plain
+     * square root, not the more accurate `hypot`, which differs by one ULP often enough to tip
+     * the integer split; and the split uses `rint` (halfway to even), because a symmetric
+     * primitive lands *exactly* on a halfway case where `round` would disagree routinely.
      *
      * @param[in] semi_a Semi-axis along the first coordinate.
      * @param[in] semi_b Semi-axis along the second coordinate.
@@ -177,13 +172,12 @@ namespace sq
 
     /**
      * @brief Samples the azimuthal and polar superellipses of every primitive.
-     * @details One thread per curve, so two per primitive, each walking its own divide-and-conquer
-     * traversal. The parallelism is only $2K$ wide, but the work per curve is a few dozen
-     * iterations and the alternative -- a parallel tree -- would have to re-derive the traversal
-     * order and with it the exact sample placement.
+     * @details One thread per curve, so two per primitive, each walking its own
+     * divide-and-conquer traversal. The parallelism is only $2K$ wide, but a parallel tree would
+     * have to re-derive the traversal order and with it the exact sample placement.
      *
-     * The azimuth takes one extra sample across the closed period; the caller drops the last, since
-     * sampling $[-\pi, \pi]$ inclusive would make the first and last columns the same point.
+     * The azimuth takes one extra sample across the closed period; the caller drops the last,
+     * since sampling $[-\pi, \pi]$ inclusive repeats the first column.
      *
      * @param[in] num_quadrics Number of primitives $K$.
      * @param[in] resolution Angular samples along each axis.
@@ -192,7 +186,6 @@ namespace sq
      * @param[in,out] stack_scratch Device array of $2K \times (\text{resolution} + 2)$ frames.
      * @param[out] out_azimuths Device array of $K \times (\text{resolution} + 1)$ angles.
      * @param[out] out_polars Device array of $K \times \text{resolution}$ angles.
-     * @note Launched with `NTHREADS` threads per block over a 1D grid.
      */
     __global__ void compute_superellipse_angles_kernel(
         const uint32_t num_quadrics,
@@ -257,7 +250,6 @@ namespace sq
      * @param[in] return_labels Whether to also record each vertex's originating primitive.
      * @param[out] out_vertices Device array of $K \times (n(n-2) + 2)$ world coordinates.
      * @param[out] out_labels Device array of the same length holding primitive indices, or nullptr.
-     * @note Launched with `NTHREADS` threads per block over a 1D grid.
      * @warning A rotation of negative determinant is a reflection, which inverts triangle winding;
      * the azimuthal order is reversed in that case so normals keep facing outward.
      */
@@ -343,7 +335,6 @@ namespace sq
      * @param[in] num_quadrics Number of primitives $K$.
      * @param[in] resolution Angular samples along each axis.
      * @param[out] out_triangles Device array of $K \times 2n(n-2)$ vertex index triples.
-     * @note Launched with `NTHREADS` threads per block over a 1D grid.
      */
     __global__ void compute_superquadric_faces_kernel(
         const uint32_t num_quadrics,

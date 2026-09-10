@@ -48,10 +48,10 @@ struct Ray {
 
     /**
      * @brief Tests Ray-AABB intersection using Kay & Kajiya slab method.
-     * 
-     * @param[in]  aabb_min Lower bounding box corner.
-     * @param[in]  aabb_max Upper bounding box corner.
-     * @param[out] t_hit    Distance along the ray to the entry hit point.
+     *
+     * @param[in] aabb_min Lower bounding box corner.
+     * @param[in] aabb_max Upper bounding box corner.
+     * @param[out] t_hit Distance along the ray to the entry hit point.
      * @return True if ray intersects the AABB within `[t_min, t_max]`.
      */
     __host__ __device__ __forceinline__ bool is_intersect_aabb(const float3& aabb_min, const float3& aabb_max, float& t_hit) const {

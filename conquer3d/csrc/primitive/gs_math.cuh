@@ -19,11 +19,11 @@ namespace gs
 
     /**
      * @brief Computes squared Mahalanobis distance $d^2 = (p - \mu)^T \Sigma^{-1} (p - \mu)$ on device.
-     * 
-     * @param[in]  point         Query point coordinate in world space.
-     * @param[in]  mean          Gaussian centroid coordinate $\mu$.
-     * @param[in]  covi          Upper-triangular packed inverse covariance array $\Sigma^{-1}$ of length 6.
-     * @param[out] out_distance  Computed squared Mahalanobis distance.
+     *
+     * @param[in] point Query point coordinate in world space.
+     * @param[in] mean Gaussian centroid coordinate $\mu$.
+     * @param[in] covi Upper-triangular packed inverse covariance array $\Sigma^{-1}$ of length 6.
+     * @param[out] out_distance Computed squared Mahalanobis distance.
      */
     __device__ __forceinline__ void compute_mahalanobis_distance(
         const float3 &point,
@@ -41,11 +41,11 @@ namespace gs
 
     /**
      * @brief Evaluates Gaussian volumetric density $\rho(p) = \alpha \exp(-\frac{1}{2} d^2)$ at point $p$.
-     * 
-     * @param[in]  point       Query point in world space.
-     * @param[in]  mean        Gaussian centroid $\mu$.
-     * @param[in]  covi        Upper-triangular packed inverse covariance entries $\Sigma^{-1}$.
-     * @param[in]  opacity     Gaussian opacity scaling factor $\alpha$.
+     *
+     * @param[in] point Query point in world space.
+     * @param[in] mean Gaussian centroid $\mu$.
+     * @param[in] covi Upper-triangular packed inverse covariance entries $\Sigma^{-1}$.
+     * @param[in] opacity Gaussian opacity scaling factor $\alpha$.
      * @param[out] out_density Computed scalar density clamped to zero for $d^2 > 30$.
      */
     __device__ __forceinline__ void compute_density(
@@ -108,11 +108,11 @@ namespace gs
 
     /**
      * @brief Converts unit quaternion $(r, x, y, z)$ into 3x3 orthonormal rotation matrix $R$.
-     * 
-     * @param[in]  rot           Quaternion representation $(r, x, y, z)$.
-     * @param[out] out_rotation  Resulting 3x3 orthonormal rotation matrix.
-     * @param[in]  rotnorm       Whether to normalize quaternion before conversion.
-     * @param[in]  transpose     Whether to output transposed rotation matrix $R^T$.
+     *
+     * @param[in] rot Quaternion representation $(r, x, y, z)$.
+     * @param[out] out_rotation Resulting 3x3 orthonormal rotation matrix.
+     * @param[in] rotnorm Whether to normalize quaternion before conversion.
+     * @param[in] transpose Whether to output transposed rotation matrix $R^T$.
      */
     __device__ __forceinline__ void compute_rotation(
         const float4 &rot,
@@ -177,17 +177,17 @@ namespace gs
 
     /**
      * @brief Analytical ray/segment intersection test against 3D Gaussian ellipsoid isosurface.
-     * 
+     *
      * @details Solves the quadratic equation $a t^2 + b t + c = 0$ along the ray $p(t) = P_0 + t (P_1 - P_0)$.
-     * 
-     * @param[in]  c0..c5        Six upper-triangular components of $\Sigma^{-1}$.
-     * @param[in]  iso           Mahalanobis radius squared threshold $r^2$.
-     * @param[in]  segment_start Segment start position $P_0$.
-     * @param[in]  segment_end   Segment end position $P_1$.
-     * @param[in]  return_t      Whether to compute and clamp entry/exit parameters $t \in [0, 1]$.
-     * @param[out] t_entry       Segment parametric entry position $t_{\text{entry}}$.
-     * @param[out] t_exit        Segment parametric exit position $t_{\text{exit}}$.
-     * 
+     *
+     * @param[in] c0..c5 Six upper-triangular components of $\Sigma^{-1}$.
+     * @param[in] iso Mahalanobis radius squared threshold $r^2$.
+     * @param[in] segment_start Segment start position $P_0$.
+     * @param[in] segment_end Segment end position $P_1$.
+     * @param[in] return_t Whether to compute and clamp entry/exit parameters $t \in [0, 1]$.
+     * @param[out] t_entry Segment parametric entry position $t_{\text{entry}}$.
+     * @param[out] t_exit Segment parametric exit position $t_{\text{exit}}$.
+     *
      * @return bool True if segment intersects the ellipsoid within $t \in [0, 1]$.
      */
     __device__ __forceinline__ bool test_gs_segment(

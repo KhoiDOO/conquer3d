@@ -1,9 +1,7 @@
 """Point cloud geometric distance metrics and loss functions.
 
-This module provides GPU-accelerated nearest-neighbor geometric distance
-functions between 3D point sets, including one-sided Chamfer distance,
-symmetric bidirectional Chamfer distance, one-sided Hausdorff distance,
-and symmetric bidirectional Hausdorff distance.
+GPU nearest-neighbour distances between 3D point sets: Chamfer and Hausdorff, each
+one-sided and symmetric.
 
 Example:
     >>> import torch
@@ -80,9 +78,8 @@ def one_sided_chamfer_distance(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Computes the one-sided nearest-neighbor distance from query points to reference points.
 
-    For each point in `query_points`, finds the closest point in `reference_points`
-    using GPU KD-Tree spatial acceleration. Fully differentiable with respect to both
-    `query_points` and `reference_points` via a custom CUDA analytical backward kernel.
+    Nearest neighbours come from a GPU KD-Tree. Differentiable with respect to both point
+    sets through an analytical CUDA backward kernel.
 
     Args:
         query_points (torch.Tensor): Point coordinates of shape `(N, 3)` with dtype
@@ -107,11 +104,9 @@ def one_sided_chamfer_distance(
             set does not exist.
 
     Note:
-        An empty `query_points` is allowed and yields empty outputs, so a caller chunking a
-        large query set does not have to special-case a trailing empty chunk. An empty
-        `reference_points` is rejected instead: the nearest-neighbour distance would be
-        $+\\infty$, which is mathematically right but silently propagates into `NaN` through
-        any mean or backward pass, surfacing far from its cause.
+        An empty `query_points` yields empty outputs, so chunking a large query set needs no
+        special case for a trailing empty chunk. An empty `reference_points` is rejected
+        because its $+\\infty$ distance would propagate into `NaN` far from its cause.
     """
     assert query_points.is_cuda and reference_points.is_cuda, "Points must be on CUDA"
     assert query_points.dtype == torch.float32 and reference_points.dtype == torch.float32, "Points must be float32"

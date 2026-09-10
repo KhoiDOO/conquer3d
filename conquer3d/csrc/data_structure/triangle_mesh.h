@@ -72,11 +72,11 @@ protected:
 public:
     /**
      * @brief Constructs a TriangleMesh from vertex and triangle face index tensors.
-     * 
-     * @param[in] in_vertices        (N, 3) float32 coordinates on CUDA device.
-     * @param[in] in_triangles       (M, 3) int32 face indices on CUDA device.
-     * @param[in] in_vertex_normals  Optional (N, 3) float32 initial normals.
-     * @param[in] in_vertex_colors   Optional (N, 3) float32 initial colors.
+     *
+     * @param[in] in_vertices (N, 3) float32 coordinates on CUDA device.
+     * @param[in] in_triangles (M, 3) int32 face indices on CUDA device.
+     * @param[in] in_vertex_normals Optional (N, 3) float32 initial normals.
+     * @param[in] in_vertex_colors Optional (N, 3) float32 initial colors.
      */
     TriangleMesh(
         const torch::Tensor &in_vertices,
@@ -245,12 +245,12 @@ public:
     /**
      * @brief Queries closest point projections, distances, and SDF signs for arbitrary points.
      *
-     * @param[in] query_pts      (Q, 3) float32 query coordinates.
-     * @param[in] return_sdf     If true, signs the returned distances.
+     * @param[in] query_pts (Q, 3) float32 query coordinates.
+     * @param[in] return_sdf If true, signs the returned distances.
      * @param[in] return_prj_pts If true, returns closest surface projections.
-     * @param[in] sign_mode      Sign evaluation strategy (0-5).
-     * @param[in] distance_mode  Distance algorithm (only 0 is implemented).
-     * @param[in] return_occ     If true (and `return_sdf` is true), also returns binary occupancy
+     * @param[in] sign_mode Sign evaluation strategy (0-5).
+     * @param[in] distance_mode Distance algorithm (only 0 is implemented).
+     * @param[in] return_occ If true (and `return_sdf` is true), also returns binary occupancy
      *                           `signed_distance < 0`. Ignored when `return_sdf` is false.
      *
      * @return Tuple of (query_ids, closest_triangle_ids, projected_points, distances, occupancy).

@@ -1,7 +1,7 @@
 /**
  * @file flood_fill_cf.h
  * @brief High-performance GPU Coarse-to-Fine (CF) Hierarchical Volumetric Flood-Fill.
- * 
+ *
  * Provides a 2-level hierarchical spatial flood-fill pipeline consuming < 10 MB of VRAM
  * at 1024^3 resolution with exact topological inside/outside sign determination.
  */
@@ -33,17 +33,17 @@ namespace ops {
     /**
      * @brief Computes 2-Level Coarse-to-Fine Volumetric Flood Fill on GPU.
      *
-     * @param[in] vertices      (V, 3) float32 mesh vertex tensor.
-     * @param[in] triangles     (F, 3) int32 triangle index tensor.
-     * @param[in] aabb_mins     (2F-1, 3) BVH lower box coordinates.
-     * @param[in] aabb_maxs     (2F-1, 3) BVH upper box coordinates.
-     * @param[in] bvh_children  (2F-1, 2) BVH child node indices.
-     * @param[in] object_ids    (F,) leaf-to-triangle map.
-     * @param[in] grid_min      3D lower coordinate bounds [x_min, y_min, z_min].
-     * @param[in] grid_max      3D upper coordinate bounds [x_max, y_max, z_max].
-     * @param[in] grid_res      3D fine grid resolution [rx, ry, rz].
-     * @param[in] block_size    Optional macro-block size [bx, by, bz]. If empty, computed dynamically.
-     * @param[in] connectivity  Voxel neighbor connectivity (6, 18, 26).
+     * @param[in] vertices (V, 3) float32 mesh vertex tensor.
+     * @param[in] triangles (F, 3) int32 triangle index tensor.
+     * @param[in] aabb_mins (2F-1, 3) BVH lower box coordinates.
+     * @param[in] aabb_maxs (2F-1, 3) BVH upper box coordinates.
+     * @param[in] bvh_children (2F-1, 2) BVH child node indices.
+     * @param[in] object_ids (F,) leaf-to-triangle map.
+     * @param[in] grid_min 3D lower coordinate bounds [x_min, y_min, z_min].
+     * @param[in] grid_max 3D upper coordinate bounds [x_max, y_max, z_max].
+     * @param[in] grid_res 3D fine grid resolution [rx, ry, rz].
+     * @param[in] block_size Optional macro-block size [bx, by, bz]. If empty, computed dynamically.
+     * @param[in] connectivity Voxel neighbor connectivity (6, 18, 26).
      * @return CFFloodFillResult struct holding coarse mask and fine boundary masks.
      */
     CFFloodFillResult compute_flood_fill_cf(

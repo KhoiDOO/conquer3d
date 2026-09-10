@@ -27,7 +27,6 @@ namespace mesh_bvh
  * @param[out] out_query_ids Device array receiving confirmed first indices.
  * @param[out] out_object_ids Device array receiving confirmed second indices.
  * @param[in,out] valid_counter Device counter, atomically incremented per confirmed pair.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Output order is nondeterministic because slots are claimed by atomics.
  */
 __global__ void filter_self_intersections_kernel(
@@ -115,7 +114,6 @@ __global__ void filter_self_intersections_kernel(
  * @param[out] out_distances Device array of ray parameters, when requested.
  * @param[in] return_distance Whether distances are written.
  * @param[in,out] valid_counter Device counter, atomically incremented per hit.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Hits are emitted unordered, so they are not sorted along the ray. Sort by
  * distance if the nearest hit is required.
  */
@@ -214,7 +212,6 @@ __global__ void filter_ray_triangle_intersections_kernel(
      * @param[in] triangles Device array of triangle vertex indices.
      * @param[in] num_objects Number of triangles.
      * @return $-1$ inside, $+1$ outside.
-     * @warning Uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory.
      * @warning Requires a watertight mesh; a hole lets the ray escape and flips the parity.
      */
     __device__ __forceinline__ float compute_sign_ray_parity(
@@ -300,7 +297,6 @@ __global__ void filter_ray_triangle_intersections_kernel(
      * @param[in] winding_data Device array of per-node winding aggregates.
      * @param[in] num_objects Number of triangles.
      * @return Winding number; near 1 inside a closed surface, near 0 outside.
-     * @warning Uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory.
      * @warning Cost grows as the accuracy scale tightens, since fewer subtrees can be
      * approximated. This is the most expensive sign mode.
      */
@@ -461,11 +457,10 @@ __global__ void filter_ray_triangle_intersections_kernel(
  * prunes any subtree whose bound already exceeds it, and the exact closest point on each
  * surviving triangle is computed by barycentric projection.
  *
- * Sign determination is selectable because no single method suits every mesh: angle-weighted
- * pseudonormals are exact for watertight input and nearly free, generalised winding numbers
- * tolerate holes and self-intersections at the cost of the hierarchical ::WindingData
- * traversal, and flood-fill lookup handles the rest. The choice is the caller's
- * `sign_mode`.
+ * Sign determination is selectable through `sign_mode` because no one method suits every
+ * mesh: angle-weighted pseudonormals are exact for watertight input and nearly free, winding
+ * numbers tolerate holes and self-intersections at the cost of the hierarchical
+ * ::WindingData traversal, and flood-fill lookup handles the rest.
  *
  * @param[in] num_queries Number of query points.
  * @param[in] num_objects Number of triangles.
@@ -481,11 +476,8 @@ __global__ void filter_ray_triangle_intersections_kernel(
  * @param[in] pseudonormal_edges Device array of edge pseudonormals.
  * @param[in] pseudonormal_faces Device array of face normals.
  * @param[out] out_query_ids Device array of query indices.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Distances are unsigned unless a sign mode is selected; the sign convention is
  * negative inside.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  * @warning Pseudonormal signing assumes a watertight, consistently oriented mesh. On open
  * or inconsistently wound surfaces the sign flips unpredictably -- prefer winding numbers
  * or flood fill there.
@@ -742,9 +734,8 @@ __global__ void query_point_mesh_bvh_kernel(
  * node lets only the second arriving thread continue, so exactly one reaches the root and
  * the whole aggregation completes in a single launch.
  *
- * The stored aggregates are what make winding number evaluation hierarchical: a distant
- * subtree can be approximated by its summary instead of being descended triangle by
- * triangle.
+ * These aggregates are what make winding number evaluation hierarchical: a distant subtree
+ * is approximated by its summary instead of being descended triangle by triangle.
  *
  * @param[in] num_objects Number of triangles.
  * @param[in] object_ids Device array mapping sorted leaf order to triangle indices.
@@ -754,7 +745,6 @@ __global__ void query_point_mesh_bvh_kernel(
  * @param[in] bvh_children Device array of child index pairs.
  * @param[out] winding_data Device array of per-node ::WindingData aggregates.
  * @param[in,out] atomic_flags Device array of visit flags; must be zeroed before launch.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning @p atomic_flags must be cleared between builds, or a node may be merged before
  * both children are final.
  */
@@ -888,9 +878,6 @@ __global__ void bottom_up_winding_data_kernel(
  * @param[in] bvh_children Device array of BVH child index pairs.
  * @param[in] object_ids Device array mapping leaves to triangle indices.
  * @param[out] out_intersect Device array of per-box boolean results.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  */
 __global__ void query_voxel_mesh_bvh_kernel(
         const int num_queries,
@@ -981,8 +968,6 @@ __global__ void query_voxel_mesh_bvh_kernel(
  * @param[in,out] active_counter Device counter of active voxels.
  * @note Launched over one thread per grid cell; indices are `int64_t` because a $1024^3$
  * grid overflows 32-bit addressing.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  */
 __global__ void count_active_voxels_mesh_bvh_kernel(
         const int3 res,
@@ -1058,8 +1043,6 @@ __global__ void count_active_voxels_mesh_bvh_kernel(
  * @note Launched over one thread per grid cell, with `int64_t` indexing.
  * @warning Emission order is nondeterministic. Sort the result if a canonical ordering is
  * needed -- downstream extraction generally expects sorted voxel ids.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  */
 __global__ void collect_active_voxels_mesh_bvh_kernel(
         const int3 res,

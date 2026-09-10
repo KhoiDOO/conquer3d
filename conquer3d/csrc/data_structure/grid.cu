@@ -31,7 +31,6 @@ namespace grid {
  * @param[in,out] valid_counter Device counter, atomically incremented per emission.
  * @param[in] activate_neighbor Whether to also activate the surrounding 26 voxels.
  * @param[in] trunc_margin Band half-width in world units.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Pixels with non-positive depth are treated as missing and skipped.
  * @warning Output order is nondeterministic because slots are claimed by atomics, and the
  * same voxel may be emitted by many pixels. Callers must sort and deduplicate.
@@ -151,7 +150,6 @@ __global__ void get_active_voxel_ids_from_depth_kernel(
  * @param[in] grid_spacing Per-axis voxel size.
  * @param[in] num_cells Per-axis cell counts.
  * @param[out] out_voxel_ids Device array of `num_vertices` linear voxel indices.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Indices are `int64_t`; a $1024^3$ grid exceeds the 32-bit range.
  */
 __global__ void quantize_vertices_to_voxel_ids_kernel(
@@ -241,7 +239,6 @@ __global__ void quantize_vertices_to_voxel_ids_kernel(
  * @param[in] num_vertices Number of voxel centres.
  * @param[in] voxel_spacing Per-axis voxel size; corners sit half a spacing from the centre.
  * @param[out] out_corners Device array of `num_vertices * 8` corner coordinates.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Corners shared between neighbouring voxels are duplicated; deduplicate downstream
  * if a welded vertex set is required.
  */

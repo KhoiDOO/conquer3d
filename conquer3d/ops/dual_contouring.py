@@ -1,20 +1,14 @@
 """GPU-accelerated Differentiable Dual Contouring (DC) with Jacobi QEF solvers.
 
-Dual Contouring (Ju et al., 2002) extracts explicit surface meshes from volumetric scalar
-fields while preserving sharp features, creases, and corners. For each active voxel cell
-intersected by the isosurface, a single dual vertex is placed at the feature point minimizing
-the Quadratic Error Function (QEF):
+Dual Contouring (Ju et al., 2002) places one vertex per active cell at the minimiser of
 
 $$E(v) = \\sum_{i} \\left( n_i \\cdot (v - p_i) \\right)^2$$
 
-where $p_i$ are Hermite edge intersection points and $n_i$ are the corresponding surface normals.
-The QEF minimum is solved in parallel on the GPU using cyclic Jacobi Singular Value
-Decomposition (SVD) on register arrays.
+over the Hermite edge intersections $(p_i, n_i)$, which is what preserves sharp creases and
+corners. The minimum is solved on the GPU by cyclic Jacobi SVD on register arrays.
 
 Example:
-    >>> import torch
     >>> from conquer3d.ops import dual_contouring
-    >>> # Extract sharp mesh from voxel grid and signed distance field
     >>> verts, faces = dual_contouring(grid_vertices, voxels, sdf, iso=0.0, quad_split=True)
 """
 

@@ -10,14 +10,14 @@ namespace ops {
 
 /**
  * @brief Forward pass of Differentiable Dual Marching Cubes (DMC).
- * 
- * @param grid_vertices (N, 3) 3D coordinate tensor of unique grid vertices.
- * @param voxels (M, 8) integer voxel index grid.
- * @param sdf (N,) 1D scalar SDF tensor on grid vertices.
- * @param colors Optional (N, C) vertex color/feature tensor.
- * @param iso Isosurface threshold value (default: 0.0).
- * @param quad_split If true, splits quads into Delaunay triangles; if false, emits quads.
- * @param project_iters Number of Newton-Raphson level-set projection iterations.
+ *
+ * @param[in] grid_vertices (N, 3) 3D coordinate tensor of unique grid vertices.
+ * @param[in] voxels (M, 8) integer voxel index grid.
+ * @param[in] sdf (N,) 1D scalar SDF tensor on grid vertices.
+ * @param[in] colors Optional (N, C) vertex color/feature tensor.
+ * @param[in] iso Isosurface threshold value (default: 0.0).
+ * @param[in] quad_split If true, splits quads into Delaunay triangles; if false, emits quads.
+ * @param[in] project_iters Number of Newton-Raphson level-set projection iterations.
  * @return std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>> 
  *         (vertices, faces/quads, colors)
  */

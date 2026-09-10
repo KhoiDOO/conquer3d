@@ -1,17 +1,14 @@
 r"""GPU-accelerated Marching Cubes with Asymptotic Decider (Topologically Consistent MC).
 
-Classical Marching Cubes (Lorensen & Cline, 1987) suffers from topological ambiguity on
-voxel faces where diagonally opposite corners share identical signs, leading to holes,
-cracks, and non-manifold surfaces in extracted meshes. The Asymptotic Decider (Nielson &
-Hamann, 1991) resolves these ambiguities by computing the hyperbolic asymptotic saddle point
-value $S = \frac{B_{00} B_{11} - B_{01} B_{10}}{B_{00} + B_{11} - B_{01} - B_{10}}$ on each
-ambiguous bilinear face, connecting positive vertices if $S > \\text{iso}$ and negative vertices
-otherwise. This guarantees extracted meshes are watertight and topologically consistent.
+Classical Marching Cubes (Lorensen & Cline, 1987) is ambiguous on faces whose diagonally
+opposite corners share a sign, which produces holes and non-manifold output. The asymptotic
+decider (Nielson & Hamann, 1991) resolves each such face by the bilinear saddle value
+$S = \frac{B_{00} B_{11} - B_{01} B_{10}}{B_{00} + B_{11} - B_{01} - B_{10}}$, joining the
+positive corners when $S > \\text{iso}$ and the negative ones otherwise, which leaves the mesh
+watertight and topologically consistent.
 
 Example:
-    >>> import torch
     >>> from conquer3d.ops import marching_cubes_asymptotic
-    >>> # Extract watertight 2-manifold surface mesh
     >>> verts, faces = marching_cubes_asymptotic(grid_vertices, voxels, sdf, iso=0.0)
 """
 

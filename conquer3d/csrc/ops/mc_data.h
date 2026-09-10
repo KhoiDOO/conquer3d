@@ -5,13 +5,11 @@
  * @file mc_data.h
  * @brief Constant lookup tables for classical Marching Cubes (Lorensen & Cline, 1987).
  *
- * @details Surface topology inside a voxel is decided entirely by the sign pattern of its
- * eight corners, giving $2^8 = 256$ cases. These tables convert that 8-bit case index into
- * the set of intersected edges and the triangles spanning them, so the kernels perform no
- * branching search at runtime -- only indexed reads from constant memory, which broadcasts
- * uniformly across a warp.
- *
- * Corner bit $i$ is set when corner $i$ lies inside the isosurface.
+ * @details Surface topology inside a voxel follows entirely from the sign pattern of its
+ * eight corners, giving $2^8 = 256$ cases. These tables turn that 8-bit index into the
+ * intersected edges and the triangles spanning them, so kernels do no branching search --
+ * only constant-memory reads, which broadcast uniformly across a warp. Corner bit $i$ is
+ * set when corner $i$ lies inside the isosurface.
  */
 
 #include <cuda_runtime.h>

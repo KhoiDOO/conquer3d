@@ -33,7 +33,6 @@ namespace ops {
      * @param[in] vertices Device array of mesh vertex coordinates.
      * @param[in] triangles Device array of triangle vertex indices.
      * @return True if the box meets any triangle.
-     * @warning Uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory.
      */
     __device__ __forceinline__ bool test_box_overlap_bvh_cf(
         const float3& box_min, const float3& box_max,
@@ -91,8 +90,6 @@ namespace ops {
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[in] num_objects Number of triangles.
  * @note Launched with one thread per coarse block, `int64_t` indexed.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  */
 __global__ void init_coarse_grid_kernel(
         int8_t* __restrict__ coarse_mask,
@@ -430,11 +427,10 @@ __global__ void coarse_to_fine_kernel(
  * @param[in] num_objects Number of triangles.
  * @param[out] changed_flag Device flag set when any label changes.
  * @note Launched with one CUDA block per boundary coarse block, threads cooperating over
- * that block's fine voxels through shared memory.
+ * that block's fine voxels through shared memory. Sets @p changed_flag on any label
+ * change; the host relaunches until a full round leaves it clear.
  * @warning Shared memory must accommodate one block's fine voxel labels, which bounds how
  * large $B_X \times B_Y \times B_Z$ may be.
- * @note Sets @p changed_flag when any label changes, which is how the host knows whether
- * another sweep is required; the fill has converged once a full round leaves it clear.
  */
 __global__ void fine_intra_block_bfs_kernel(
         const int3* __restrict__ boundary_coords,

@@ -5,11 +5,10 @@
  * @file dmc_data.h
  * @brief Constant topology tables for Dual Marching Cubes.
  *
- * @details Dual Marching Cubes decomposes each cell into independent contours and emits one
- * dual vertex per contour rather than one per cell. Cells that Dual Contouring would collapse
- * to a single vertex -- and thereby pinch -- instead receive several, which is what
- * guarantees strictly 2-manifold output. The tables here encode both the cell-local topology
- * and the full 256-case contour patterns.
+ * @details Dual Marching Cubes emits one dual vertex per independent contour rather than
+ * one per cell, so cells that Dual Contouring would collapse to a single vertex -- and
+ * thereby pinch -- receive several instead, which is what guarantees 2-manifold output.
+ * These tables hold the cell-local topology and the full 256-case contour patterns.
  */
 
 #include <cuda_runtime.h>
@@ -94,10 +93,10 @@ static __constant__ int dmc_edge_quadrant[12] = {
 /**
  * @brief Maps each corner-sign case to its topological equivalence class representative.
  *
- * @details Entries carrying the sentinel ::DMC_AMBIGUOUS (254) mark cases whose face or
- * interior connectivity cannot be settled from corner signs alone and must be resolved at
- * runtime by the asymptotic decider. All other cases index a canonical representative,
- * collapsing the 256 configurations onto the far smaller set of distinct topologies.
+ * @details The sentinel ::DMC_AMBIGUOUS (254) marks cases whose connectivity cannot be
+ * settled from corner signs alone and must go to the asymptotic decider at runtime. Every
+ * other case indexes a canonical representative, collapsing 256 configurations onto the
+ * far smaller set of distinct topologies.
  */
 static __constant__ unsigned char dmc_ambig_table[256] = {
     0, // quitte: 0 <-> mc: 0, class representative: 0

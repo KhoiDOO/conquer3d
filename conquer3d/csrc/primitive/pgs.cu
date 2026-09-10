@@ -34,7 +34,6 @@ namespace pgs
  * @param[in] k Number of neighbours to consider; must not exceed `MAX_K`.
  * @param[out] isos Device array of $N$ tangency radii.
  * @param[out] invalid_mask Device array of $N$ flags marking unsolvable Gaussians.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Entries flagged in @p invalid_mask leave the matching @p isos value
  * unspecified; filter on the mask before use.
  */

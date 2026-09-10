@@ -1,17 +1,12 @@
 """Differentiable Poisson Surface Reconstruction (DPSR).
 
-This module implements GPU-accelerated Differentiable Poisson Surface Reconstruction.
-It solves the continuous Poisson indicator equation via the Spectral Fourier Method
-using PyTorch's native cuFFT backend, enabling direct gradient backpropagation from
-implicit volume grids and surface meshes to input points and normals.
-
+Solves the Poisson indicator equation spectrally on the cuFFT backend, so gradients flow
+from the implicit grid and the mesh extracted from it back to the input points and normals.
 Adapted from Shape As Points (Peng et al., NeurIPS 2021):
 https://github.com/autonomousvision/shape_as_points/tree/main
 
 Example:
-    >>> import torch
     >>> from conquer3d.ops import dpsr, DPSR
-    >>> # Compute indicator / pseudo-SDF field
     >>> phi = dpsr(points, normals, res=128, sig=10.0)
 """
 

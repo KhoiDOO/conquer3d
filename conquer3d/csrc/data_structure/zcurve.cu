@@ -21,7 +21,6 @@ namespace zcurve
  * @param[in] num_points Number of points.
  * @param[out] codes Device array of `num_points` Morton codes, widened to 64-bit for the
  *     radix sort that follows.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note The code is computed at 10 bits per axis, so points closer than $2^{-10}$ of the
  * grid extent collide. Collisions are harmless -- they only leave the relative order of
  * near-coincident points unspecified.

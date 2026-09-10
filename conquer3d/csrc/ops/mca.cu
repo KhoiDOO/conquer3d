@@ -202,7 +202,6 @@ __device__ __forceinline__ int trace_mca_loops(
  * @param[in] sdf Device array of scalar field values at grid vertices.
  * @param[in] iso Isolevel separating inside from outside.
  * @param[out] triangle_counts Device array of per-voxel triangle counts.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void compute_active_voxels_mca_kernel(
     const uint32_t num_voxels,
@@ -264,7 +263,6 @@ __global__ void compute_active_voxels_mca_kernel(
  * @param[in] tri_offsets Device array of per-voxel triangle write offsets.
  * @param[out] out_edges Device array of 64-bit edge keys, three per triangle.
  * @param[out] out_triangles Device array of triangles, initially indexed by edge instance.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning The decider must reach the same conclusion as the counting pass. Any divergence
  * between the two -- for instance from a differently rounded saddle evaluation -- would
  * overrun the allotted output range.
@@ -369,7 +367,6 @@ __global__ void generate_edges_and_triangles_mca_kernel(
  * @param[in] num_triangles Number of triangles.
  * @param[in] edge_indices Device array mapping edge instances to unique vertex indices.
  * @param[in,out] triangles Device array of triangles, remapped in place.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void remap_triangles_kernel(
     const uint32_t num_triangles,
@@ -400,7 +397,6 @@ __global__ void remap_triangles_kernel(
  * @param[in] iso Isolevel being extracted.
  * @param[out] out_vertices Device array of interpolated surface vertices.
  * @param[out] out_colors Device array of interpolated colours.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void interpolate_vertices_and_features_kernel(
     const uint32_t num_edges,
@@ -455,7 +451,6 @@ __global__ void interpolate_vertices_and_features_kernel(
  * @param[in] iso Isolevel used in the forward pass.
  * @param[out] grad_sdf Device array accumulating scalar field gradients.
  * @param[out] grad_in_colors Device array accumulating colour gradients.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Accumulation into shared grid vertices uses `atomicAdd`, so the reduction order
  * varies between runs.
  */

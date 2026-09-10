@@ -30,7 +30,6 @@ namespace gs
  * @param[in] tol Minimum scale as a fraction of the voxel size.
  * @param[in] level Octree level setting the reference voxel size $2 / 2^{level}$.
  * @param[out] covis Device array of $6N$ floats, six upper-triangular entries per Gaussian.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Quaternions are assumed normalised unless @p rotnorm is set; an unnormalised
  * quaternion silently scales the covariance.
  */
@@ -101,7 +100,6 @@ __global__ void compute_gs_covi_kernel(
  * @param[in] tree_inds Device array of permutation indices back to original order.
  * @param[in] k Number of neighbours to consider; must not exceed `MAX_K`.
  * @param[out] isos Device array of $N$ per-Gaussian isovalues.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning The neighbour queue is sized by `MAX_K` to stay in registers; raising it
  * increases register pressure and risks spilling to local memory.
  */

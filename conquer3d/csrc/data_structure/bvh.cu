@@ -125,7 +125,6 @@ namespace bvh
  * @param[out] morton_codes Device array of $N$ Morton codes.
  * @param[out] object_ids Device array of $N$ identity indices, permuted by the sort that
  *     follows so results can be mapped back to the caller's ordering.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Primitives whose centroids fall within $2^{-10}$ of the scene extent share a code.
  * Duplicates are handled during hierarchy emission by falling back to index comparison.
  */
@@ -254,7 +253,6 @@ __global__ void karras_emit_hierarchy_kernel(
  * @param[out] bvh_aabb_maxs Device array of $2N - 1$ node upper bounds.
  * @param[in,out] atomic_flags Device array of $N - 1$ visit flags; must be zeroed before
  *     launch.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning @p atomic_flags must be cleared between builds. Stale flags let the first
  * thread through at a node whose sibling has not finished, producing bounds that silently
  * omit part of the subtree.
@@ -406,10 +404,6 @@ __global__ void bottom_up_aabb_kernel(
  * @param[out] out_object_ids Device array receiving the primitive index of each pair.
  * @param[in,out] hit_counter Device counter, atomically incremented per pair.
  * @param[in] max_capacity Capacity of the output arrays.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries held in local
- * memory. A deeply unbalanced hierarchy can overflow it; Morton ordering keeps the tree
- * shallow enough in practice, but pathological input remains a risk.
  * @warning Output slots are claimed with a single atomic on @p hit_counter, so pair
  * ordering is nondeterministic between runs. Writes stop once @p max_capacity is
  * reached; compare the final counter against it to detect truncation.
@@ -497,10 +491,6 @@ __global__ void query_bvh_kernel(
  * @param[out] out_object_ids Device array receiving the second index of each pair.
  * @param[in,out] hit_counter Device counter, atomically incremented per pair.
  * @param[in] max_capacity Capacity of the output arrays.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries held in local
- * memory. A deeply unbalanced hierarchy can overflow it; Morton ordering keeps the tree
- * shallow enough in practice, but pathological input remains a risk.
  * @warning Output slots are claimed with a single atomic on @p hit_counter, so pair
  * ordering is nondeterministic between runs. Writes stop once @p max_capacity is
  * reached; compare the final counter against it to detect truncation.
@@ -587,10 +577,6 @@ __global__ void query_self_bvh_kernel(
  * @param[out] out_object_ids Device array receiving the primitive index of each hit.
  * @param[in,out] hit_counter Device counter, atomically incremented per hit.
  * @param[in] max_capacity Capacity of the output arrays.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries held in local
- * memory. A deeply unbalanced hierarchy can overflow it; Morton ordering keeps the tree
- * shallow enough in practice, but pathological input remains a risk.
  * @warning Output slots are claimed with a single atomic on @p hit_counter, so pair
  * ordering is nondeterministic between runs. Writes stop once @p max_capacity is
  * reached; compare the final counter against it to detect truncation.
@@ -679,12 +665,8 @@ __global__ void query_ray_bvh_kernel(
  * @param[out] out_query_ids Device array of $Q$ query indices.
  * @param[out] out_object_ids Device array of $Q$ nearest primitive indices, $-1$ if none.
  * @param[out] out_distances Device array of $Q$ squared distances to the nearest AABB.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Distances are to the bounding box, not the primitive surface; a box is only a
  * lower bound on the true distance.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries held in local
- * memory. A deeply unbalanced hierarchy can overflow it; Morton ordering keeps the tree
- * shallow enough in practice, but pathological input remains a risk.
  */
 __global__ void query_point_bvh_kernel(
         const uint32_t num_queries,

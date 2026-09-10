@@ -1,10 +1,8 @@
 """Data loading, dataset abstractions, geometric transformations, and batch collation.
 
-This package provides:
-- Benchmark mesh datasets (`MeshDataset`, `Digit3D`, `RedWood`).
-- Custom PyTorch DataLoader collate functions (`bmesh_collate_fn`, `sparse_collate_fn`).
-- Geometric data augmentations (`Rotation`, `Scale`, `MeshSequence`).
-- Canonical 3D asset downloads (`Bunny`, `Dragon`, `Armadillo`, `Iphiagenia`).
+Benchmark mesh datasets, collate functions for variable-sized meshes and sparse tensors,
+composable geometric augmentations, and the downloadable standard assets in
+:mod:`conquer3d.data.assets`.
 """
 
 from . import assets

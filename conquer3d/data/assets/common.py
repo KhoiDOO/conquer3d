@@ -79,8 +79,6 @@ class Common3D:
 class Alligator(Common3D):
     """A stylised alligator model, useful for testing extraction on elongated shapes with thin limbs.
 
-    Downloads and caches `alligator.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Alligator
@@ -88,7 +86,7 @@ class Alligator(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Alligator asset.
+        """Downloads and caches `alligator.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -100,8 +98,6 @@ class Alligator(Common3D):
 class Armadillo(Common3D):
     """The Stanford Armadillo, a standard benchmark with dense, high-curvature detail.
 
-    Downloads and caches `armadillo.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Armadillo
@@ -109,7 +105,7 @@ class Armadillo(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Armadillo asset.
+        """Downloads and caches `armadillo.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -121,8 +117,6 @@ class Armadillo(Common3D):
 class Beast(Common3D):
     """A quadruped creature model with pronounced surface detail.
 
-    Downloads and caches `beast.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Beast
@@ -130,7 +124,7 @@ class Beast(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Beast asset.
+        """Downloads and caches `beast.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -142,8 +136,6 @@ class Beast(Common3D):
 class BeetleAlt(Common3D):
     """An alternative beetle model variant with differing topology.
 
-    Downloads and caches `beetle-alt.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import BeetleAlt
@@ -151,7 +143,7 @@ class BeetleAlt(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the BeetleAlt asset.
+        """Downloads and caches `beetle-alt.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -163,8 +155,6 @@ class BeetleAlt(Common3D):
 class Beetle(Common3D):
     """A beetle model exercising fine appendage geometry.
 
-    Downloads and caches `beetle.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Beetle
@@ -172,7 +162,7 @@ class Beetle(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Beetle asset.
+        """Downloads and caches `beetle.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -184,8 +174,6 @@ class Beetle(Common3D):
 class Bimba(Common3D):
     """A bust sculpture scan, a common target for smoothing and curvature tests.
 
-    Downloads and caches `bimba.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Bimba
@@ -193,7 +181,7 @@ class Bimba(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Bimba asset.
+        """Downloads and caches `bimba.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -205,8 +193,6 @@ class Bimba(Common3D):
 class Cheburashka(Common3D):
     """A cartoon character model with large smooth regions and sharp ear creases.
 
-    Downloads and caches `cheburashka.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Cheburashka
@@ -214,7 +200,7 @@ class Cheburashka(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Cheburashka asset.
+        """Downloads and caches `cheburashka.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -226,8 +212,6 @@ class Cheburashka(Common3D):
 class Cow(Common3D):
     """The classic cow model, widely used in parameterisation and remeshing literature.
 
-    Downloads and caches `cow.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Cow
@@ -235,7 +219,7 @@ class Cow(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Cow asset.
+        """Downloads and caches `cow.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -247,8 +231,6 @@ class Cow(Common3D):
 class Fandisk(Common3D):
     """A CAD part with prominent sharp creases and mechanical corners, the standard test for feature-preserving extraction such as Dual Contouring.
 
-    Downloads and caches `fandisk.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Fandisk
@@ -256,7 +238,7 @@ class Fandisk(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Fandisk asset.
+        """Downloads and caches `fandisk.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -268,8 +250,6 @@ class Fandisk(Common3D):
 class HappyBuddha(Common3D):
     """The Stanford Happy Buddha, a high-genus scan that stresses topological handling.
 
-    Downloads and caches `happy.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import HappyBuddha
@@ -277,7 +257,7 @@ class HappyBuddha(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the HappyBuddha asset.
+        """Downloads and caches `happy.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -289,8 +269,6 @@ class HappyBuddha(Common3D):
 class Homer(Common3D):
     """A cartoon character model with mixed smooth and faceted regions.
 
-    Downloads and caches `homer.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Homer
@@ -298,7 +276,7 @@ class Homer(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Homer asset.
+        """Downloads and caches `homer.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -310,8 +288,6 @@ class Homer(Common3D):
 class Horse(Common3D):
     """A horse model with thin legs, useful for testing narrow-band voxelisation.
 
-    Downloads and caches `horse.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Horse
@@ -319,7 +295,7 @@ class Horse(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Horse asset.
+        """Downloads and caches `horse.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -331,8 +307,6 @@ class Horse(Common3D):
 class Igea(Common3D):
     """The Igea bust scan, a standard subject for detail-preserving simplification.
 
-    Downloads and caches `igea.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Igea
@@ -340,7 +314,7 @@ class Igea(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Igea asset.
+        """Downloads and caches `igea.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -352,8 +326,6 @@ class Igea(Common3D):
 class Lucy(Common3D):
     """The Stanford Lucy statue, a very large scan suited to high-resolution extraction benchmarks.
 
-    Downloads and caches `lucy.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Lucy
@@ -361,7 +333,7 @@ class Lucy(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Lucy asset.
+        """Downloads and caches `lucy.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -373,8 +345,6 @@ class Lucy(Common3D):
 class MaxPlanck(Common3D):
     """The Max Planck bust, a common target for curvature and smoothing tests.
 
-    Downloads and caches `max-planck.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import MaxPlanck
@@ -382,7 +352,7 @@ class MaxPlanck(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the MaxPlanck asset.
+        """Downloads and caches `max-planck.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -394,8 +364,6 @@ class MaxPlanck(Common3D):
 class Nefertiti(Common3D):
     """The Nefertiti bust scan, dense and highly detailed.
 
-    Downloads and caches `nefertiti.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Nefertiti
@@ -403,7 +371,7 @@ class Nefertiti(Common3D):
     """
 
     def __init__(self, download_dir: str ="~/.conquer3d") -> None:
-        """Downloads and caches the Nefertiti asset.
+        """Downloads and caches `nefertiti.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -415,8 +383,6 @@ class Nefertiti(Common3D):
 class Ogre(Common3D):
     """An ogre character model with heavy surface displacement.
 
-    Downloads and caches `ogre.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Ogre
@@ -424,7 +390,7 @@ class Ogre(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Ogre asset.
+        """Downloads and caches `ogre.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -436,8 +402,6 @@ class Ogre(Common3D):
 class RockerArm(Common3D):
     """A mechanical rocker arm, a CAD model combining curved and planar faces.
 
-    Downloads and caches `rocker-arm.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import RockerArm
@@ -445,7 +409,7 @@ class RockerArm(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the RockerArm asset.
+        """Downloads and caches `rocker-arm.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -457,8 +421,6 @@ class RockerArm(Common3D):
 class Spot(Common3D):
     """Keenan Crane's Spot the cow, a genus-0 model widely used in geometry processing.
 
-    Downloads and caches `spot.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Spot
@@ -466,7 +428,7 @@ class Spot(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Spot asset.
+        """Downloads and caches `spot.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -478,8 +440,6 @@ class Spot(Common3D):
 class StanfordBunny(Common3D):
     """The Stanford Bunny, the most widely used benchmark model in the field.
 
-    Downloads and caches `stanford-bunny.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import StanfordBunny
@@ -487,7 +447,7 @@ class StanfordBunny(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the StanfordBunny asset.
+        """Downloads and caches `stanford-bunny.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -499,8 +459,6 @@ class StanfordBunny(Common3D):
 class Suzanne(Common3D):
     """Blender's Suzanne monkey head, a compact model with mixed topology.
 
-    Downloads and caches `suzanne.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Suzanne
@@ -508,7 +466,7 @@ class Suzanne(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Suzanne asset.
+        """Downloads and caches `suzanne.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -520,8 +478,6 @@ class Suzanne(Common3D):
 class Teapot(Common3D):
     """The Utah Teapot, the canonical computer graphics test model.
 
-    Downloads and caches `teapot.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Teapot
@@ -529,7 +485,7 @@ class Teapot(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Teapot asset.
+        """Downloads and caches `teapot.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -541,8 +497,6 @@ class Teapot(Common3D):
 class Woody(Common3D):
     """A character model with articulated limbs.
 
-    Downloads and caches `woody.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import Woody
@@ -550,7 +504,7 @@ class Woody(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the Woody asset.
+        """Downloads and caches `woody.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to
@@ -562,8 +516,6 @@ class Woody(Common3D):
 class XYZRGBDragon(Common3D):
     """The XYZ RGB Dragon scan, a dense model with intricate scale detail.
 
-    Downloads and caches `xyzrgb_dragon.obj` from the common-3d-test-models repository
-    on first use. See :class:`Common3D` for the loading interface.
 
     Example:
         >>> from conquer3d.data.assets import XYZRGBDragon
@@ -571,7 +523,7 @@ class XYZRGBDragon(Common3D):
     """
 
     def __init__(self, download_dir: str = "~/.conquer3d") -> None:
-        """Downloads and caches the XYZRGBDragon asset.
+        """Downloads and caches `xyzrgb_dragon.obj` on first use.
 
         Args:
             download_dir (str, optional): Local cache directory. Defaults to

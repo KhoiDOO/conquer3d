@@ -145,12 +145,10 @@ void bind_ops_chamfer(py::module_& m) {
                   - indices (torch.Tensor): (N,) int64 index of the closest reference point for each query point.
 
           Note:
-              This is the raw kernel entry point and reports empty inputs with sentinels rather
-              than raising. An empty query cloud yields two empty tensors; an empty reference
-              cloud yields distances of +inf and indices of -1, since no nearest neighbour
-              exists. Those +inf values turn into NaN through any mean or backward pass, so
-              prefer :func:`conquer3d.ops.one_sided_chamfer_distance`, which rejects an empty
-              reference cloud outright.
+              This is the raw kernel entry point: it signals empty inputs rather than raising.
+              An empty query cloud yields empty tensors; an empty reference cloud yields +inf
+              distances and -1 indices, which become NaN through any mean or backward pass.
+              Prefer :func:`conquer3d.ops.one_sided_chamfer_distance`, which rejects it.
 
           Example:
               >>> import torch

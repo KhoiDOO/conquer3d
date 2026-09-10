@@ -11,11 +11,11 @@ namespace maths {
 
 /**
  * @brief Computes the eigensystem of a real symmetric 3x3 matrix via Jacobi rotations.
- * 
- * @param A Input symmetric 3x3 matrix.
- * @param eigenvalues Output eigenvalues (diagonal).
- * @param eigenvectors Output orthonormal eigenvectors (columns of V).
- * @param max_sweeps Maximum Jacobi sweeps (default: 6).
+ *
+ * @param[in] A Input symmetric 3x3 matrix.
+ * @param[out] eigenvalues Output eigenvalues (diagonal).
+ * @param[out] eigenvectors Output orthonormal eigenvectors (columns of V).
+ * @param[in] max_sweeps Maximum Jacobi sweeps (default: 6).
  */
 __host__ __device__ __forceinline__ void symmetric_eigen_3x3(
     const float3x3 &A,
@@ -134,17 +134,17 @@ __host__ __device__ __forceinline__ void symmetric_eigen_3x3(
 
 /**
  * @brief Quadratic Error Function (QEF) Solver for Dual Contouring.
- * 
+ *
  * Minimizes E(x) = sum_{i=0}^{K-1} (n_i . (x - p_i))^2 subject to x in [cell_min, cell_max].
  * Uses mass-point origin shifting and truncated SVD/pseudoinverse for numerical stability.
- * 
- * @param pts Array of K intersection points on voxel edges.
- * @param normals Array of K corresponding unit surface normal vectors.
- * @param count Number of intersection points (K).
- * @param cell_min Minimum AABB coordinate of the voxel cell.
- * @param cell_max Maximum AABB coordinate of the voxel cell.
- * @param svd_tolerance Relative eigenvalue threshold for pseudoinverse (default: 0.01).
- * @param cell_expand Scale applied to the cell half-extents before clamping (default: 2.0).
+ *
+ * @param[in] pts Array of K intersection points on voxel edges.
+ * @param[in] normals Array of K corresponding unit surface normal vectors.
+ * @param[in] count Number of intersection points (K).
+ * @param[in] cell_min Minimum AABB coordinate of the voxel cell.
+ * @param[in] cell_max Maximum AABB coordinate of the voxel cell.
+ * @param[in] svd_tolerance Relative eigenvalue threshold for pseudoinverse (default: 0.01).
+ * @param[in] cell_expand Scale applied to the cell half-extents before clamping (default: 2.0).
  * @return Optimal inner vertex position x*.
  */
 __host__ __device__ __forceinline__ float3 solve_qef(

@@ -1,9 +1,7 @@
 """Input/Output routines for 3D geometry and mesh file formats.
 
-This package provides high-speed I/O loaders and writers for:
-- Wavefront OBJ files (`read_obj`, `write_obj`, `write_quad_obj`, `write_voxel_obj`).
-- Stanford PLY files (`read_ply`, `write_ply`, `write_voxel_ply`).
-- Geomview OFF files (`read_off`).
+Readers and writers for Wavefront OBJ, Stanford PLY and Geomview OFF, including the
+voxel-cube writers that dump a grid straight to disk.
 """
 
 from .obj import read_obj, write_obj, write_quad_obj, write_voxel_obj

@@ -34,7 +34,7 @@
 
 /**
  * @brief Verifies the status code of a CUDA runtime call.
- * 
+ *
  * @param[in] code Return code from CUDA runtime function (`cudaError_t`).
  * @param[in] file Calling source file name (`__FILE__`).
  * @param[in] line Calling line number (`__LINE__`).

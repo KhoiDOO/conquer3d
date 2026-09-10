@@ -119,8 +119,7 @@ void bind_primitive_superquadric(py::module_ &m)
 
           Each primitive is meshed analytically from Barr's parametric form on an
           `(resolution, resolution)` grid of angles spaced by approximately equal arc length,
-          then rotated and translated into world space. The per-primitive meshes are packed
-          into one vertex and triangle array by offsetting indices.
+          placed into world space, then packed into one vertex and triangle array.
 
           Args:
               scales (torch.Tensor): (K, 3) float32 semi-axes on CUDA, strictly positive.
@@ -141,10 +140,8 @@ void bind_primitive_superquadric(py::module_ &m)
                     when `return_labels` is False.
 
           Note:
-              The result is a concatenation, not a union: it holds one closed surface per
-              primitive, and wherever two primitives overlap their triangles pass through one
-              another with no shared vertices. Each individual primitive is watertight with
-              Euler characteristic 2.
+              The result is a concatenation, not a union: one closed surface per primitive,
+              self-intersecting wherever two overlap. Each primitive alone is watertight.
 
           Example:
               >>> from conquer3d._C import compute_superquadric_mesh_func

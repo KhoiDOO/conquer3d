@@ -27,7 +27,6 @@ namespace triangle_mesh
  * @param[in] vertices Device array of mesh vertex coordinates.
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[out] triangle_normals Device array of per-triangle unit normals.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Degenerate triangles have a zero-length cross product and produce NaNs. Screen
  * them with compute_triangle_areas_kernel() first.
  */
@@ -57,7 +56,6 @@ __global__ void compute_triangle_normals_kernel(
  * @param[in] vertices Device array of mesh vertex coordinates.
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[out] triangle_areas Device array of per-triangle areas.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void compute_triangle_areas_kernel(
         const uint32_t num_triangles,
@@ -78,24 +76,11 @@ __global__ void compute_triangle_areas_kernel(
     }
 
 /**
- * @brief Evaluates one per-triangle quality metric over the whole mesh.
- * @details The six quality measures differ only in which ::Triangle method they call, so
- * the metric is a template parameter rather than a copied kernel. Binding it as a member
- * function pointer keeps the call resolved at compile time -- it inlines exactly as the
- * hand-written kernels did -- and avoids needing device lambdas, which would require
- * `--expt-extended-lambda` on the build.
- * @tparam Metric Const member of ::Triangle returning the measure for one face.
- * @param[in] num_triangles Number of faces.
- * @param[in] vertices Device array of vertex coordinates.
- * @param[in] triangles Device array of triangle vertex indices.
- * @param[out] out Device array receiving one value per face.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- */
-/**
  * @brief Metric functors selecting one ::Triangle quality measure.
- * @details A functor rather than a pointer-to-member because nvcc cannot carry a
- * pointer-to-member through the launch stub it generates for a `__global__` template.
- * As a type parameter the call still resolves at compile time and inlines away.
+ * @details The quality measures differ only in which ::Triangle method they call, so the
+ * metric is a type parameter of one templated kernel. A functor rather than a
+ * pointer-to-member, because nvcc cannot carry a pointer-to-member through the launch stub
+ * it generates for a `__global__` template; as a type the call still inlines away.
  */
 struct MetricQuality {
     /** @brief Evaluates ::Triangle::compute_quality for one face. */
@@ -138,7 +123,6 @@ struct MetricRadiiRatio {
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[out] out Device array receiving one value per face.
  * @param[in] metric The measure to evaluate.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 template <class Metric>
 __global__ void per_triangle_metric_kernel(
@@ -191,7 +175,6 @@ __global__ void per_triangle_metric_kernel(
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[in] mode Aspect ratio definition selector.
  * @param[out] aspect_ratios Device array of per-triangle aspect ratios.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Larger values indicate worse-conditioned triangles; an equilateral triangle
  * attains the minimum.
  */
@@ -224,7 +207,6 @@ __global__ void compute_aspect_ratio_kernel(
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[out] aabb_mins Device array of per-triangle lower bounds.
  * @param[out] aabb_maxs Device array of per-triangle upper bounds.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void compute_triangle_aabbs_kernel(
         const uint32_t num_triangles,
@@ -441,7 +423,6 @@ __global__ void compute_triangle_aabbs_kernel(
  * @param[in] triangle_normals Device array of per-triangle normals.
  * @param[out] vertex_normals Device array accumulating unnormalised vertex normals.
  * @param[in] mode Weighting selector.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Results are unnormalised; follow with normalize_vertex_normals_kernel().
  * @warning Vertices are shared between triangles, so accumulation uses `atomicAdd`; the
  * reduction order, and hence the last bits of the result, varies between runs.
@@ -508,7 +489,6 @@ __global__ void compute_vertex_normals_kernel(
  * @details One thread per vertex, completing the two-pass accumulate-then-normalise scheme.
  * @param[in] num_vertices Number of vertices.
  * @param[in,out] vertex_normals Device array of vertex normals, normalised in place.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning An isolated vertex accumulates a zero vector, whose normalisation is undefined
  * and yields NaNs.
  */
@@ -564,7 +544,6 @@ __global__ void normalize_vertex_normals_kernel(
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[out] edge_keys Device array of $3N$ edge keys, with duplicates.
  * @param[out] edge_indices Device array of $3N$ source triangle slots.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void extract_edge_slots_kernel(
         const uint32_t num_triangles,
@@ -597,7 +576,6 @@ __global__ void extract_edge_slots_kernel(
  * @param[in] sorted_edge_indices Device array of source triangle slots, permuted alongside.
  * @param[in] triangle_normals Device array of per-triangle normals.
  * @param[out] edge_normals Device array of per-edge normals.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note A boundary edge has a single incident triangle and simply inherits its normal.
  */
 __global__ void compute_edge_normals_kernel(
@@ -689,7 +667,6 @@ __global__ void compute_edge_normals_kernel(
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[out] edge_keys Device array of $3N$ edge keys, with duplicates.
  * @param[out] triangle_indices Device array of $3N$ source triangle indices.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void extract_edges_kernel(
         const uint32_t num_triangles,
@@ -719,7 +696,6 @@ __global__ void extract_edges_kernel(
  * @param[in] num_unique_edges Number of unique edges.
  * @param[in] unique_edge_keys Device array of deduplicated edge keys.
  * @param[out] unique_edges_out Device array of $2E$ vertex indices.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void unpack_edges_kernel(
         const uint32_t num_unique_edges,
@@ -819,7 +795,6 @@ __global__ void unpack_edges_kernel(
  * @param[in] num_triangles Number of triangles.
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[out] counts Device array of per-vertex incidence counts; must be zeroed first.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning @p counts must be zeroed before launch, and the increments are atomic.
  */
 __global__ void compute_vertex_triangle_counts_kernel(
@@ -845,7 +820,6 @@ __global__ void compute_vertex_triangle_counts_kernel(
  * @param[in,out] current_offsets Device array of per-vertex write cursors, initialised to
  *     the CSR offsets.
  * @param[out] indices Device array receiving incident triangle indices.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Triangles appear in nondeterministic order within each vertex's range. Sort per
  * vertex if a canonical ordering matters.
  */
@@ -930,7 +904,6 @@ __global__ void compute_vertex_triangle_indices_kernel(
  * @param[in] v2t_counts Device array of per-vertex incidence counts.
  * @param[in] v2t_indices Device array of incident triangle indices.
  * @param[out] out_is_non_manifold Device array of per-vertex flags.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Detects only vertex-based non-manifoldness; edges shared by more than two
  * triangles are a separate check.
  */
@@ -1061,7 +1034,6 @@ __global__ void get_non_manifold_vertices_kernel(
  * @param[in] triangle_normals Device array of per-triangle normals, or `nullptr`.
  * @param[in] vertex_colors Device array of per-vertex colours, or `nullptr`.
  * @param[out] out_points Device array of sampled positions.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Uniformity depends on @p tri_indices being drawn proportionally to triangle area.
  */
 __global__ void sample_points_triangle_mesh_kernel(
@@ -1168,7 +1140,6 @@ __global__ void sample_points_triangle_mesh_kernel(
  * @param[in] num_unique_edges Number of unique edges.
  * @param[in] unique_edges Device array of $2E$ vertex indices.
  * @param[out] vertex_degrees Device array of per-vertex degrees; must be zeroed first.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning @p vertex_degrees must be zeroed before launch.
  */
 __global__ void compute_vertex_degree_kernel(
@@ -1214,7 +1185,6 @@ __global__ void compute_vertex_degree_kernel(
  * @param[in] unique_edges Device array of $2E$ vertex indices.
  * @param[in] vertices Device array of mesh vertex coordinates.
  * @param[out] vertex_lb_uniform Device array accumulating Laplacian vectors.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Vertices are shared between triangles, so accumulation uses `atomicAdd`; the
  * reduction order, and hence the last bits of the result, varies between runs.
  */
@@ -1243,7 +1213,6 @@ __global__ void compute_uniform_laplacian_kernel(
  * @param[in] num_vertices Number of vertices.
  * @param[in] vertex_degrees Device array of per-vertex degrees.
  * @param[in,out] vertex_lb_uniform Device array of Laplacian vectors, normalised in place.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Isolated vertices have degree zero; guard against division by zero.
  */
 __global__ void normalize_uniform_laplacian_kernel(
@@ -1303,7 +1272,6 @@ __global__ void normalize_uniform_laplacian_kernel(
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[in] vertices Device array of mesh vertex coordinates.
  * @param[out] voronoi_areas Device array of per-vertex areas; must be zeroed first.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Vertices are shared between triangles, so accumulation uses `atomicAdd`; the
  * reduction order, and hence the last bits of the result, varies between runs.
  */
@@ -1400,7 +1368,6 @@ __global__ void compute_voronoi_areas_kernel(
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[in] vertices Device array of mesh vertex coordinates.
  * @param[out] vertex_lb_cot Device array accumulating Laplacian vectors.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Cotangent weights become unbounded as a triangle degenerates and are negative
  * for obtuse angles, so a poor-quality mesh can produce a non-positive-definite operator.
  * @warning Vertices are shared between triangles, so accumulation uses `atomicAdd`; the
@@ -1451,7 +1418,6 @@ __global__ void compute_cotangent_laplacian_kernel(
  * @param[in] num_vertices Number of vertices.
  * @param[in] voronoi_areas Device array of per-vertex mixed Voronoi areas.
  * @param[in,out] vertex_lb_cot Device array of Laplacian vectors, normalised in place.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Vertices with near-zero area amplify the result; clamp or filter degenerate
  * neighbourhoods first.
  */
@@ -1513,7 +1479,6 @@ __global__ void normalize_cotangent_laplacian_kernel(
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[in] vertices Device array of mesh vertex coordinates.
  * @param[out] vertex_angle_sum Device array of per-vertex angle sums; must be zeroed first.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Vertices are shared between triangles, so accumulation uses `atomicAdd`; the
  * reduction order, and hence the last bits of the result, varies between runs.
  */
@@ -1544,7 +1509,6 @@ __global__ void compute_incident_angles_kernel(
  * @param[in] voronoi_areas Device array of per-vertex mixed Voronoi areas.
  * @param[in] vertex_angle_sum Device array of per-vertex angle sums.
  * @param[out] gaussian_curvature Device array of per-vertex curvature values.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Boundary vertices have no full angular neighbourhood, so the $2\pi$ deficit is
  * meaningless there; treat their values as invalid.
  * @warning Near-zero Voronoi areas amplify the deficit without bound.
@@ -1600,7 +1564,6 @@ __global__ void finalize_gaussian_curvature_kernel(
  * @param[in] visited Device array of per-triangle visit flags.
  * @param[out] seed Device slot receiving an unvisited triangle index.
  * @param[out] found Device flag set when a seed was written.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Which unvisited triangle wins the race is unspecified; any is a valid seed.
  */
 __global__ void find_unvisited_kernel(
@@ -1636,7 +1599,6 @@ __global__ void find_unvisited_kernel(
  * @param[in] frontier_size Number of entries in @p frontier.
  * @param[out] next_frontier Device array receiving the following layer.
  * @param[in,out] next_frontier_size Device counter, atomically incremented per insertion.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Only makes winding *consistent*, not outward-facing; a whole component may end
  * up inverted. component_signed_volume_kernel() decides that separately.
  * @warning Non-manifold edges shared by more than two triangles have no well-defined
@@ -1713,7 +1675,6 @@ __global__ void fix_winding_bfs_kernel(
  * @param[in] vertices Device array of mesh vertex coordinates.
  * @param[in] triangles Device array of triangle vertex indices.
  * @param[out] volumes Device accumulator for the signed volume.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Meaningful only for a closed component; an open surface gives an
  * origin-dependent value with no orientation interpretation.
  * @warning Vertices are shared between triangles, so accumulation uses `atomicAdd`; the
@@ -1747,7 +1708,6 @@ __global__ void component_signed_volume_kernel(
  * @param[in] num_component_faces Number of faces in the component.
  * @param[in] component_faces Device array of the component's triangle indices.
  * @param[in,out] triangles Device array of triangle vertex indices, flipped in place.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void invert_component_kernel(
         const int num_component_faces,

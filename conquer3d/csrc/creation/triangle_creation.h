@@ -15,11 +15,11 @@ namespace triangle_creation
 {
     /**
      * @brief Generates a parametric UV Sphere mesh with vertex coordinates and triangle faces on CPU.
-     * 
+     *
      * @param[in] sectors Number of longitudinal angular sectors (default: 32).
-     * @param[in] stacks  Number of latitudinal horizontal stacks (default: 16).
-     * @param[in] radius  Radius of the generated sphere (default: 1.0f).
-     * 
+     * @param[in] stacks Number of latitudinal horizontal stacks (default: 16).
+     * @param[in] radius Radius of the generated sphere (default: 1.0f).
+     *
      * @return Tuple containing (vertices [N, 3] float32, triangles [M, 3] int32).
      */
     inline std::tuple<torch::Tensor, torch::Tensor> create_sphere(int sectors = 32, int stacks = 16, float radius = 1.0f) {
@@ -106,9 +106,9 @@ namespace triangle_creation
 
     /**
      * @brief Generates a regular canonical tetrahedron mesh with 4 vertices and 4 faces on CPU.
-     * 
+     *
      * @param[in] radius Circumscribed sphere radius of the tetrahedron (default: 1.0f).
-     * 
+     *
      * @return Tuple containing (vertices [4, 3] float32, triangles [4, 3] int32).
      */
     inline std::tuple<torch::Tensor, torch::Tensor> create_tetrahedra(float radius = 1.0f) {

@@ -18,10 +18,9 @@
  * @file f4x4.h
  * @brief The `float4x4` homogeneous transform type and its products.
  *
- * @details Full $4 \times 4$ transforms, as used for camera projection and view matrices
- * where the bottom row is not constant and the compact `float3x4` of f3x4.h will not do.
- * Products follow the row-vector convention: translation lives in row 3, and points are
- * multiplied on the left.
+ * @details Full $4 \times 4$ transforms, for camera projection and view matrices whose
+ * bottom row is not constant. Products follow the row-vector convention: translation lives
+ * in row 3 and points are multiplied on the left.
  */
 
 /**
