@@ -1,31 +1,20 @@
 """Learnable superquadric primitive sets.
 
-This module implements the original superquadric of Barr (1981) — an implicit solid
-controlled by three semi-axes and two shape exponents — as a differentiable set of $K$
-primitives whose parameters are `torch.nn.Parameter`, so a set can be fitted to an object
-by gradient descent.
-
-The parameterisation follows the direct per-object optimisation path of SuperFlex
-(Tavernini et al.), but **without its tapering and bending deformations**: this is the
-rigid superquadric only. Every parameter is stored unconstrained and mapped through a
-smooth activation, which keeps the semi-axes positive and the exponents inside the range
-where the inside-outside function is numerically well behaved, without any projection step
-during optimisation.
+Barr's (1981) superquadric — an implicit solid set by three semi-axes and two shape
+exponents — as a differentiable set of $K$ primitives whose parameters are
+`torch.nn.Parameter`, fittable by gradient descent. The parameterisation follows the direct
+per-object path of SuperFlex (Tavernini et al.) **without its tapering and bending
+deformations**. Parameters are stored unconstrained and mapped through smooth activations,
+so the semi-axes stay positive and the exponents stay in their stable range with no
+projection step.
 
 Note:
-    The value returned is the superquadric's *radial* inside-outside function, negative
-    inside and positive outside, not a metric signed distance field: $\\|\\nabla f\\| \\neq 1$
-    away from the isotropic case. It is suitable for occupancy and level-set work; it is
-    not safe input to a sphere tracer.
-
-Note:
-    The numerical guards bound the achievable accuracy. :func:`_safe_pow` clamps not only its
-    base but also its *result* to $[10^{-3}, 5 \\times 10^{2}]$, which floors terms that ought to
-    vanish: querying a unit sphere along an axis contributes $10^{-3}$ from each of the two
-    silent axes instead of zero, displacing the field by roughly $4 \\times 10^{-3}$ at unit
-    scale. This reproduces the reference implementation exactly and is what keeps the
-    exponentiations stable, so it is kept deliberately; treat $10^{-2}$ as the accuracy floor
-    and rescale the geometry if a tighter one is needed.
+    The field is the *radial* inside-outside function, not a metric SDF
+    ($\\|\\nabla f\\| \\neq 1$ away from the isotropic case): it suits occupancy and level-set
+    work but is not safe input to a sphere tracer. Accuracy floors at $10^{-2}$ at unit
+    scale, because :func:`_safe_pow` clamps its result to $[10^{-3}, 5 \\times 10^{2}]$ —
+    kept deliberately, since it matches the reference implementation and is what keeps the
+    exponentiations stable.
 
 Example:
     >>> import torch
@@ -212,11 +201,10 @@ def compute_sq_union(
             shape or selects no primitive at all.
 
     Note:
-        The smooth minimum is a *lower* bound on the true minimum, short of it by at most
-        $\\tau \\log K$. The union surface is therefore slightly inflated relative to the hard
-        union — with the default $\\tau$ and $K = 8$ the offset reaches $0.021$, which is not
-        negligible against geometry normalised to the unit cube. Reduce `tau` if the bias
-        matters more than the smoother gradient.
+        The softmin is a *lower* bound on the true minimum, short of it by at most
+        $\\tau \\log K$ — $0.021$ at the default $\\tau$ with $K = 8$, not negligible against
+        unit-cube geometry — so the union surface is slightly inflated. Reduce `tau` if that
+        bias matters more than the smoother gradient.
 
     Example:
         >>> import torch
@@ -249,24 +237,17 @@ def compute_sq_union(
 class SuperQuadrics(nn.Module):
     """A learnable set of $K$ superquadrics in the original, undeformed Barr formulation.
 
-    Parameters are held unconstrained as `raw_*` tensors and mapped to valid geometry through
+    Parameters are held unconstrained as `raw_*` tensors and mapped to valid geometry by
     smooth activations exposed as properties, so an optimiser can move them freely without
-    ever producing a negative semi-axis or a degenerate exponent. Tapering and bending are
-    deliberately absent; this is the rigid superquadric.
+    producing a negative semi-axis or a degenerate exponent. :meth:`forward` reports every
+    primitive separately; `return_union=True` also returns the :func:`compute_sq_union`
+    softmin of width `union_tau`, which is the field a fitting loss attaches to, while the
+    per-primitive rows feed the overlap and extent regularisers.
 
     Note:
-        `forward` returns the field of every primitive separately. Passing `return_union=True`
-        additionally combines them through :func:`compute_sq_union`, a softmin whose width is
-        the `union_tau` set on the module; that combined field is what a fitting loss attaches
-        to. The per-primitive rows are kept alongside it because the regularisers that keep a
-        fit well behaved — overlap, per-primitive extent — need them.
-
-    Note:
-        `existences` gates the union discretely, through the bool :attr:`mask`, and so receives
-        no gradient: a primitive is either in the union or absent from it, never faded. This
-        follows the reference implementation, where existence is frozen during optimisation and
-        changed only by discrete pruning. Nothing here drives it down, so a set fitted without
-        a parsimony term or a pruning step keeps all $K$ primitives alive.
+        `existences` gates the union discretely through the bool :attr:`mask` and receives no
+        gradient — a primitive is either in the union or absent, never faded. Nothing drives it
+        down, so a set fitted without a parsimony term or a pruning step keeps all $K$ alive.
 
     Attributes:
         raw_scales (torch.nn.Parameter): Unconstrained semi-axes of shape `(K, 3)`.
@@ -439,12 +420,9 @@ class SuperQuadrics(nn.Module):
                 while :attr:`mask` selects no primitive.
 
         Note:
-            The union applies the existence mask but the per-primitive fields do not, since the
-            union is the shape the set represents whereas the rows are the primitives
-            themselves. A primitive below `existence_threshold` therefore still has a row and
-            still receives gradient from any per-primitive term, but contributes nothing to the
-            union. Existence itself stays outside the gradient path either way — it gates
-            discretely, as in the reference implementation.
+            The union applies the existence mask; the per-primitive rows do not. A primitive
+            below `existence_threshold` still has a row and still receives gradient from any
+            per-primitive term, but contributes nothing to the union.
         """
         fields = compute_sq_sdf(
             points,
@@ -467,10 +445,9 @@ class SuperQuadrics(nn.Module):
                Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Tessellates every present primitive and concatenates the result into one mesh.
 
-        Each primitive is meshed analytically from Barr's parametric form, evaluated on an
+        Each primitive is meshed analytically from Barr's parametric form on an
         `(resolution, resolution)` grid of angles spaced by approximately equal arc length,
-        then rotated and translated into world space. The per-primitive meshes are packed
-        into a single vertex and triangle array by offsetting indices.
+        placed into world space, then packed into one vertex and triangle array.
 
         Args:
             resolution (int, optional): Number of angular samples along each axis. Each
@@ -492,13 +469,10 @@ class SuperQuadrics(nn.Module):
                 the set is not on a CUDA device.
 
         Note:
-            The result is a **concatenation, not a union**: it holds one closed surface per
-            present primitive, and wherever two primitives overlap their triangles pass
-            through one another with no shared vertices. It is therefore self-intersecting
-            and is not the boundary of the union solid, since surface interior to a
-            neighbouring primitive is still present. Its Euler characteristic is $2K$ rather
-            than 2. For a watertight surface, evaluate :func:`compute_sq_union` on a grid and
-            run an isosurface extractor over it.
+            The result is a **concatenation, not a union**: one closed surface per present
+            primitive, self-intersecting wherever two overlap, with Euler characteristic $2K$
+            rather than 2. For the boundary of the union solid, evaluate
+            :func:`compute_sq_union` on a grid and run an isosurface extractor over it.
 
         Example:
             >>> import torch
@@ -636,9 +610,8 @@ class SuperQuadrics(nn.Module):
     def save(self, filepath: str) -> None:
         """Writes the set to a PyTorch archive.
 
-        The unconstrained parameters are what get stored, so a reloaded set is bit-identical
-        and an interrupted optimisation resumes exactly. Constrained values are written
-        alongside for inspection only and are ignored when loading.
+        The unconstrained parameters are what is stored, so a reloaded set is bit-identical.
+        Constrained values are written alongside for inspection and ignored when loading.
 
         Args:
             filepath (str): Destination path, conventionally ending in `.pt`.

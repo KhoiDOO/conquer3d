@@ -1,27 +1,17 @@
 r"""Exact Hermite data for sharp-feature Dual Contouring.
 
-Dual Contouring (Ju et al., 2002) places one vertex per cell at the minimiser of
+The Dual Contouring QEF only places its vertex on a crease when each $(p_i, n_i)$ is the
+*true* edge-surface intersection and the *true* normal there -- the Hermite data the method
+is named for. Interpolating $n_i$ from normals at the two grid corners blends across the
+crease, because the corners belong to different faces, and the QEF then reconstructs
+neither and rounds the feature off.
 
-$$E(v) = \sum_i \left( n_i \cdot (v - p_i) \right)^2$$
-
-and that minimiser only lands on a crease when each $(p_i, n_i)$ is the *true*
-surface intersection of the edge and the *true* surface normal there -- the
-Hermite data the method is named for. Deriving $n_i$ instead by interpolating
-normals stored at the two grid corners blends across the crease, because the
-two corners belong to different faces, and the QEF then reconstructs neither
-face and rounds the feature off.
-
-This module builds genuine Hermite data for the 12 edges of every cell, in the
-edge order the CUDA kernel uses, ready to hand to
-:func:`conquer3d.ops.dual_contouring` through its ``edge_points`` and
-``edge_normals`` arguments.
-
-Two sources are provided:
-
-- :func:`compute_hermite_from_mesh` -- for a :class:`~conquer3d.data_structure.TriangleMesh`,
-  using the BVH to find the closest surface point and its face normal.
-- :func:`compute_hermite_from_field` -- for an implicit or neural field, refining the
-  crossing along the edge and taking the normal from the field gradient.
+This module builds genuine Hermite data for the 12 edges of every cell, in the edge order
+the CUDA kernel uses, ready to pass to :func:`conquer3d.ops.dual_contouring` as
+``edge_points`` and ``edge_normals``. :func:`compute_hermite_from_mesh` takes it from a
+:class:`~conquer3d.data_structure.TriangleMesh` via the BVH closest point and its face
+normal; :func:`compute_hermite_from_field` refines the crossing along the edge and reads
+the normal from the field gradient.
 
 Example:
     >>> from conquer3d.ops import compute_hermite_from_mesh, dual_contouring

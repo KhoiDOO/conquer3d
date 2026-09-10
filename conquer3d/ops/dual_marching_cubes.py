@@ -1,17 +1,13 @@
 """GPU-accelerated Differentiable Dual Marching Cubes (DMC).
 
-Dual Marching Cubes (Schaefer & Warren, 2004) combines the sharp feature preservation
-and clean quad topology of Dual Contouring with the strict 2-manifold topological guarantees
-of Marching Cubes. Unlike standard Dual Contouring which generates at most 1 dual vertex
-per voxel cell (causing topological pinch points and self-intersections when multiple surface
-sheets intersect a cell), Dual Marching Cubes generates multiple dual vertices per cell—one
-for each independent MC contour—and projects them onto the exact trilinear zero-isosurface
-using Newton-Raphson level-set iterations.
+Dual Marching Cubes (Schaefer & Warren, 2004) keeps Dual Contouring's sharp features and
+quad topology while retaining the 2-manifold guarantee of Marching Cubes: a cell emits one
+dual vertex per independent MC contour rather than one per cell, so sheets sharing a cell no
+longer pinch together. Vertices are projected onto the trilinear zero level set by
+Newton-Raphson.
 
 Example:
-    >>> import torch
     >>> from conquer3d.ops import dual_marching_cubes
-    >>> # Extract strictly 2-manifold isosurface mesh
     >>> verts, faces = dual_marching_cubes(grid_vertices, voxels, sdf, iso=0.0, project_iters=5)
 """
 
