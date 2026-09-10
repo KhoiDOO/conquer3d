@@ -272,3 +272,13 @@ In this markdown file, I place the research papers that I read during building t
     numpages = {19}
 }
 ```
+
+```bibtex
+@article{superflex,
+    author = {Tavernini, Gabriel and Fedele, Elisabetta and Novello, Tiago and Guibas, Leonidas and Pollefeys, Marc and Engelmann, Francis},
+    title = {SuperFlex: Deformable Superquadrics for Point Cloud Decomposition},
+    year = {2026},
+    journal = {arXiv preprint arXiv:2607.01015},
+    url = {https://arxiv.org/abs/2607.01015}
+}
+```
