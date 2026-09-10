@@ -7,6 +7,7 @@
 
 #include <torch/extension.h>
 #include <c10/cuda/CUDAFunctions.h>
+#include <c10/cuda/CUDAStream.h>
 #include <cstdint>
 #include <cfloat>
 
@@ -115,11 +116,17 @@ void one_sided_chamfer_distance(
     if (num_query_points == 0)
         return;
 
+    // Every enqueue below must go on PyTorch's current stream: the output buffers and the
+    // scratch tensors are allocated by the caching allocator against that stream, and
+    // kdtree::build already uses it. Mixing in the legacy default stream races, because
+    // PyTorch creates its streams with cudaStreamNonBlocking and so gets no implicit sync.
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
     if (num_reference_points == 0)
     {
-        // No reference points available: initialize distances to infinity and indices to -1
-        cudaMemsetAsync(distances, 0x7F, num_query_points * sizeof(float));
-        cudaMemsetAsync(indices, 0xFF, num_query_points * sizeof(int64_t));
+        // No reference points available: saturate distances and mark indices as -1.
+        cudaMemsetAsync(distances, 0x7F, num_query_points * sizeof(float), stream);
+        cudaMemsetAsync(indices, 0xFF, num_query_points * sizeof(int64_t), stream);
         return;
     }
 
@@ -128,7 +135,7 @@ void one_sided_chamfer_distance(
 
     if (num_reference_points == 1)
     {
-        one_sided_chamfer_single_point_kernel<<<blocks, threads>>>(
+        one_sided_chamfer_single_point_kernel<<<blocks, threads, 0, stream>>>(
             num_query_points,
             query_points,
             reference_points,
@@ -146,7 +153,8 @@ void one_sided_chamfer_distance(
         cloned_ref_tensor.data_ptr<float>(),
         reference_points,
         num_reference_points * sizeof(float3),
-        cudaMemcpyDeviceToDevice
+        cudaMemcpyDeviceToDevice,
+        stream
     );
 
     auto ref_indices_tensor = torch::arange((int64_t)num_reference_points, opt_i);
@@ -159,7 +167,7 @@ void one_sided_chamfer_distance(
         p_cloned,
         p_inds);
 
-    one_sided_chamfer_distance_kernel<<<blocks, threads>>>(
+    one_sided_chamfer_distance_kernel<<<blocks, threads, 0, stream>>>(
         num_query_points,
         query_points,
         num_reference_points,
@@ -167,4 +175,119 @@ void one_sided_chamfer_distance(
         p_inds,
         distances,
         indices);
+}
+
+/**
+ * @brief CUDA kernel computing analytical gradients for one-sided Chamfer distance.
+ *
+ * Each thread handles one query point. For each query point, it computes the gradient
+ * contribution w.r.t. the query point (direct coalesced write) and atomically accumulates the
+ * reaction gradient into the corresponding nearest reference point.
+ *
+ * @param[in]  num_query_points     Number of query points ($N$).
+ * @param[in]  query_points         Device array of $N$ query coordinates.
+ * @param[in]  num_reference_points Number of reference points ($M$).
+ * @param[in]  reference_points     Device array of $M$ reference coordinates.
+ * @param[in]  indices              Device array of $N$ nearest reference point indices.
+ * @param[in]  grad_distances       Device array of $N$ incoming adjoint gradients.
+ * @param[in]  squared              Whether metric is squared Euclidean ($L_2^2$) or Euclidean ($L_2$).
+ * @param[out] grad_query           Device array of $N$ query point gradients (nullptr if not needed).
+ * @param[out] grad_reference       Device array of $M$ reference point gradients (nullptr if not needed).
+ */
+__global__ void one_sided_chamfer_distance_backward_kernel(
+    const uint32_t num_query_points,
+    const float3* __restrict__ query_points,
+    const uint32_t num_reference_points,
+    const float3* __restrict__ reference_points,
+    const int64_t* __restrict__ indices,
+    const float* __restrict__ grad_distances,
+    const bool squared,
+    float3* __restrict__ grad_query,
+    float3* __restrict__ grad_reference)
+{
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_query_points)
+        return;
+
+    int64_t ref_idx = indices[idx];
+    if (ref_idx < 0 || ref_idx >= static_cast<int64_t>(num_reference_points))
+        return;
+
+    float g = grad_distances[idx];
+    float3 q = query_points[idx];
+    float3 r = reference_points[ref_idx];
+
+    float dx = q.x - r.x;
+    float dy = q.y - r.y;
+    float dz = q.z - r.z;
+
+    float scale = 0.0f;
+    if (squared)
+    {
+        scale = 2.0f * g;
+    }
+    else
+    {
+        float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+        scale = (dist > 1e-12f) ? (g / dist) : 0.0f;
+    }
+
+    float gx = scale * dx;
+    float gy = scale * dy;
+    float gz = scale * dz;
+
+    if (grad_query != nullptr)
+    {
+        grad_query[idx] = make_float3(gx, gy, gz);
+    }
+
+    if (grad_reference != nullptr)
+    {
+        atomicAdd(&(grad_reference[ref_idx].x), -gx);
+        atomicAdd(&(grad_reference[ref_idx].y), -gy);
+        atomicAdd(&(grad_reference[ref_idx].z), -gz);
+    }
+}
+
+void one_sided_chamfer_distance_backward(
+    const uint32_t num_query_points,
+    const float3* __restrict__ query_points,
+    const uint32_t num_reference_points,
+    const float3* __restrict__ reference_points,
+    const int64_t* __restrict__ indices,
+    const float* __restrict__ grad_distances,
+    const bool squared,
+    float3* __restrict__ grad_query,
+    float3* __restrict__ grad_reference)
+{
+    if (num_query_points == 0)
+        return;
+
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+    if (num_reference_points == 0)
+    {
+        if (grad_query != nullptr)
+        {
+            cudaMemsetAsync(grad_query, 0, num_query_points * sizeof(float3), stream);
+        }
+        return;
+    }
+
+    if (grad_query == nullptr && grad_reference == nullptr)
+        return;
+
+    uint32_t threads = NTHREADS;
+    uint32_t blocks = (num_query_points + threads - 1) / threads;
+
+    one_sided_chamfer_distance_backward_kernel<<<blocks, threads, 0, stream>>>(
+        num_query_points,
+        query_points,
+        num_reference_points,
+        reference_points,
+        indices,
+        grad_distances,
+        squared,
+        grad_query,
+        grad_reference);
 }
