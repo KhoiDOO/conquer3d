@@ -6,9 +6,8 @@
  * @brief The `float3x4` affine transform type and its products.
  *
  * @details A $3 \times 4$ matrix stores a rotation and a translation without the constant
- * bottom row of a full $4 \times 4$, which is the compact form used for camera extrinsics
- * and instance transforms. Dropping the row saves four floats per transform and a row of
- * multiply-adds per point.
+ * bottom row of a full $4 \times 4$ -- the compact form used for camera extrinsics and
+ * instance transforms, saving four floats and a row of multiply-adds per point.
  */
 
 #include <stdint.h>
@@ -20,8 +19,6 @@
 /**
  * @brief 3x4 affine transform matrix.
  *
- * @details Stores a rotation and translation without the constant bottom row of a full
- * 4x4, the compact form used for camera extrinsics and instance transforms.
  */
 typedef struct
 {

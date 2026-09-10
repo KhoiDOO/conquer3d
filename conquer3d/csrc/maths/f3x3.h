@@ -19,9 +19,9 @@
  * @file f3x3.h
  * @brief The `float3x3` matrix type, its products, and closed-form inversion.
  *
- * @details The workhorse matrix of the library: rotations, Gaussian splat covariances, and
- * the QEF normal matrix are all $3 \times 3$. Kernels keep these entirely in registers, so
- * the routines here are closed form and loop-free to avoid spilling to local memory.
+ * @details Rotations, Gaussian splat covariances and the QEF normal matrix are all
+ * $3 \times 3$. Kernels keep these in registers, so every routine here is closed form and
+ * loop-free to avoid spilling to local memory.
  */
 
 /**

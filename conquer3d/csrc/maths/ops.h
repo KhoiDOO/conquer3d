@@ -9,15 +9,11 @@
  * @file ops.h
  * @brief Host fallbacks for CUDA math intrinsics, and scalar interpolation helpers.
  *
- * @details `rsqrt` and `rsqrtf` are device intrinsics that do not exist when a translation
- * unit is compiled by the host compiler alone. These definitions appear only outside
- * `__CUDACC__`, so headers shared between host and device code compile either way without
- * `#ifdef` guards at every call site.
- *
- * The scalar helpers below are the counterparts of the `float3` routines in f3x1.h and
- * overload on the same names, so `maths::clamp` and `maths::lerp` read identically whether
- * the operand is a scalar or a vector. They live here rather than in f3x1.h because this
- * header is included first and must not depend on the vector operators.
+ * @details `rsqrt` and `rsqrtf` are device intrinsics, so host-only translation units get
+ * the fallbacks below and shared headers compile either way without `#ifdef` at every call
+ * site. The scalar helpers overload the same names as their `float3` counterparts in
+ * f3x1.h, and live here because this header is included first and must not depend on the
+ * vector operators.
  */
 
 #include <math_constants.h>
@@ -49,15 +45,12 @@ namespace maths
 {
     /**
      * @brief Confines a scalar to a range.
-     * @details Scalar overload of the `float3` clamp in f3x1.h. Spelling the two branches
-     * as one call keeps the intent legible where the bound is itself an expression.
      * @param[in] v Value to clamp.
      * @param[in] min_val Lower bound.
      * @param[in] max_val Upper bound.
      * @return @p v confined to $[\text{min\_val}, \text{max\_val}]$.
-     * @note Ordered `fmaxf(lo, fminf(hi, v))` to match the form these call sites already
-     * used. The order is irrelevant for finite input but decides which bound a NaN
-     * collapses to, so keeping it preserves the previous behaviour exactly.
+     * @note Ordered `fmaxf(lo, fminf(hi, v))`. Irrelevant for finite input, but it decides
+     * which bound a NaN collapses to, so the order is deliberate.
      */
     static inline __host__ __device__ float clamp(float v, float min_val, float max_val) {
         return fmaxf(min_val, fminf(max_val, v));
@@ -65,8 +58,8 @@ namespace maths
 
     /**
      * @brief Confines a scalar to the unit interval.
-     * @details The overwhelmingly common case of clamp(), used wherever an interpolation
-     * parameter or a normalised cell coordinate must not escape $[0, 1]$ through rounding.
+     * @details The common case of clamp(), for interpolation parameters and normalised
+     * cell coordinates that must not escape $[0, 1]$ through rounding.
      * @param[in] v Value to clamp.
      * @return @p v confined to $[0, 1]$.
      */

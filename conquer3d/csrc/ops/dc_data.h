@@ -5,11 +5,10 @@
  * @file dc_data.h
  * @brief Constant topology tables for Dual Contouring.
  *
- * @details Dual Contouring inverts the Marching Cubes arrangement: one vertex is placed
- * inside each active cell, positioned by minimising a quadratic error function over the
- * surface normals, and faces are formed by connecting the cells around each bipolar edge.
- * That is what lets it reproduce sharp creases and corners that vertex-on-edge methods round
- * away. These tables supply the cell-local topology the QEF kernels index into.
+ * @details Dual Contouring inverts the Marching Cubes arrangement: one QEF-placed vertex
+ * per active cell, with faces formed by connecting the cells around each bipolar edge --
+ * which is what reproduces creases that vertex-on-edge methods round away. These tables
+ * supply the cell-local topology the QEF kernels index into.
  */
 
 #include <cuda_runtime.h>
@@ -55,17 +54,14 @@ static __constant__ float dc_corner_uvw[8][3] = {
 /**
  * @brief Cartesian quadrant slot assigned to each of the 12 local edges.
  *
- * @details Dual methods place vertices per edge rather than per cell, so each edge must map
- * deterministically to one of four quadrant slots. Because adjacent cells agree on this
- * mapping, the dual quad around a shared edge is assembled consistently from all four
- * incident cells.
+ * @details Each edge maps deterministically to one of four quadrant slots, and adjacent
+ * cells agree on the mapping, so the dual quad around a shared edge is assembled
+ * consistently from all four incident cells.
  *
- * Slots 0-3 must walk the four incident cells **counter-clockwise about the edge's own
- * positive axis**, and all three edge families must agree on that handedness -- otherwise
- * the faces of one family are wound backwards relative to the rest and the extracted mesh
- * has inconsistent normals. The right-handed plane perpendicular to each axis is $(Y, Z)$
- * for $+X$, $(Z, X)$ for $+Y$ and $(X, Y)$ for $+Z$; note that $+Y$ pairs with $(Z, X)$ and
- * not $(X, Z)$, which is the easy mistake here.
+ * Slots 0-3 must walk those cells **counter-clockwise about the edge's own positive axis**,
+ * and all three edge families must agree on that handedness, or one family is wound
+ * backwards and the mesh has inconsistent normals. The right-handed plane is $(Y, Z)$ for
+ * $+X$, $(Z, X)$ for $+Y$ and $(X, Y)$ for $+Z$ -- $+Y$ pairs with $(Z, X)$, not $(X, Z)$.
  */
 static __constant__ int dc_edge_quadrant[12] = {
     0, // e=0 (+X) -> slot 0

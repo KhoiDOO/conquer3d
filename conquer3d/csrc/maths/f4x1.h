@@ -7,10 +7,9 @@
  * @file f4x1.h
  * @brief Arithmetic operators and vector routines for CUDA's `float4` type.
  *
- * @details The `float4` counterpart to f3x1.h. Four-component vectors carry homogeneous
- * coordinates for matrix transforms and quaternion rotations, and their 16-byte width lets
- * the hardware move one per instruction, so `float4` is also the preferred layout for
- * coalesced global-memory traffic.
+ * @details The `float4` counterpart to f3x1.h, carrying homogeneous coordinates and
+ * quaternions. Its 16-byte width moves in one instruction, so it is also the preferred
+ * layout for coalesced global-memory traffic.
  */
 
 #include <stdint.h>

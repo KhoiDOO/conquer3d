@@ -6,11 +6,10 @@
  * @brief Constant tables for the asymptotic decider used by Marching Cubes Asymptotic.
  *
  * @details Classical Marching Cubes is ambiguous on any cube face whose four corners
- * alternate in sign: the two possible connections produce different topology, and picking
- * inconsistently between neighbouring cells tears holes in the surface. The asymptotic
- * decider (Nielson & Hamann, 1991) resolves this by evaluating the bilinear saddle value on
- * the face and connecting according to its sign, which is consistent by construction because
- * both cells sharing the face compute the same value.
+ * alternate in sign, and choosing inconsistently between neighbours tears holes in the
+ * surface. The asymptotic decider (Nielson & Hamann, 1991) connects according to the sign
+ * of the bilinear saddle value on the face -- consistent by construction, since both cells
+ * sharing the face compute the same value.
  */
 
 #include <cuda_runtime.h>

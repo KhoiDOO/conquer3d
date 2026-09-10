@@ -5,10 +5,9 @@
  * @file f3x1.h
  * @brief Arithmetic operators and vector routines for CUDA's `float3` type.
  *
- * @details CUDA ships `float3` as a plain struct with no operators, so every geometric
- * kernel in the library would otherwise spell out component arithmetic by hand. These
- * `__host__ __device__` inlines supply the missing algebra once, compile to the same
- * instructions as the expanded form, and keep kernel code readable.
+ * @details CUDA ships `float3` as a plain struct with no operators. These
+ * `__host__ __device__` inlines supply the missing algebra once and compile to the same
+ * instructions as the expanded form.
  *
  * All functions are branch-free and safe to call from divergent warp contexts.
  */
@@ -125,10 +124,9 @@ static inline __host__ __device__ void operator/=(float3 &a, float b) {
 #ifdef __CUDACC__
 /**
  * @brief Atomically accumulates a vector into device memory.
- * @details Issues three independent scalar `atomicAdd` calls. The components are
- * therefore atomic individually but not as a unit -- a concurrent reader may observe a
- * partially updated vector. That is sufficient for gradient accumulation, where only
- * the final total matters.
+ * @details Three independent scalar `atomicAdd` calls, so the components are atomic
+ * individually but not as a unit: a concurrent reader may see a partially updated vector.
+ * Sufficient for gradient accumulation, where only the final total matters.
  * @param[in,out] address Destination vector in global or shared memory.
  * @param[in] val Vector added to the destination.
  * @return The component-wise values held before the update.
@@ -177,9 +175,8 @@ namespace maths
 
     /**
      * @brief Cross product of two vectors.
-     * @details The result is orthogonal to both operands, with magnitude equal to the area
-     * of the parallelogram they span -- the basis for triangle normals and areas throughout
-     * the library.
+     * @details Orthogonal to both operands, with magnitude equal to the area of the
+     * parallelogram they span -- the basis for triangle normals and areas.
      * @param[in] a First operand.
      * @param[in] b Second operand.
      * @return The vector $\mathbf{a} \times \mathbf{b}$.
@@ -194,8 +191,8 @@ namespace maths
 
     /**
      * @brief Scales a vector to unit length.
-     * @details Uses the hardware reciprocal square root rather than dividing by norm(),
-     * which is faster and accurate enough for shading and geometric predicates.
+     * @details Uses the hardware reciprocal square root, accurate enough for shading and
+     * geometric predicates.
      * @param[in] v Vector to normalise.
      * @return The unit vector $\mathbf{v} / \|\mathbf{v}\|$.
      * @warning Undefined for the zero vector, which yields NaNs. Guard degenerate inputs
@@ -263,9 +260,7 @@ namespace maths
 
     /**
      * @brief Linear interpolation between two vectors.
-     * @details Overloads the scalar lerp() in ops.h. Interpolating along an edge is the
-     * single most repeated operation in the extraction kernels -- a crossing point, an
-     * interpolated normal, a blended colour -- and naming it keeps those sites readable.
+     * @details Vector overload of the scalar lerp() in ops.h.
      * @param[in] a Vector returned at $t = 0$.
      * @param[in] b Vector returned at $t = 1$.
      * @param[in] t Interpolation parameter; not clamped.
@@ -277,10 +272,9 @@ namespace maths
 
     /**
      * @brief Normalises a vector, falling back when it is too short to normalise.
-     * @details normalize() divides unconditionally and yields NaN or an infinity for a
-     * degenerate input. Kernels therefore guard the division by hand, and did so with three
-     * different epsilons across the tree. This states the policy once: below @p eps the
-     * direction is meaningless, so @p fallback is returned instead.
+     * @details normalize() divides unconditionally and yields NaN for a degenerate input.
+     * This states the guard once: below @p eps the direction is meaningless, so
+     * @p fallback is returned instead.
      * @param[in] v Vector to normalise.
      * @param[in] fallback Direction returned when @p v is shorter than @p eps.
      * @param[in] eps Length below which @p v is treated as degenerate.
