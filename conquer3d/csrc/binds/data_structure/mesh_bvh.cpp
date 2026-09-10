@@ -129,7 +129,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
         return_distance ? out_distances.slice(0, 0, h_valid_counter) : out_distances);
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::query_point(
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::query_point(
     const torch::Tensor &query_points,
     const torch::Tensor &vertices,
     const torch::Tensor &triangles,
@@ -147,7 +147,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     std::optional<torch::Tensor> cf_boundary_lookup,
     std::optional<torch::Tensor> cf_fine_masks,
     std::optional<std::vector<int64_t>> cf_block_size,
-    std::optional<std::vector<int64_t>> cf_coarse_res)
+    std::optional<std::vector<int64_t>> cf_coarse_res,
+    bool return_occ)
 {
     if (sign_mode != 0 && sign_mode != 1 && sign_mode != 2 && sign_mode != 3 && sign_mode != 4 && sign_mode != 5)
     {
@@ -311,7 +312,16 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
         cf_bs,
         cf_cd);
 
-    return std::make_tuple(out_query_ids, out_object_ids, out_projected_pts, out_distances);
+    // Occupancy is defined once, here: a point is inside iff its signed distance is
+    // negative. Points exactly on the surface yield -0.0f, which compares as outside.
+    // Unsigned distances are non-negative, so occupancy is only produced alongside an SDF.
+    torch::Tensor out_occupancy;
+    if (return_occ && return_sdf)
+    {
+        out_occupancy = out_distances.lt(0);
+    }
+
+    return std::make_tuple(out_query_ids, out_object_ids, out_projected_pts, out_distances, out_occupancy);
 }
 
 torch::Tensor MeshBVH::query_voxel(
@@ -527,7 +537,39 @@ void bind_ds_mesh_bvh(py::module_ &m) {
              Example:
                  >>> ray_ids, tri_ids, pts = mesh_bvh.get_ray_intersection(origins, dirs, verts, tris)
              )pbdoc")
-        .def("query_point", &MeshBVH::query_point,
+        .def("query_point", [](MeshBVH &self,
+                               const torch::Tensor &query_points,
+                               const torch::Tensor &vertices,
+                               const torch::Tensor &triangles,
+                               bool return_sdf,
+                               bool return_prj_pts,
+                               int sign_mode,
+                               std::optional<torch::Tensor> triangle_normals,
+                               std::optional<torch::Tensor> vertex_normals,
+                               std::optional<torch::Tensor> edge_normals,
+                               std::optional<torch::Tensor> flood_fill_mask,
+                               std::optional<std::vector<float>> flood_grid_min,
+                               std::optional<std::vector<float>> flood_grid_max,
+                               std::optional<std::vector<int64_t>> flood_grid_res,
+                               std::optional<torch::Tensor> cf_coarse_mask,
+                               std::optional<torch::Tensor> cf_boundary_lookup,
+                               std::optional<torch::Tensor> cf_fine_masks,
+                               std::optional<std::vector<int64_t>> cf_block_size,
+                               std::optional<std::vector<int64_t>> cf_coarse_res,
+                               bool return_occ) -> py::object {
+                 auto result = self.query_point(
+                     query_points, vertices, triangles, return_sdf, return_prj_pts, sign_mode,
+                     triangle_normals, vertex_normals, edge_normals, flood_fill_mask,
+                     flood_grid_min, flood_grid_max, flood_grid_res,
+                     cf_coarse_mask, cf_boundary_lookup, cf_fine_masks,
+                     cf_block_size, cf_coarse_res, return_occ);
+                 if (return_occ) {
+                     return py::cast(result);
+                 } else {
+                     return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result),
+                                                     std::get<2>(result), std::get<3>(result)));
+                 }
+             },
              py::arg("query_points"), py::arg("vertices"), py::arg("triangles"),
              py::arg("return_sdf") = false, py::arg("return_prj_pts") = true, py::arg("sign_mode") = 0,
              py::arg("triangle_normals") = py::none(), py::arg("vertex_normals") = py::none(),
@@ -536,7 +578,7 @@ void bind_ds_mesh_bvh(py::module_ &m) {
              py::arg("flood_grid_res") = py::none(),
              py::arg("cf_coarse_mask") = py::none(), py::arg("cf_boundary_lookup") = py::none(),
              py::arg("cf_fine_masks") = py::none(), py::arg("cf_block_size") = py::none(),
-             py::arg("cf_coarse_res") = py::none(),
+             py::arg("cf_coarse_res") = py::none(), py::arg("return_occ") = false,
              R"pbdoc(
              Finds closest triangles, projected surface points, and Signed Distance Fields (SDF).
 
@@ -547,16 +589,24 @@ void bind_ds_mesh_bvh(py::module_ &m) {
                  return_sdf (bool, optional): Return signed distance instead of unsigned. Defaults to False.
                  return_prj_pts (bool, optional): Return closest surface projections. Defaults to True.
                  sign_mode (int, optional): Sign evaluation method (0: ray parity, 1: Fast Winding Number, 2: angle-weighted pseudonormals, 3: flood-fill mask, 4: hybrid, 5: coarse-to-fine flood fill). Defaults to 0.
+                 return_occ (bool, optional): If True, additionally returns binary occupancy defined as
+                     `distances < 0`. Only active when `return_sdf=True`; with an unsigned distance the
+                     occupancy slot is returned as None, since unsigned distances carry no inside/outside
+                     information. Points exactly on the surface classify as outside. Occupancy is exactly
+                     as reliable as the sign produced by `sign_mode`. Defaults to False.
 
              Returns:
-                 Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+                 Union[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
                      - query_ids (torch.Tensor): (Q,) int64 query indices.
                      - triangle_ids (torch.Tensor): (Q,) int64 closest triangle indices.
                      - projected_points (torch.Tensor): (Q, 3) float32 closest surface coordinates.
                      - distances (torch.Tensor): (Q,) float32 signed/unsigned distances.
+                     - [occupancy] (torch.Tensor, optional): (Q,) bool inside mask, returned only when
+                       `return_occ=True`, and None unless `return_sdf=True` as well.
 
              Example:
                  >>> q_ids, tri_ids, prj_pts, dists = mesh_bvh.query_point(query_pts, verts, tris, return_sdf=True, sign_mode=5)
+                 >>> q_ids, tri_ids, prj_pts, dists, occ = mesh_bvh.query_point(query_pts, verts, tris, return_sdf=True, return_occ=True)
              )pbdoc")
         .def("build_winding_data", &MeshBVH::build_winding_data,
              py::arg("vertices"), py::arg("triangles"),
