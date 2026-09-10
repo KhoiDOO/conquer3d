@@ -63,58 +63,41 @@ verts.sum().backward()          # gradients flow back into the field
 
 ## 🔬 Qualitative Results
 
-Every figure below is real library output on the bundled benchmark assets, regenerated
-by `docs/_figures/make_figures.py` — nothing is mocked or hand-drawn. More, at full size,
-on the **[showcase](https://khoidoo.github.io/conquer3d/)**.
-
 ### Isosurface extraction
 
-<img src="docs/assets/img/fig-algorithms.webp" alt="Four extractors on one signed distance field" width="100%">
+<img src="docs/assets/img/fig-algorithms.webp" alt="Isosurface extraction" width="100%">
 
-One signed distance field on a 64³ narrow-band grid of 19,329 cells, meshed by four
-extractors — Marching Cubes, MC Asymptotic, Dual Contouring and Dual Marching Cubes —
-with the source mesh on the left. The lower row crops the crease where Marching Cubes
-and Dual Contouring disagree most.
+One signed distance field meshed by four different extractors.
 
-### Sharp features from Hermite data
+### Sharp features
 
-<img src="docs/assets/img/fig-hermite.webp" alt="Dual methods with and without Hermite data" width="100%">
+<img src="docs/assets/img/fig-hermite.webp" alt="Sharp features" width="100%">
 
-Dual Contouring and Dual Marching Cubes run twice each: once with normals interpolated
-from the grid, once with exact Hermite data from `compute_hermite_from_mesh`, which
-ray-casts all 25,832 sign-crossing edges for the true intersection and face normal.
-The crease is reconstructed rather than rounded.
+Exact Hermite data lets the dual methods reconstruct a crease instead of rounding it.
 
-### Detail is a resolution dial
+### Grid resolution
 
-<img src="docs/assets/img/fig-resolution.webp" alt="Resolution ladder from 64 to 2048 cubed" width="100%">
+<img src="docs/assets/img/fig-resolution.webp" alt="Grid resolution" width="100%">
 
-Dual Marching Cubes on the Armadillo at seven grid resolutions from 64³ to 2048³.
-Face count runs from 12,076 to 13,294,500, with Chamfer and Hausdorff distance to the
-source measured at every step.
+The same model extracted from 64³ up to 2048³, with the error measured at each step.
 
-### From mesh to surface, step by step
+### Extraction pipeline
 
-<img src="docs/assets/img/fig-pipeline.webp" alt="Sparse grid construction and extraction" width="100%">
+<img src="docs/assets/img/fig-pipeline.webp" alt="Extraction pipeline" width="100%">
 
-The input mesh, the narrow-band cells allocated around it (7,863 of a possible 64,000
-at 40³), the signed distance shown as a cutaway, the 2,646 bipolar cells, and the
-extracted surface. No dense volume is ever held.
+Every stage of one extraction, from input mesh to extracted surface.
 
-### Six ways to decide inside
+### Sign modes
 
-<img src="docs/assets/img/fig-sign-modes.webp" alt="Six sign determination modes" width="100%">
+<img src="docs/assets/img/fig-sign-modes.webp" alt="Sign modes" width="100%">
 
-One axial slice signed by each of the six sign modes and contoured at zero — ray parity,
-pseudonormal, winding number, flood fill, hybrid consensus, and coarse-fine fill.
+One slice through a mesh, signed by each of the six ways of deciding inside.
 
-### Ray queries against the hierarchies
+### Ray queries
 
-<img src="docs/assets/img/fig-meshbvh.webp" alt="Ray-triangle and ray-voxel queries" width="100%">
+<img src="docs/assets/img/fig-meshbvh.webp" alt="Ray queries" width="100%">
 
-`MeshBVH.get_ray_intersection` returns the triangles a ray pierces; `BVH.query_ray`
-returns the narrow-band cells it crosses. Five rays from five origins, each drawn as far
-as its own first hit.
+Which triangles and which voxels a ray hits, found through the BVH.
 
 ---
 
