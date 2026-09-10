@@ -254,6 +254,12 @@ FIGURES = [
         "by `fix_normals`.",
         False,
     ),
+    (
+        "fig-diffrender", "Differentiable rendering", "Gradients",
+        "A field of noise optimised into the Happy Buddha by multi-view mask "
+        "and depth loss alone, with `diff_marching_cubes` carrying the gradient.",
+        False,
+    ),
 ]
 
 

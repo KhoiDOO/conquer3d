@@ -1310,6 +1310,143 @@ def fig_fix_normals(rnd):
     )
 
 
+AZ_DIFF = 205
+
+#: The optimisation the figure runs, mirroring examples/differentiable_rendering
+#: with --method mc. Kept here rather than read from the example so the numbers
+#: printed on the panels always describe the run that actually happened.
+DIFF_RES = 128
+DIFF_ITERS = 1000
+DIFF_BATCH = 8
+DIFF_TRAIN_RES = [2048, 2048]
+DIFF_LR = 0.01
+DIFF_SHOTS = (0, 10, 30, 75)
+
+
+def _example_diffrender():
+    """The example's kaolin camera sampling and mask/depth rasterisation.
+
+    Loaded by path under its own module name: ``sys.modules["render"]`` is
+    already this package's renderer, and the example's helper has the same file
+    name, so a plain import would silently hand back the wrong module.
+    """
+    import importlib.util
+
+    path = HERE.parent.parent / "examples" / "differentiable_rendering" / "render.py"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"the differentiable rendering example this figure trains with is missing: {path}"
+        )
+    spec = importlib.util.spec_from_file_location("c3d_example_diffrender", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def fig_diffrender(rnd):
+    """A random field optimised into a surface by multi-view rendering loss."""
+    import kaolin as kal
+    import nvdiffrast.torch as dr
+    from conquer3d.data_structure import create_voxel_grid
+    from conquer3d.ops import diff_marching_cubes
+
+    ex = _example_diffrender()
+    # Cameras are sampled at random every step, so without a seed a regenerated
+    # figure converges to a visibly different result each time.
+    torch.manual_seed(0)
+
+    tmesh = load_mesh(_asset("HappyBuddha"))
+    tmesh.fix_normals()
+    gt_verts = tmesh.vertices.contiguous()
+    gt_faces = tmesh.triangles.int().contiguous()
+    ref_points = tmesh.sample_points(SURFACE_SAMPLES)[0].contiguous()
+
+    glctx = dr.RasterizeCudaContext(device=DEV)
+    target_mesh = kal.rep.SurfaceMesh(vertices=gt_verts, faces=gt_faces.long())
+
+    grid_vertices, voxels, _ = create_voxel_grid(
+        grid_min=BOUNDS_MIN, grid_max=BOUNDS_MAX,
+        res=[DIFF_RES] * 3, device=DEV,
+    )
+    # The example's initialisation: uniform noise biased so about a tenth of the
+    # corners start inside, which is why iteration 0 is a foam rather than a ball.
+    sdf = torch.nn.Parameter((torch.rand_like(grid_vertices[:, 0]) - 0.1).clone().detach())
+    optimizer = torch.optim.Adam([sdf], lr=DIFF_LR)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer, lr_lambda=lambda i: max(0.0, 10 ** (-i * 0.0002))
+    )
+
+    shots, t0 = [], time.time()
+    for it in range(DIFF_ITERS):
+        optimizer.zero_grad()
+
+        cameras = ex.get_random_camera_batch(
+            DIFF_BATCH, iter_res=DIFF_TRAIN_RES, device=DEV)
+        target = ex.render_mesh(glctx, target_mesh, cameras, DIFF_TRAIN_RES,
+                                return_types=["mask", "depth"])
+
+        verts, faces = diff_marching_cubes(grid_vertices, voxels, sdf, iso=0.0)[:2]
+        if verts.shape[0] == 0:
+            continue
+
+        buffers = ex.render_mesh(
+            glctx, kal.rep.SurfaceMesh(vertices=verts, faces=faces.long()),
+            cameras, DIFF_TRAIN_RES, return_types=["mask", "depth"])
+
+        mask_loss = (buffers["mask"] - target["mask"]).abs().mean()
+        depth_loss = ((((buffers["depth"] - target["depth"]) * target["mask"]) ** 2)
+                      .sum(-1) + 1e-8).sqrt().mean() * 10.0
+        loss = mask_loss + depth_loss
+
+        if it in DIFF_SHOTS:
+            shots.append((it, verts.detach().clone(), faces.detach().int().clone(),
+                          float(loss.detach())))
+
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+    with torch.no_grad():
+        verts, faces = diff_marching_cubes(grid_vertices, voxels, sdf, iso=0.0)[:2]
+        buffers = ex.render_mesh(
+            glctx, kal.rep.SurfaceMesh(vertices=verts, faces=faces.long()),
+            cameras, DIFF_TRAIN_RES, return_types=["mask", "depth"])
+        final_loss = float((buffers["mask"] - target["mask"]).abs().mean()
+                           + ((((buffers["depth"] - target["depth"]) * target["mask"]) ** 2)
+                              .sum(-1) + 1e-8).sqrt().mean() * 10.0)
+    shots.append((DIFF_ITERS, verts.detach().contiguous(), faces.int().contiguous(),
+                  final_loss))
+    print(f"    {DIFF_ITERS} iterations in {time.time() - t0:.0f}s "
+          f"({DIFF_BATCH} views at {DIFF_TRAIN_RES[0]}x{DIFF_TRAIN_RES[1]}, "
+          f"{DIFF_RES}^3 grid)")
+
+    # A fixed frame across every panel: the grid is the unit cube, so the camera
+    # must not be refitted per mesh or the trajectory would appear to change size
+    # rather than shape.
+    shot = dict(flat=True, azimuth=AZ_DIFF, elevation=14, fit_radius=1.0,
+                rim_strength=0.14)
+    panels, labels, subs = [], [], []
+    for i, (it, v, f, loss) in enumerate(shots):
+        cd, _ = surface_metrics(v, f, ref_points)
+        panels.append(rnd.render(v.contiguous(), f.contiguous(), **shot))
+        labels.append("Final" if i == len(shots) - 1 else f"Iteration {it}")
+        subs.append(f"{f.shape[0]:,} faces\nloss {loss:.3f} · CD {cd:.3f}")
+        print(f"    it {it:<5} {f.shape[0]:>9,} faces  loss {loss:.4f}  CD {cd:.4f}")
+
+    panels.append(rnd.render(gt_verts, gt_faces, colors=None, base=GT_TINT, **shot))
+    labels.append("Source")
+    subs.append(f"{gt_faces.shape[0]:,} faces\nreference")
+
+    accents = [(150, 158, 176), (34, 211, 238), (167, 139, 250), (251, 191, 36),
+               (118, 185, 0), (150, 158, 176)]
+
+    compose.save(
+        compose.grid(compose.trim(panels), labels, sublabels=subs, cols=3,
+                     accents=accents),
+        OUT / "fig-diffrender.png",
+    )
+
+
 def _asset(name):
     import conquer3d.data.assets as assets
 
@@ -1332,6 +1469,7 @@ FIGURES = [
     ("quality", fig_quality, True),
     ("kdtree", fig_kdtree, True),
     ("fix normals", fig_fix_normals, True),
+    ("diffrender", fig_diffrender, True),
 ]
 
 
