@@ -14,6 +14,11 @@ void bind_primitive_gs(py::module_& m);
  */
 void bind_primitive_pgs(py::module_& m);
 /**
+ * @brief Registers superquadric primitive operators on the extension module.
+ * @param[in,out] m The `conquer3d._C` module object.
+ */
+void bind_primitive_superquadric(py::module_& m);
+/**
  * @brief Registers the ::Triangle geometric primitive on the extension module.
  * @param[in,out] m The `conquer3d._C` module object.
  */
@@ -134,6 +139,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
     bind_primitive_gs(m);
     bind_primitive_pgs(m);
+    bind_primitive_superquadric(m);
     bind_primitive_triangle(m);
     bind_primitive_ray(m);
 

@@ -42,6 +42,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .._C import compute_superquadric_mesh_func
+
 __all__ = ['SuperQuadrics', 'compute_sq_sdf', 'compute_sq_union']
 
 #: Lower bound added to the exponentiated raw semi-axes, keeping every scale strictly positive.
@@ -455,6 +457,83 @@ class SuperQuadrics(nn.Module):
         if return_union:
             return fields, compute_sq_union(fields, tau=self.union_tau, mask=self.mask)
         return fields
+
+    @torch.no_grad()
+    def get_mesh(
+        self,
+        resolution: int = 30,
+        return_labels: bool = False
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor],
+               Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+        """Tessellates every present primitive and concatenates the result into one mesh.
+
+        Each primitive is meshed analytically from Barr's parametric form, evaluated on an
+        `(resolution, resolution)` grid of angles spaced by approximately equal arc length,
+        then rotated and translated into world space. The per-primitive meshes are packed
+        into a single vertex and triangle array by offsetting indices.
+
+        Args:
+            resolution (int, optional): Number of angular samples along each axis. Each
+                primitive contributes `resolution * (resolution - 2) + 2` vertices and
+                `2 * resolution * (resolution - 2)` triangles. Defaults to 30.
+            return_labels (bool, optional): If True, additionally returns the index into the
+                original `K` primitives that each vertex came from, which survives a change of
+                the existence mask. Defaults to False.
+
+        Returns:
+            Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+                - vertices (torch.Tensor): Float32 coordinates of shape `(V, 3)`.
+                - triangles (torch.Tensor): Int32 vertex indices of shape `(F, 3)`.
+                - [labels] (torch.Tensor, optional): Int32 originating primitive index of shape
+                  `(V,)`, returned only when `return_labels=True`.
+
+        Raises:
+            ValueError: If `resolution` is below 3, if :attr:`mask` selects no primitive, or if
+                the set is not on a CUDA device.
+
+        Note:
+            The result is a **concatenation, not a union**: it holds one closed surface per
+            present primitive, and wherever two primitives overlap their triangles pass
+            through one another with no shared vertices. It is therefore self-intersecting
+            and is not the boundary of the union solid, since surface interior to a
+            neighbouring primitive is still present. Its Euler characteristic is $2K$ rather
+            than 2. For a watertight surface, evaluate :func:`compute_sq_union` on a grid and
+            run an isosurface extractor over it.
+
+        Example:
+            >>> import torch
+            >>> from conquer3d.primitive import SuperQuadrics
+            >>> sq = SuperQuadrics(num_quadrics=2).cuda()
+            >>> vertices, triangles = sq.get_mesh(resolution=16)
+            >>> vertices.shape[0] == 2 * (16 * 14 + 2)
+            True
+            >>> triangles.shape[0] == 2 * (2 * 16 * 14)
+            True
+        """
+        if resolution < 3:
+            raise ValueError(f"resolution must be at least 3, got {resolution}")
+
+        present = self.mask
+        if not bool(present.any()):
+            raise ValueError("mask selects no primitive, so the set has no surface to tessellate")
+        if not self.raw_scales.is_cuda:
+            raise ValueError("get_mesh runs on CUDA; move the set with .to('cuda') first")
+
+        # The native layer knows nothing about existence: it tessellates every primitive it is
+        # handed, so the absent ones are dropped here and the labels mapped back afterwards.
+        index = present.nonzero().flatten()
+        vertices, triangles, labels = compute_superquadric_mesh_func(
+            self.scales[index].contiguous().to(torch.float32),
+            self.exponents[index].contiguous().to(torch.float32),
+            self.rotations[index].contiguous().to(torch.float32),
+            self.translations[index].contiguous().to(torch.float32),
+            int(resolution),
+            bool(return_labels)
+        )
+
+        if return_labels:
+            return vertices, triangles, index.to(torch.int32)[labels.long()]
+        return vertices, triangles
 
     @torch.no_grad()
     def set_values(
