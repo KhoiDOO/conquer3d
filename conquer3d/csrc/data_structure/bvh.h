@@ -33,7 +33,7 @@ public:
 
     /**
      * @brief Constructs a Linear BVH from axis-aligned bounding boxes (AABBs).
-     * 
+     *
      * @param[in] in_aabb_mins (N, 3) float32 tensor of lower box coordinates.
      * @param[in] in_aabb_maxs (N, 3) float32 tensor of upper box coordinates.
      */
@@ -41,7 +41,7 @@ public:
 
     /**
      * @brief Performs parallel AABB-AABB overlap queries against the BVH.
-     * 
+     *
      * @param[in] query_aabb_mins (Q, 3) float32 lower bounds of query boxes.
      * @param[in] query_aabb_maxs (Q, 3) float32 upper bounds of query boxes.
      * @return Tuple of (query_ids, object_ids) for all overlapping pairs.
@@ -52,17 +52,17 @@ public:
 
     /**
      * @brief Performs self-intersection collision detection among all leaves in the BVH.
-     * 
+     *
      * @return Tuple of (query_ids, object_ids) for all colliding leaf pairs.
      */
     std::tuple<torch::Tensor, torch::Tensor> query_self();
 
     /**
      * @brief Performs parallel Ray-AABB intersection queries against the BVH.
-     * 
-     * @param[in] ray_origins   (R, 3) float32 ray origin coordinates.
-     * @param[in] ray_dirs      (R, 3) float32 normalized ray directions.
-     * @param[in] max_capacity  Maximum capacity for the output pair buffer.
+     *
+     * @param[in] ray_origins (R, 3) float32 ray origin coordinates.
+     * @param[in] ray_dirs (R, 3) float32 normalized ray directions.
+     * @param[in] max_capacity Maximum capacity for the output pair buffer.
      * @return Tuple of (ray_ids, object_ids) for all ray-box intersections.
      */
     std::tuple<torch::Tensor, torch::Tensor> query_ray(
@@ -72,7 +72,7 @@ public:
 
     /**
      * @brief Finds the closest bounding box for each query point.
-     * 
+     *
      * @param[in] query_points (P, 3) float32 point coordinates.
      * @return Tuple of (query_ids, object_ids, distances).
      */
@@ -84,16 +84,16 @@ namespace bvh
 {
     /**
      * @brief Constructs the Karras (2012) Radix Linear BVH hierarchy on GPU.
-     * 
-     * @param[in]  num_objects   Number of leaf objects ($N$).
-     * @param[in]  num_nodes     Total internal and leaf nodes ($2N - 1$).
-     * @param[in]  in_aabb_mins  Unsorted input lower bounding box coordinates.
-     * @param[in]  in_aabb_maxs  Unsorted input upper bounding box coordinates.
+     *
+     * @param[in] num_objects Number of leaf objects ($N$).
+     * @param[in] num_nodes Total internal and leaf nodes ($2N - 1$).
+     * @param[in] in_aabb_mins Unsorted input lower bounding box coordinates.
+     * @param[in] in_aabb_maxs Unsorted input upper bounding box coordinates.
      * @param[out] bvh_aabb_mins Output BVH lower bounds array of size $2N - 1$.
      * @param[out] bvh_aabb_maxs Output BVH upper bounds array of size $2N - 1$.
-     * @param[out] bvh_children  Output BVH child indices array of size $2N - 1$.
-     * @param[out] bvh_parents   Output BVH parent indices array of size $2N - 1$.
-     * @param[out] object_ids    Output leaf-to-original primitive ID map of size $N$.
+     * @param[out] bvh_children Output BVH child indices array of size $2N - 1$.
+     * @param[out] bvh_parents Output BVH parent indices array of size $2N - 1$.
+     * @param[out] object_ids Output leaf-to-original primitive ID map of size $N$.
      */
     __host__ void build(
         const uint32_t num_objects,

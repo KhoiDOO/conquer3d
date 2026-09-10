@@ -27,7 +27,7 @@ namespace bvh
     /**
      * @brief Walks the hierarchy, visiting every leaf the node test admits.
      *
-     * @tparam NodeTest  Callable `bool(int node_idx)`; return false to prune the subtree.
+     * @tparam NodeTest Callable `bool(int node_idx)`; return false to prune the subtree.
      * @tparam LeafVisit Callable `bool(int leaf_idx)` receiving the leaf's slot in
      *         `object_ids`; return false to abandon the traversal, which is how
      *         any-hit queries stop at their first result.

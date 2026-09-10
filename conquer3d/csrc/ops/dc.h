@@ -10,13 +10,13 @@ namespace ops {
 /**
  * @brief Forward Dual Contouring with GPU QEF solver.
  *
- * @param grid_vertices (N, 3) float32 corner coordinates.
- * @param voxels (M, 8) int32 corner indices in CCW order.
- * @param sdf (N,) float32 scalar field.
- * @param grid_normals (N, 3) float32 optional explicit vertex normals.
- * @param colors (N, C) float32 optional vertex feature colors.
- * @param iso Isolevel threshold (default: 0.0).
- * @param quad_split If true, splits quads into optimal triangles; if false, outputs quads.
+ * @param[in] grid_vertices (N, 3) float32 corner coordinates.
+ * @param[in] voxels (M, 8) int32 corner indices in CCW order.
+ * @param[in] sdf (N,) float32 scalar field.
+ * @param[in] grid_normals (N, 3) float32 optional explicit vertex normals.
+ * @param[in] colors (N, C) float32 optional vertex feature colors.
+ * @param[in] iso Isolevel threshold (default: 0.0).
+ * @param[in] quad_split If true, splits quads into optimal triangles; if false, outputs quads.
  * @return std::tuple<at::Tensor, at::Tensor, c10::optional<at::Tensor>>
  *         - Extracted vertices: (V, 3) float32
  *         - Extracted faces: (F, 3) int32 triangles or (Q, 4) int32 quads

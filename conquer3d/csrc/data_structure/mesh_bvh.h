@@ -39,8 +39,8 @@ public:
 
     /**
      * @brief Builds hierarchical dipole winding data for Fast Winding Number queries.
-     * 
-     * @param[in] vertices  (V, 3) float32 mesh vertex tensor on CUDA.
+     *
+     * @param[in] vertices (V, 3) float32 mesh vertex tensor on CUDA.
      * @param[in] triangles (F, 3) int32 triangle index tensor on CUDA.
      */
     void build_winding_data(
@@ -49,8 +49,8 @@ public:
 
     /**
      * @brief Discovers all colliding triangle index pairs in the mesh.
-     * 
-     * @param[in] vertices  (V, 3) float32 mesh vertex tensor.
+     *
+     * @param[in] vertices (V, 3) float32 mesh vertex tensor.
      * @param[in] triangles (F, 3) int32 triangle index tensor.
      * @return (N, 2) int64 tensor of intersecting triangle index pairs.
      */
@@ -60,8 +60,8 @@ public:
 
     /**
      * @brief Checks if the triangle mesh contains any self-intersecting faces.
-     * 
-     * @param[in] vertices  (V, 3) float32 mesh vertex tensor.
+     *
+     * @param[in] vertices (V, 3) float32 mesh vertex tensor.
      * @param[in] triangles (F, 3) int32 triangle index tensor.
      * @return True if self-intersections exist, False otherwise.
      */
@@ -71,13 +71,13 @@ public:
 
     /**
      * @brief Performs accelerated ray-triangle intersection queries (Möller-Trumbore).
-     * 
-     * @param[in] ray_origins     (R, 3) float32 ray origins.
-     * @param[in] ray_dirs        (R, 3) float32 ray unit directions.
-     * @param[in] vertices        (V, 3) float32 mesh vertices.
-     * @param[in] triangles       (F, 3) int32 triangle indices.
+     *
+     * @param[in] ray_origins (R, 3) float32 ray origins.
+     * @param[in] ray_dirs (R, 3) float32 ray unit directions.
+     * @param[in] vertices (V, 3) float32 mesh vertices.
+     * @param[in] triangles (F, 3) int32 triangle indices.
      * @param[in] return_distance If true, computes and returns exact ray hit distances.
-     * 
+     *
      * @return Tuple of (ray_ids, triangle_ids, intersect_points, distances).
      */
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> get_ray_intersection(
@@ -89,36 +89,36 @@ public:
 
     /**
      * @brief Queries closest triangle projections and Signed Distance Fields (SDF) for points.
-     * 
-     * @param[in] query_points      (P, 3) float32 query coordinates on CUDA.
-     * @param[in] vertices          (V, 3) float32 mesh vertices.
-     * @param[in] triangles         (F, 3) int32 triangle indices.
-     * @param[in] return_sdf        If true, computes signed distance.
-     * @param[in] return_prj_pts    If true, computes closest projected points on surface.
-     * @param[in] sign_mode         Sign evaluation mode:
+     *
+     * @param[in] query_points (P, 3) float32 query coordinates on CUDA.
+     * @param[in] vertices (V, 3) float32 mesh vertices.
+     * @param[in] triangles (F, 3) int32 triangle indices.
+     * @param[in] return_sdf If true, computes signed distance.
+     * @param[in] return_prj_pts If true, computes closest projected points on surface.
+     * @param[in] sign_mode Sign evaluation mode:
      *                              - 0: Ray parity casting.
      *                              - 1: Fast Winding Number (FWN).
      *                              - 2: Angle-weighted pseudonormals.
      *                              - 3: Volumetric 3D flood fill mask (dense).
      *                              - 4: Hybrid Winding Number + Pseudonormals.
      *                              - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill.
-     * @param[in] triangle_normals  Optional (F, 3) triangle face normals.
-     * @param[in] vertex_normals    Optional (V, 3) vertex pseudonormals.
-     * @param[in] edge_normals      Optional (3*F, 3) edge pseudonormals.
-     * @param[in] flood_fill_mask   Optional 3D grid flood fill mask.
-     * @param[in] flood_grid_min    Optional flood grid min bounds.
-     * @param[in] flood_grid_max    Optional flood grid max bounds.
-     * @param[in] flood_grid_res    Optional flood grid resolution.
-     * @param[in] cf_coarse_mask    Optional (Cx, Cy, Cz) int8 coarse mask for sign_mode=5.
+     * @param[in] triangle_normals Optional (F, 3) triangle face normals.
+     * @param[in] vertex_normals Optional (V, 3) vertex pseudonormals.
+     * @param[in] edge_normals Optional (3*F, 3) edge pseudonormals.
+     * @param[in] flood_fill_mask Optional 3D grid flood fill mask.
+     * @param[in] flood_grid_min Optional flood grid min bounds.
+     * @param[in] flood_grid_max Optional flood grid max bounds.
+     * @param[in] flood_grid_res Optional flood grid resolution.
+     * @param[in] cf_coarse_mask Optional (Cx, Cy, Cz) int8 coarse mask for sign_mode=5.
      * @param[in] cf_boundary_lookup Optional (Cx, Cy, Cz) int32 boundary lookup table for sign_mode=5.
-     * @param[in] cf_fine_masks    Optional (N_boundary, Bx, By, Bz) int8 fine masks for sign_mode=5.
-     * @param[in] cf_block_size     Optional macro-block size [Bx, By, Bz].
-     * @param[in] cf_coarse_res     Optional coarse grid resolution [Cx, Cy, Cz].
-     * @param[in] return_occ        If true (and `return_sdf` is true), also returns binary
+     * @param[in] cf_fine_masks Optional (N_boundary, Bx, By, Bz) int8 fine masks for sign_mode=5.
+     * @param[in] cf_block_size Optional macro-block size [Bx, By, Bz].
+     * @param[in] cf_coarse_res Optional coarse grid resolution [Cx, Cy, Cz].
+     * @param[in] return_occ If true (and `return_sdf` is true), also returns binary
      *                              occupancy `signed_distance < 0`. Ignored when `return_sdf`
      *                              is false, since unsigned distances carry no inside/outside
      *                              information.
-     * 
+     *
      * @return Tuple of (query_ids, closest_triangle_ids, projected_points, signed_distances,
      *         occupancy). The occupancy tensor is undefined (Python `None`) unless
      *         `return_occ && return_sdf`.

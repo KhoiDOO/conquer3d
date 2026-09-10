@@ -182,15 +182,15 @@ void one_sided_chamfer_distance(
  * contribution w.r.t. the query point (direct coalesced write) and atomically accumulates the
  * reaction gradient into the corresponding nearest reference point.
  *
- * @param[in]  num_query_points     Number of query points ($N$).
- * @param[in]  query_points         Device array of $N$ query coordinates.
- * @param[in]  num_reference_points Number of reference points ($M$).
- * @param[in]  reference_points     Device array of $M$ reference coordinates.
- * @param[in]  indices              Device array of $N$ nearest reference point indices.
- * @param[in]  grad_distances       Device array of $N$ incoming adjoint gradients.
- * @param[in]  squared              Whether metric is squared Euclidean ($L_2^2$) or Euclidean ($L_2$).
- * @param[out] grad_query           Device array of $N$ query point gradients (nullptr if not needed).
- * @param[out] grad_reference       Device array of $M$ reference point gradients (nullptr if not needed).
+ * @param[in] num_query_points Number of query points ($N$).
+ * @param[in] query_points Device array of $N$ query coordinates.
+ * @param[in] num_reference_points Number of reference points ($M$).
+ * @param[in] reference_points Device array of $M$ reference coordinates.
+ * @param[in] indices Device array of $N$ nearest reference point indices.
+ * @param[in] grad_distances Device array of $N$ incoming adjoint gradients.
+ * @param[in] squared Whether metric is squared Euclidean ($L_2^2$) or Euclidean ($L_2$).
+ * @param[out] grad_query Device array of $N$ query point gradients (nullptr if not needed).
+ * @param[out] grad_reference Device array of $M$ reference point gradients (nullptr if not needed).
  */
 __global__ void one_sided_chamfer_distance_backward_kernel(
     const uint32_t num_query_points,
