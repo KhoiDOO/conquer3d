@@ -64,15 +64,12 @@ __global__ void init_perimeter_kernel(
 
 /**
  * @brief Expands the flood-fill frontier by one layer, stopping at the surface.
- * @details One thread per frontier vertex. Each examines its 6- or 26-connected
- * neighbours and, for every unvisited one, tests whether the connecting segment
- * intersects the mesh by traversing the BVH. Unobstructed neighbours inherit the exterior
- * label and join the next frontier; blocked ones are left for the interior pass. Testing
- * the segment rather than the endpoint is what keeps the fill from tunnelling through
- * thin walls between adjacent samples.
- *
- * The host relaunches this kernel until the frontier empties, so the number of launches
- * is the exterior region's graph diameter rather than a fixed count.
+ * @details One thread per frontier vertex, testing each unvisited 6- or 26-connected
+ * neighbour by traversing the BVH for a mesh intersection along the connecting segment.
+ * Unobstructed neighbours inherit the exterior label and join the next frontier; blocked
+ * ones are left for the interior pass. Testing the segment rather than the endpoint is what
+ * stops the fill tunnelling through thin walls. The host relaunches until the frontier
+ * empties, so the launch count is the exterior region's graph diameter.
  *
  * @param[in,out] mask Device array of occupancy labels, updated in place.
  * @param[in] current_frontier Device array of vertex indices to expand.
@@ -93,11 +90,10 @@ __global__ void init_perimeter_kernel(
  * @param[in] triangles Device array of mesh triangle vertex indices.
  * @param[in] num_objects Number of triangles in the mesh.
  * @note Launched with `NTHREADS` threads per block over a 1D grid sized to the frontier.
- * @warning Load is highly irregular: a thread whose neighbours are all visited exits at
- * once, while one near the surface performs up to 26 BVH traversals. Warp divergence here
- * is intrinsic to the algorithm.
- * @warning Several threads may reach the same neighbour in one step. The label write is
- * idempotent, but the frontier counter must stay atomic or entries would be lost.
+ * @warning Several threads may reach the same neighbour in one step: the label write is
+ * idempotent, but the frontier counter must stay atomic or entries would be lost. Load is
+ * also highly irregular -- a thread whose neighbours are all visited exits at once, one
+ * near the surface performs up to 26 BVH traversals -- so warp divergence is intrinsic.
  */
 __global__ void flood_fill_step_kernel(
         int8_t* __restrict__ mask,

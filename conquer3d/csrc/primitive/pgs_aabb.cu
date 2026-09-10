@@ -183,9 +183,6 @@ namespace pgs_aabb
  * @param[out] densities Device array of per-pair densities, when requested.
  * @param[in,out] global_counter Device counter, atomically incremented per pair.
  * @param[in] max_capacity Capacity of the output arrays.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  * @warning Output slots are claimed atomically, so pair ordering varies between runs.
  * Emission stops at @p max_capacity; compare the final counter against it to detect
  * truncation.
@@ -383,9 +380,6 @@ __global__ void query_pgs_voxel_pair_intersection_bvh_kernel(
  * @param[in] iso Uniform isovalue fallback.
  * @param[out] hit_mask Device array of $E$ flags marking intersected edges.
  * @param[out] out_gaus_ids Device array of $E$ Gaussian indices, $-1$ where none.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  */
 __global__ void query_pgs_edge_intersection_bvh_kernel(
         const uint32_t num_edges,

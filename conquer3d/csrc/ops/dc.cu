@@ -101,16 +101,15 @@ __device__ __forceinline__ float triangle_min_angle(
 // -----------------------------------------------------------------------------------------
 /**
  * @brief Solves one dual vertex per active voxel by minimising a quadratic error function.
- * @details The heart of Dual Contouring. One thread per voxel. Each bipolar edge
- * contributes a plane through its crossing point with the local surface normal, and the
- * vertex is placed at the point minimising $\sum_i (\mathbf{n}_i \cdot (\mathbf{v} -
- * \mathbf{p}_i))^2$. Because the planes reconstruct the surface's own tangent structure,
- * the minimiser lands exactly on creases and corners -- which is why Dual Contouring keeps
- * mechanical CAD edges that vertex-on-edge methods round away.
+ * @details One thread per voxel. Each bipolar edge contributes a plane through its crossing
+ * point with the local surface normal, and the vertex is placed at the minimiser of
+ * $\sum_i (\mathbf{n}_i \cdot (\mathbf{v} - \mathbf{p}_i))^2$. Those planes reconstruct the
+ * surface's own tangent structure, which is why the minimiser lands on creases and corners
+ * that vertex-on-edge methods round away.
  *
- * The normal matrix is diagonalised by cyclic Jacobi entirely in registers, and its
- * pseudoinverse is truncated at a relative eigenvalue tolerance so that under-constrained
- * cells fall back towards the cell centroid instead of shooting off along a null direction.
+ * The normal matrix is diagonalised by cyclic Jacobi entirely in registers, with the
+ * pseudoinverse truncated at a relative eigenvalue tolerance so under-constrained cells fall
+ * back towards the cell centroid instead of shooting off along a null direction.
  *
  * @param[in] grid_vertices Device array of grid vertex coordinates.
  * @param[in] voxels Device array of eight corner indices per voxel.
@@ -122,7 +121,6 @@ __device__ __forceinline__ float triangle_min_angle(
  * @param[out] dual_vertices Device array of one solved vertex per voxel.
  * @param[out] voxel_is_active Device array of per-voxel activity flags.
  * @param[out] bipolar_edge_counts Device array of per-voxel bipolar edge counts.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note The solved vertex is clamped to the cell's bounding box, so a badly conditioned
  * QEF can never place geometry outside the voxel that produced it.
  * @warning The Jacobi solve is register resident. Raising the sweep count increases
@@ -245,7 +243,6 @@ __global__ void compute_dual_vertices_kernel(
  * @param[in] num_voxels Number of voxels.
  * @param[out] out_edge_keys Device array of 64-bit shared-edge keys.
  * @param[out] out_voxel_and_edge Device array packing the source voxel and local edge.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Writes go to precomputed offsets, so this kernel needs no atomics.
  */
 __global__ void emit_bipolar_edges_kernel(
@@ -303,7 +300,6 @@ __global__ void emit_bipolar_edges_kernel(
  * @param[out] out_quads Device array receiving dual faces; a boundary triangle repeats its
  *     last index.
  * @param[in,out] out_quad_count Device counter, atomically incremented per face.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Requires @p sorted_edge_keys to be sorted, otherwise runs are not contiguous and
  * faces are emitted several times or not at all.
  * @warning The output slot is claimed with `atomicAdd`, so face ordering varies between
@@ -408,7 +404,6 @@ __global__ void gather_dual_quads_kernel(
  * @param[in] num_quads Number of faces.
  * @param[out] out_triangles Device array receiving triangle vertex index triples.
  * @param[in,out] out_tri_count Device counter, atomically incremented per triangle.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning The output slot is claimed with `atomicAdd`, so face ordering varies between
  * runs. Geometry is unaffected, but a byte-identical mesh is not guaranteed.
  */
@@ -470,7 +465,6 @@ __global__ void quad_to_triangle_kernel(
  * @param[in] num_channels Colour channels per vertex.
  * @param[out] compact_vertices Device array of dense output vertices.
  * @param[out] compact_colors Device array of dense output colours.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void compact_dual_vertices_and_colors_kernel(
     const float3 *__restrict__ dual_vertices,
@@ -552,7 +546,6 @@ __global__ void compact_dual_vertices_and_colors_kernel(
  * @param[in] num_channels Colour channels per vertex.
  * @param[out] grad_sdf Device array accumulating scalar field gradients.
  * @param[out] grad_colors_in Device array accumulating colour gradients.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Grid vertices are shared between voxels, so accumulation goes through
  * `atomicAdd` and the reduction order -- and hence the last bits of the result -- varies
  * between runs.
@@ -633,7 +626,6 @@ __global__ void backward_dual_contouring_kernel(
  * @param[in] num_voxels Number of voxels.
  * @param[out] voxel_is_active Device array of per-voxel activity flags.
  * @param[out] bipolar_edge_counts Device array of per-voxel bipolar edge counts.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void detect_active_voxels_kernel(
     const int *__restrict__ voxels,

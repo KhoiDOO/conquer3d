@@ -111,13 +111,11 @@ namespace kdtree
 
 /**
  * @brief Advances every point's subtree tag by one level of the balanced KD-tree build.
- * @details The tree is built breadth-first without recursion: at level $L$ each point
- * carries a tag naming the subtree it currently belongs to, and this kernel refines that
- * tag after the level's partition has been applied. Pivot positions come from the
- * left-balanced offset rule, which is what makes the finished tree complete and lets
- * traversal address children arithmetically instead of storing pointers.
- *
- * One thread per point. Points already settled as pivots at shallower levels -- the first
+ * @details The tree is built breadth-first without recursion: at level $L$ each point carries
+ * a tag naming its current subtree, and this kernel refines that tag once the level's
+ * partition has been applied. Pivot positions follow the left-balanced offset rule, which
+ * makes the finished tree complete and lets traversal address children arithmetically instead
+ * of storing pointers. One thread per point; pivots settled at shallower levels -- the first
  * $2^L - 1$ entries -- return immediately.
  *
  * @param[in,out] tag Device array of `numPoints` subtree tags, refined in place.
@@ -204,7 +202,6 @@ __global__ void update_tags(uint32_t* tag, int numPoints, int L) {
  * @param[out] out_dists Device array of $N \times k$ squared distances, ascending per query.
  * @param[out] out_inds Device array of $N \times k$ original-order point indices; unfilled
  *     slots are $-1$.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning The priority queue is sized by the compile-time constant `MAX_K` so it stays in
  * registers. Raising `MAX_K` increases register pressure on every thread and can spill to
  * local memory, costing far more than the extra neighbours are worth.

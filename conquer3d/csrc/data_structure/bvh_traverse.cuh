@@ -2,14 +2,11 @@
  * @file bvh_traverse.cuh
  * @brief Shared stack-based descent over a Linear BVH.
  *
- * @details Every query in the library walks the hierarchy the same way: pop a node, ask
- * whether it is worth entering, and either visit it as a leaf or push its two children.
- * Only the node test and the leaf action differ. Writing that loop once and passing those
- * two steps as functors keeps the traversal -- including the stack bound, the leaf index
- * arithmetic and the overflow guard -- in a single place, so a fix lands everywhere rather
- * than in one of eighteen copies.
- *
- * The functors are device lambdas and are fully inlined, so the generated code matches the
+ * @details Every query walks the hierarchy the same way: pop a node, ask whether it is worth
+ * entering, and either visit it as a leaf or push its two children. Only the node test and
+ * the leaf action differ, so they are passed as functors and the traversal -- stack bound,
+ * leaf index arithmetic, overflow guard -- lives in one place instead of eighteen copies.
+ * The functors are device lambdas and inline fully, so the generated code matches the
  * hand-written loop it replaces.
  *
  * @note Two query shapes are deliberately *not* expressed here and remain hand-written:
@@ -40,11 +37,6 @@ namespace bvh
      * @param[in] children Device array of $N - 1$ child index pairs.
      * @param[in] node_test Predicate deciding whether to enter a node.
      * @param[in] leaf_visit Action performed at an admitted leaf.
-     *
-     * @warning The stack holds `BVH_STACK_SIZE` entries in local memory. A hierarchy deeper
-     * than that silently drops the remaining children rather than failing, so a
-     * pathologically unbalanced tree can under-report. Morton ordering keeps real trees
-     * far shallower than the bound.
      */
     template <class NodeTest, class LeafVisit>
     __device__ __forceinline__ void traverse(

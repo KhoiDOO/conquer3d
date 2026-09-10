@@ -69,7 +69,6 @@ namespace ops {
      * @param[in] triangles Device array of triangle vertex indices.
      * @return True if the segment meets any triangle.
      * @note Degenerate segments shorter than 1e-8 return false.
-     * @warning Uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory.
      */
     __device__ __forceinline__ bool test_segment_intersect_mesh(
         const float3& p0, const float3& p1,

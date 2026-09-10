@@ -75,7 +75,6 @@ namespace mc
  * @param[in] used_voxel_index Device array mapping compacted index to original voxel index.
  * @param[in] used_voxel_codes Device array of sign codes for the active voxels.
  * @param[out] active_edges Device array receiving the emitted edge keys, with duplicates.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Uses the ::edgeTable / ::triTable table to look up which edges a case activates.
  */
 __global__ void compute_active_edges_kernel(
@@ -125,7 +124,6 @@ __global__ void compute_active_edges_kernel(
  * @param[in] unique_edges Device array of sorted, deduplicated edge keys.
  * @param[out] voxel_edge_to_vert_idx Device array mapping each voxel-local edge slot to a
  *     global vertex index.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Requires @p unique_edges to be sorted; the lookup is a binary search.
  */
 __global__ void build_edge_map_kernel(
@@ -201,7 +199,6 @@ __global__ void build_edge_map_kernel(
  * @param[out] out_verts Device array of interpolated surface vertices.
  * @param[out] out_normals Device array of interpolated normals, when requested.
  * @param[out] out_colors Device array of interpolated colours, when requested.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning The interpolation denominator $f_1 - f_0$ is non-zero for any genuinely bipolar
  * edge, but a field with exactly equal corner values either side of the isolevel would
  * divide by zero. Such edges are excluded upstream by the sign test.
@@ -511,16 +508,11 @@ __global__ void interpolate_vertices_kernel(
  *     vertex indices.
  * @param[in] voxel_triangle_prefix_sums Device array of per-voxel output offsets.
  * @param[out] out_triangles Device array receiving triangle vertex index triples.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- * @note The implementation is based on Bourke implementation at http://paulbourke.net/geometry/polygonise/.
- * @note The adatation to CUDA at first is normal inconsistent where all normals are facing inwards.
- * @note The canonical Lorensen-Cline / Bourke ::triTable is written for the convention
- * that a corner bit is set when the corner is *below* the isolevel, and it winds each
- * triangle so the right-hand normal points towards that below-isolevel region. For a
- * signed distance field, below-isolevel is the *interior*, so emitting the table row
+ * @note The canonical Lorensen-Cline / Bourke ::triTable (http://paulbourke.net/geometry/polygonise/)
+ * winds each triangle so the right-hand normal points towards the below-isolevel region.
+ * For a signed distance field that region is the *interior*, so emitting a table row
  * verbatim yields inward-facing normals. The last two indices are therefore swapped on
- * write, which reverses the winding and gives outward-facing normals for a field that is
- * negative inside -- matching Dual Contouring and the rest of the library.
+ * write, matching Dual Contouring and the rest of the library.
  */
 __global__ void assemble_triangles_kernel(
         const uint32_t num_active_voxels,
@@ -705,7 +697,6 @@ __global__ void assemble_triangles_kernel(
  * @param[out] adj_values Device array accumulating scalar field gradients.
  * @param[out] adj_grid_colors Device array accumulating colour gradients.
  * @param[in] with_colors Whether colour gradients are propagated.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Grid vertices are shared between edges, so several threads accumulate into the
  * same slot. Writes go through `atomicAdd`, which makes the reduction order
  * nondeterministic and the result bitwise non-reproducible between runs.

@@ -129,7 +129,6 @@ namespace gs_aabb
  * @param[out] aabb_min Device array of $N$ AABB lower bounds.
  * @param[out] aabb_max Device array of $N$ AABB upper bounds.
  * @param[out] contact_points Device array of $N$ representative surface points.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Templated on `multiple_isos`; the host instantiates the variant it needs.
  */
 __global__ void compute_gs_aabb_kernel(
@@ -481,9 +480,6 @@ __global__ void compute_gs_aabb_kernel(
  * @param[out] densities Device array of per-pair densities, when requested.
  * @param[in,out] global_counter Device counter, atomically incremented per pair.
  * @param[in] max_capacity Capacity of the output arrays.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  * @warning Output slots are claimed atomically, so pair ordering varies between runs.
  * Emission stops at @p max_capacity; compare the final counter against it to detect
  * truncation.
@@ -712,9 +708,6 @@ __global__ void query_gs_voxel_pair_intersection_bvh_kernel(
  * @param[out] out_gaus_ids Device array receiving the Gaussian index of each pair.
  * @param[in,out] global_counter Device counter, atomically incremented per pair.
  * @param[in] max_capacity Capacity of the output arrays.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  * @warning Output slots are claimed atomically, so pair ordering varies between runs.
  * Emission stops at @p max_capacity; compare the final counter against it to detect
  * truncation.
@@ -875,11 +868,8 @@ __global__ void query_gs_edge_pair_intersection_bvh_kernel(
  * @param[in] iso Uniform isovalue fallback.
  * @param[out] hit_mask Device array of $E$ flags marking intersected edges.
  * @param[out] out_gaus_ids Device array of $E$ Gaussian indices, $-1$ where none.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Reports the first qualifying Gaussian encountered, which is not necessarily the
  * nearest along the segment.
- * @warning Traversal uses a per-thread stack of `BVH_STACK_SIZE` entries in local memory;
- * a pathologically unbalanced hierarchy can overflow it.
  */
 __global__ void query_gs_edge_intersection_bvh_kernel(
         const uint32_t num_edges,

@@ -89,21 +89,17 @@ namespace mt
 
 /**
  * @brief Classifies every tet by the sign pattern of its four corners.
- * @details Stage 1 of extraction. One thread per tet; each compares its corner values
- * against the isolevel and packs the results into a 16-case code. The code alone
- * determines the tet's surface topology, so all later stages are table lookups rather
- * than searches. Inactive tets -- entirely inside or outside -- receive code 0 and are
- * compacted away by the host before stage 2, which is what makes cost scale with surface
- * area rather than volume.
- *
- * A tetrahedron has only 16 cases and none of them is ambiguous, which is why Marching
- * Tetrahedra needs no asymptotic decider and cannot produce cracks.
+ * @details Stage 1. One thread per tet, comparing its corner values against the isolevel and
+ * packing the result into a 16-case code that alone determines the tet's topology, so every
+ * later stage is a table lookup. Inactive tets get code 0 and are compacted away by the host
+ * before stage 2, which is what makes cost scale with surface area rather than volume. None
+ * of the 16 cases is ambiguous, so Marching Tetrahedra needs no asymptotic decider and cannot
+ * produce cracks.
  * @param[in] num_tets Number of tets.
  * @param[in] tets Device array of corner indices, four per tet.
  * @param[in] vert_values Device array of scalar field values at the grid vertices.
  * @param[in] iso Isolevel separating inside from outside.
  * @param[out] tet_codes Device array of one sign code per tet.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void compute_active_tets_kernel(
         const uint32_t num_tets,
@@ -142,7 +138,6 @@ __global__ void compute_active_tets_kernel(
  * @param[in] used_tet_index Device array mapping compacted index to original tet index.
  * @param[in] used_tet_codes Device array of sign codes for the active tets.
  * @param[out] active_edges Device array receiving the emitted edge keys, with duplicates.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Uses the ::tetEdgeTable / ::tetTriTable table to look up which edges a case activates.
  */
 __global__ void compute_active_edges_kernel(
@@ -192,7 +187,6 @@ __global__ void compute_active_edges_kernel(
  * @param[in] unique_edges Device array of sorted, deduplicated edge keys.
  * @param[out] tet_edge_to_vert_idx Device array mapping each tet-local edge slot to a
  *     global vertex index.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Requires @p unique_edges to be sorted; the lookup is a binary search.
  */
 __global__ void build_edge_map_kernel(
@@ -269,7 +263,6 @@ __global__ void build_edge_map_kernel(
  * @param[out] out_verts Device array of interpolated surface vertices.
  * @param[out] out_normals Device array of interpolated normals, when requested.
  * @param[out] out_colors Device array of interpolated colours, when requested.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning The interpolation denominator $f_1 - f_0$ is non-zero for any genuinely bipolar
  * edge, but a field with exactly equal corner values either side of the isolevel would
  * divide by zero. Such edges are excluded upstream by the sign test.
@@ -364,7 +357,6 @@ __global__ void interpolate_vertices_kernel(
  *     vertex indices.
  * @param[in] tet_triangle_prefix_sums Device array of per-tet output offsets.
  * @param[out] out_triangles Device array receiving triangle vertex index triples.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Winding follows the table, giving outward-facing normals for a field that is
  * negative inside.
  */
@@ -779,7 +771,6 @@ __global__ void assemble_triangles_kernel(
  * @param[out] adj_values Device array accumulating scalar field gradients.
  * @param[out] adj_grid_colors Device array accumulating colour gradients.
  * @param[in] with_colors Whether colour gradients are propagated.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Grid vertices are shared between edges, so several threads accumulate into the
  * same slot. Writes go through `atomicAdd`, which makes the reduction order
  * nondeterministic and the result bitwise non-reproducible between runs.

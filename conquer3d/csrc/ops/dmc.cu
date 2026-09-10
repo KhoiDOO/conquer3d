@@ -279,7 +279,6 @@ __device__ inline int extract_cell_contours(
  * @param[in] num_voxels Number of voxels.
  * @param[out] contour_counts Device array of per-voxel contour counts, one dual vertex each.
  * @param[out] edge_instance_counts Device array of per-voxel (contour, edge) instance counts.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 __global__ void dmc_count_contours_kernel(
     const int *__restrict__ voxels,
@@ -356,7 +355,6 @@ __global__ void dmc_count_contours_kernel(
  * @param[out] out_colors Device array receiving interpolated colours.
  * @param[out] out_edge_keys Device array of 64-bit shared-edge keys.
  * @param[out] out_dual_vert_and_edge Device array packing the source vertex and local edge.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Vertices are clamped to their cell, so a diverging Newton step cannot place
  * geometry outside the voxel that produced it.
  * @warning Each iteration costs a trilinear value and gradient evaluation. Beyond a handful
@@ -566,7 +564,6 @@ __global__ void dmc_extract_dual_vertices_and_edges_kernel(
  * @param[in] total_instances Number of (contour, edge) instances.
  * @param[out] out_quads Device array receiving dual faces.
  * @param[in,out] out_quad_count Device counter, atomically incremented per face.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Requires @p sorted_edge_keys to be sorted so equal keys form contiguous runs.
  * @warning The output slot is claimed with `atomicAdd`, so face ordering varies between
  * runs. Geometry is unaffected, but a byte-identical mesh is not guaranteed.
@@ -657,7 +654,6 @@ __global__ void dmc_gather_quads_kernel(
  * @param[in] num_quads Number of faces.
  * @param[out] out_triangles Device array receiving triangle vertex index triples.
  * @param[in,out] out_tri_count Device counter, atomically incremented per triangle.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning The output slot is claimed with `atomicAdd`, so face ordering varies between
  * runs. Geometry is unaffected, but a byte-identical mesh is not guaranteed.
  */
@@ -717,7 +713,6 @@ __global__ void dmc_quad_to_triangle_kernel(
  * @param[in] num_voxels Number of voxels.
  * @param[out] grad_sdf Device array accumulating scalar field gradients.
  * @param[out] grad_colors_in Device array accumulating colour gradients.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Accumulation into shared grid vertices uses `atomicAdd`, so results are not
  * bitwise reproducible between runs.
  * @warning The Newton projection applied in the forward pass is not differentiated; the

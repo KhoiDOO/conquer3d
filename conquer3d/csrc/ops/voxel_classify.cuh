@@ -77,7 +77,6 @@ namespace voxel_classify {
  * @param[in] sdf Device array of scalar field values at the grid vertices.
  * @param[in] iso Isolevel separating inside from outside.
  * @param[out] voxel_codes Device array of one sign code per voxel.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  */
 static __global__ void compute_active_voxels_kernel(
         const uint32_t num_voxels,

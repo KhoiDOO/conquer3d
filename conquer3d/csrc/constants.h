@@ -12,6 +12,8 @@
 /**
  * @def NTHREADS
  * @brief Default 1D CUDA thread block dimension (256 threads per block).
+ * @details Every kernel in the library is launched with this block size over a 1D grid
+ * unless its own documentation says otherwise.
  */
 #define NTHREADS 256
 
@@ -30,6 +32,12 @@
 /**
  * @def BVH_STACK_SIZE
  * @brief Fixed local stack depth for non-recursive GPU BVH traversal (supports up to $2^{64}$ primitives).
+ * @details Every BVH traversal in the library keeps its stack in per-thread local memory at
+ * this depth.
+ * @warning A pathologically unbalanced hierarchy can overflow the stack, which silently
+ * drops the remaining children rather than failing, so the traversal under-reports. Morton
+ * ordering keeps real trees far shallower than the bound. This applies to every traversal
+ * kernel and is not repeated on each one.
  */
 #define BVH_STACK_SIZE 64
 

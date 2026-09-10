@@ -22,7 +22,6 @@
  * @param[in] reference_points Device array holding the single reference point.
  * @param[out] distances Device array of $N$ squared distances.
  * @param[out] indices Device array of $N$ neighbour indices, all zero.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @note Non-finite distances are clamped to `FLT_MAX` so downstream reductions stay
  * well defined.
  */
@@ -62,7 +61,6 @@ __global__ void one_sided_chamfer_single_point_kernel(
  *     the caller's original ordering.
  * @param[out] distances Device array of $N$ squared distances to the nearest reference.
  * @param[out] indices Device array of $N$ original-order reference indices.
- * @note Launched with `NTHREADS` threads per block over a 1D grid.
  * @warning Traversal is data dependent, so threads in a warp diverge whenever their
  * queries descend different branches; throughput therefore falls as the reference cloud
  * becomes less uniform.
