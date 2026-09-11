@@ -10,3 +10,5 @@ In this markdown file, I place the repositories that I have learnt from to build
 - [trimesh](https://github.com/mikedh/trimesh)
 - [TetWeave](https://github.com/AlexandreBinninger/TetWeave/tree/main)
 - [ManifoldDMC] (https://github.com/PhiliGuertler/ManifoldDMC)
+- [SuperFlex](https://github.com/GabrielTavernini/superflex)
+- [chamferdist](https://github.com/krrish94/chamferdist)

@@ -639,23 +639,6 @@ html[data-theme="light"] .tok-fn { color: #0e7490; }
 .fig-note b { color: var(--fg-mid); font-weight: 600; }
 .fig-note code { font-size: .93em; }
 
-/* Full-width figure cards are far wider than a comfortable measure, so the
-   caption becomes two columns -- title on the left, prose on the right --
-   rather than one paragraph stranded against the left edge. */
-.fig--lead .fig-body p { max-width: none; }
-@media (min-width: 1000px) {
-  .fig--lead .fig-body {
-    display: grid;
-    grid-template-columns: minmax(190px, 0.42fr) minmax(0, 1fr);
-    column-gap: 44px;
-    align-items: start;
-  }
-  .fig--lead .fig-kicker { grid-column: 1; grid-row: 1; }
-  .fig--lead .fig-body h3 { grid-column: 1; grid-row: 2; margin-bottom: 0; }
-  .fig--lead .fig-body > p:not(.fig-note) { grid-column: 2; grid-row: 1 / span 3; }
-  .fig--lead .fig-note { grid-column: 1; grid-row: 3; max-width: none; }
-  .fig--lead .fig-meta { grid-column: 1 / -1; grid-row: 4; margin-top: 18px; }
-}
 .fig-kicker {
   display: block; font: 600 12px/1 var(--mono); letter-spacing: .1em;
   text-transform: uppercase; color: var(--accent); margin-bottom: 10px;

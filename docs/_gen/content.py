@@ -254,16 +254,19 @@ FIGURES = [
         "by `fix_normals`.",
         False,
     ),
+    (
+        "fig-diffrender", "Differentiable rendering", "Gradients",
+        "A field of noise optimised into the Happy Buddha by multi-view mask "
+        "and depth loss alone, with `diff_marching_cubes` carrying the gradient.",
+        False,
+    ),
 ]
 
 
 def _figure_card(entry) -> str:
-    name, title, kicker, prose, lead = entry
-    # A lead figure spans the gallery's full width: these are multi-panel
-    # comparisons that become unreadable at one column's width.
-    cls = "fig fig--lead" if lead else "fig"
+    name, title, kicker, prose, _lead = entry
     return (
-        f'<figure class="{cls}">'
+        f'<figure class="fig">'
         f'<div class="fig-media">'
         f'<img src="{img_src(name)}" alt="{esc(title)}" loading="lazy" decoding="async">'
         f"</div>"
@@ -275,11 +278,12 @@ def _figure_card(entry) -> str:
 
 
 def gallery() -> str:
-    """The qualitative results, then the smaller supporting figures.
+    """Every figure in one gallery, the lead comparisons first.
 
-    Two sections: the lead comparisons full width, where their many panels stay
-    legible, and the rest as a column-flow gallery so each card ends where its
-    own content ends instead of being stretched to the tallest in a row.
+    Column flow rather than a grid, because the figures differ a lot in aspect
+    and caption length and a grid row stretches every card to the tallest in it.
+    Every card is one column wide, so a wide multi-panel comparison reads small
+    here -- clicking it opens the full-size image in the lightbox.
     """
     lead = "".join(_figure_card(f) for f in FIGURES if f[4])
     rest = "".join(_figure_card(f) for f in FIGURES if not f[4])
@@ -288,14 +292,7 @@ def gallery() -> str:
   <div class="section-head">
     <span class="kicker">Qualitative results</span>
   </div>
-  <div class="fig-grid" style="grid-template-columns:minmax(0,1fr)">{lead}</div>
-</section>
-
-<section class="section wrap">
-  <div class="section-head">
-    <span class="kicker">Others</span>
-  </div>
-  <div class="fig-gallery">{rest}</div>
+  <div class="fig-gallery">{lead}{rest}</div>
 </section>
 """
 
