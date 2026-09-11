@@ -14,96 +14,70 @@ namespace aabb
     /**
      * @brief Computes the center position of an AABB.
      */
-    __device__ __forceinline__ void compute_aabb_centroid(
-        const float3 &aabb_min,
-        const float3 &aabb_max,
-        float3 &out_centroid)
+    __device__ __forceinline__ void compute_aabb_centroid(const float3 &aabb_min, const float3 &aabb_max,
+                                                          float3 &out_centroid)
     {
-        out_centroid = make_float3(
-            (aabb_min.x + aabb_max.x) * 0.5f,
-            (aabb_min.y + aabb_max.y) * 0.5f,
-            (aabb_min.z + aabb_max.z) * 0.5f);
+        out_centroid = make_float3((aabb_min.x + aabb_max.x) * 0.5f, (aabb_min.y + aabb_max.y) * 0.5f,
+                                   (aabb_min.z + aabb_max.z) * 0.5f);
     }
 
     /**
      * @brief Computes the intersection (overlap) box of two AABBs.
      */
-    __device__ __forceinline__ void compute_aabb_overlap(
-        const float3 &query_aabb_min,
-        const float3 &query_aabb_max,
-        const float3 &target_aabb_min,
-        const float3 &target_aabb_max,
-        float3 &overlap_min,
-        float3 &overlap_max)
+    __device__ __forceinline__ void compute_aabb_overlap(const float3 &query_aabb_min, const float3 &query_aabb_max,
+                                                         const float3 &target_aabb_min, const float3 &target_aabb_max,
+                                                         float3 &overlap_min, float3 &overlap_max)
     {
-        overlap_min = make_float3(
-            fmaxf(query_aabb_min.x, target_aabb_min.x),
-            fmaxf(query_aabb_min.y, target_aabb_min.y),
-            fmaxf(query_aabb_min.z, target_aabb_min.z));
+        overlap_min =
+            make_float3(fmaxf(query_aabb_min.x, target_aabb_min.x), fmaxf(query_aabb_min.y, target_aabb_min.y),
+                        fmaxf(query_aabb_min.z, target_aabb_min.z));
 
-        overlap_max = make_float3(
-            fminf(query_aabb_max.x, target_aabb_max.x),
-            fminf(query_aabb_max.y, target_aabb_max.y),
-            fminf(query_aabb_max.z, target_aabb_max.z));
+        overlap_max =
+            make_float3(fminf(query_aabb_max.x, target_aabb_max.x), fminf(query_aabb_max.y, target_aabb_max.y),
+                        fminf(query_aabb_max.z, target_aabb_max.z));
     }
 
     /**
      * @brief Computes the union bounding box enclosing two AABBs.
      */
-    __device__ __forceinline__ void compute_aabb_union(
-        const float3 &query_aabb_min,
-        const float3 &query_aabb_max,
-        const float3 &target_aabb_min,
-        const float3 &target_aabb_max,
-        float3 &out_union_min,
-        float3 &out_union_max)
+    __device__ __forceinline__ void compute_aabb_union(const float3 &query_aabb_min, const float3 &query_aabb_max,
+                                                       const float3 &target_aabb_min, const float3 &target_aabb_max,
+                                                       float3 &out_union_min, float3 &out_union_max)
     {
-        out_union_min = make_float3(
-            fminf(query_aabb_min.x, target_aabb_min.x),
-            fminf(query_aabb_min.y, target_aabb_min.y),
-            fminf(query_aabb_min.z, target_aabb_min.z));
+        out_union_min =
+            make_float3(fminf(query_aabb_min.x, target_aabb_min.x), fminf(query_aabb_min.y, target_aabb_min.y),
+                        fminf(query_aabb_min.z, target_aabb_min.z));
 
-        out_union_max = make_float3(
-            fmaxf(query_aabb_max.x, target_aabb_max.x),
-            fmaxf(query_aabb_max.y, target_aabb_max.y),
-            fmaxf(query_aabb_max.z, target_aabb_max.z));
+        out_union_max =
+            make_float3(fmaxf(query_aabb_max.x, target_aabb_max.x), fmaxf(query_aabb_max.y, target_aabb_max.y),
+                        fmaxf(query_aabb_max.z, target_aabb_max.z));
     }
 
     /**
      * @brief Computes clamped dimension extents of an AABB.
      */
-    __device__ __forceinline__ void compute_aabb_extent(
-        const float3 &aabb_min,
-        const float3 &aabb_max,
-        float3 &out_extent)
+    __device__ __forceinline__ void compute_aabb_extent(const float3 &aabb_min, const float3 &aabb_max,
+                                                        float3 &out_extent)
     {
-        out_extent = make_float3(
-            fmaxf(1e-6f, aabb_max.x - aabb_min.x),
-            fmaxf(1e-6f, aabb_max.y - aabb_min.y),
-            fmaxf(1e-6f, aabb_max.z - aabb_min.z));
+        out_extent = make_float3(fmaxf(1e-6f, aabb_max.x - aabb_min.x), fmaxf(1e-6f, aabb_max.y - aabb_min.y),
+                                 fmaxf(1e-6f, aabb_max.z - aabb_min.z));
     }
 
     /**
      * @brief Computes positive dimension lengths of an AABB.
      */
-    __device__ __forceinline__ void compute_aabb_dim_size(
-        const float3 &aabb_min,
-        const float3 &aabb_max,
-        float3 &out_dim_size)
+    __device__ __forceinline__ void compute_aabb_dim_size(const float3 &aabb_min, const float3 &aabb_max,
+                                                          float3 &out_dim_size)
     {
-        out_dim_size = make_float3(
-            fmaxf(0.0f, aabb_max.x - aabb_min.x),
-            fmaxf(0.0f, aabb_max.y - aabb_min.y),
-            fmaxf(0.0f, aabb_max.z - aabb_min.z));
+        out_dim_size = make_float3(fmaxf(0.0f, aabb_max.x - aabb_min.x), fmaxf(0.0f, aabb_max.y - aabb_min.y),
+                                   fmaxf(0.0f, aabb_max.z - aabb_min.z));
     }
 
     /**
      * @brief Computes volume of an AABB.
      */
-    __device__ __forceinline__ void compute_aabb_volume(
-        const float3 &aabb_min,
-        const float3 &aabb_max,
-        float &out_volume)
+    __device__ __forceinline__ void compute_aabb_volume(const float3 &aabb_min, const float3 &aabb_max,
+                                                        float &out_volume)
     {
         float3 dim_size;
         compute_aabb_dim_size(aabb_min, aabb_max, dim_size);
@@ -113,10 +87,8 @@ namespace aabb
     /**
      * @brief Computes surface area of an AABB.
      */
-    __device__ __forceinline__ void compute_aabb_surface_area(
-        const float3 &aabb_min,
-        const float3 &aabb_max,
-        float &out_surface_area)
+    __device__ __forceinline__ void compute_aabb_surface_area(const float3 &aabb_min, const float3 &aabb_max,
+                                                              float &out_surface_area)
     {
         float3 dim_size;
         compute_aabb_dim_size(aabb_min, aabb_max, dim_size);
@@ -126,9 +98,7 @@ namespace aabb
     /**
      * @brief Computes volume directly from dimensions.
      */
-    __device__ __forceinline__ void compute_aabb_volume_from_dims(
-        const float3 &dim_size,
-        float &out_volume)
+    __device__ __forceinline__ void compute_aabb_volume_from_dims(const float3 &dim_size, float &out_volume)
     {
         out_volume = dim_size.x * dim_size.y * dim_size.z;
     }
@@ -136,9 +106,7 @@ namespace aabb
     /**
      * @brief Computes surface area directly from dimensions.
      */
-    __device__ __forceinline__ void compute_aabb_surface_area_from_dims(
-        const float3 &dim_size,
-        float &out_surface_area)
+    __device__ __forceinline__ void compute_aabb_surface_area_from_dims(const float3 &dim_size, float &out_surface_area)
     {
         out_surface_area = 2.0f * (dim_size.x * dim_size.y + dim_size.x * dim_size.z + dim_size.y * dim_size.z);
     }
@@ -146,32 +114,35 @@ namespace aabb
     /**
      * @brief Computes squared Euclidean distance from point to closest point on AABB.
      */
-    __device__ __forceinline__ float compute_squared_distance(
-        const float3 &p,
-        const float3 &aabb_min,
-        const float3 &aabb_max)
+    __device__ __forceinline__ float compute_squared_distance(const float3 &p, const float3 &aabb_min,
+                                                              const float3 &aabb_max)
     {
         float d2 = 0.0f;
-        if (p.x < aabb_min.x) d2 += (aabb_min.x - p.x) * (aabb_min.x - p.x);
-        else if (p.x > aabb_max.x) d2 += (p.x - aabb_max.x) * (p.x - aabb_max.x);
-        
-        if (p.y < aabb_min.y) d2 += (aabb_min.y - p.y) * (aabb_min.y - p.y);
-        else if (p.y > aabb_max.y) d2 += (p.y - aabb_max.y) * (p.y - aabb_max.y);
-        
-        if (p.z < aabb_min.z) d2 += (aabb_min.z - p.z) * (aabb_min.z - p.z);
-        else if (p.z > aabb_max.z) d2 += (p.z - aabb_max.z) * (p.z - aabb_max.z);
-        
+        if (p.x < aabb_min.x)
+            d2 += (aabb_min.x - p.x) * (aabb_min.x - p.x);
+        else if (p.x > aabb_max.x)
+            d2 += (p.x - aabb_max.x) * (p.x - aabb_max.x);
+
+        if (p.y < aabb_min.y)
+            d2 += (aabb_min.y - p.y) * (aabb_min.y - p.y);
+        else if (p.y > aabb_max.y)
+            d2 += (p.y - aabb_max.y) * (p.y - aabb_max.y);
+
+        if (p.z < aabb_min.z)
+            d2 += (aabb_min.z - p.z) * (aabb_min.z - p.z);
+        else if (p.z > aabb_max.z)
+            d2 += (p.z - aabb_max.z) * (p.z - aabb_max.z);
+
         return d2;
     }
 
     /**
      * @brief Tests if two AABBs overlap.
      */
-    __host__ __device__ __forceinline__ bool test_aabb_overlap(
-        const float3 &query_aabb_min,
-        const float3 &query_aabb_max,
-        const float3 &target_aabb_min,
-        const float3 &target_aabb_max)
+    __host__ __device__ __forceinline__ bool test_aabb_overlap(const float3 &query_aabb_min,
+                                                               const float3 &query_aabb_max,
+                                                               const float3 &target_aabb_min,
+                                                               const float3 &target_aabb_max)
     {
         if (query_aabb_max.x < target_aabb_min.x)
             return false;
@@ -192,39 +163,23 @@ namespace aabb
     /**
      * @brief Tests if query AABB is completely enclosed inside target AABB.
      */
-    __device__ __forceinline__ bool test_aabb_inside(
-        const float3 &query_aabb_min,
-        const float3 &query_aabb_max,
-        const float3 &target_aabb_min,
-        const float3 &target_aabb_max
-    )
+    __device__ __forceinline__ bool test_aabb_inside(const float3 &query_aabb_min, const float3 &query_aabb_max,
+                                                     const float3 &target_aabb_min, const float3 &target_aabb_max)
     {
-        return (
-            target_aabb_min.x <= query_aabb_min.x &&
-            target_aabb_min.y <= query_aabb_min.y &&
-            target_aabb_min.z <= query_aabb_min.z &&
-            (target_aabb_max.x) >= query_aabb_max.x &&
-            (target_aabb_max.y) >= query_aabb_max.y &&
-            (target_aabb_max.z) >= query_aabb_max.z);
+        return (target_aabb_min.x <= query_aabb_min.x && target_aabb_min.y <= query_aabb_min.y &&
+                target_aabb_min.z <= query_aabb_min.z && (target_aabb_max.x) >= query_aabb_max.x &&
+                (target_aabb_max.y) >= query_aabb_max.y && (target_aabb_max.z) >= query_aabb_max.z);
     }
 
     /**
      * @brief Tests if 3D point is inside an AABB.
      */
-    __device__ __forceinline__ bool test_point_inside_aabb(
-        const float3 &point,
-        const float3 &aabb_min,
-        const float3 &aabb_max
-    )
+    __device__ __forceinline__ bool test_point_inside_aabb(const float3 &point, const float3 &aabb_min,
+                                                           const float3 &aabb_max)
     {
-        return (
-            aabb_min.x <= point.x &&
-            aabb_min.y <= point.y &&
-            aabb_min.z <= point.z &&
-            (aabb_max.x) >= point.x &&
-            (aabb_max.y) >= point.y &&
-            (aabb_max.z) >= point.z);
+        return (aabb_min.x <= point.x && aabb_min.y <= point.y && aabb_min.z <= point.z && (aabb_max.x) >= point.x &&
+                (aabb_max.y) >= point.y && (aabb_max.z) >= point.z);
     }
-}
+} // namespace aabb
 
 #endif // AABB_H

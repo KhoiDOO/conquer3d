@@ -1,0 +1,49 @@
+---
+# Conquer3D C++ / CUDA Clang-Format Configuration
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++17
+
+# Indentation & Alignment
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+NamespaceIndentation: All
+ContinuationIndentWidth: 4
+
+# Line Width
+ColumnLimit: 120
+
+# Brace Breaking Style
+BreakBeforeBraces: Allman
+
+# Pointer & Reference Alignment
+PointerAlignment: Right
+ReferenceAlignment: Right
+
+# Include Sorting (Disabled to preserve PyTorch and CUDA header dependencies)
+SortIncludes:
+  Enabled: false
+
+# Comments (Preserve Doxygen tags, LaTeX math formulas, and ASCII diagrams)
+ReflowComments: false
+
+# Spaces & Padding
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyBlock: false
+SpacesBeforeTrailingComments: 1
+
+# Control Flow & Short Statements
+IndentCaseLabels: true
+IndentPPDirectives: None
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+FixNamespaceComments: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+...

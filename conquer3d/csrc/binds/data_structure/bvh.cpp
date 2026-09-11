@@ -8,9 +8,7 @@
 
 namespace py = pybind11;
 
-BVH::BVH(
-    const torch::Tensor &in_aabb_mins,
-    const torch::Tensor &in_aabb_maxs)
+BVH::BVH(const torch::Tensor &in_aabb_mins, const torch::Tensor &in_aabb_maxs)
 {
     CHECK_INPUT(in_aabb_mins);
     CHECK_INPUT(in_aabb_maxs);
@@ -57,21 +55,17 @@ BVH::BVH(
     this->bvh_parents = torch::empty({this->num_nodes}, options.dtype(torch::kInt32));
     this->object_ids = torch::empty({this->num_objects}, options.dtype(torch::kInt32));
 
-    bvh::build(
-        this->num_objects,
-        this->num_nodes,
-        reinterpret_cast<const float3 *>(in_aabb_mins.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(in_aabb_maxs.data_ptr<float>()),
-        reinterpret_cast<float3 *>(this->aabb_mins.data_ptr<float>()),
-        reinterpret_cast<float3 *>(this->aabb_maxs.data_ptr<float>()),
-        reinterpret_cast<int2 *>(this->bvh_children.data_ptr<int>()),
-        reinterpret_cast<int *>(this->bvh_parents.data_ptr<int>()),
-        reinterpret_cast<int *>(this->object_ids.data_ptr<int>()));
+    bvh::build(this->num_objects, this->num_nodes, reinterpret_cast<const float3 *>(in_aabb_mins.data_ptr<float>()),
+               reinterpret_cast<const float3 *>(in_aabb_maxs.data_ptr<float>()),
+               reinterpret_cast<float3 *>(this->aabb_mins.data_ptr<float>()),
+               reinterpret_cast<float3 *>(this->aabb_maxs.data_ptr<float>()),
+               reinterpret_cast<int2 *>(this->bvh_children.data_ptr<int>()),
+               reinterpret_cast<int *>(this->bvh_parents.data_ptr<int>()),
+               reinterpret_cast<int *>(this->object_ids.data_ptr<int>()));
 }
 
-std::tuple<torch::Tensor, torch::Tensor> BVH::query(
-    const torch::Tensor &query_aabb_mins,
-    const torch::Tensor &query_aabb_maxs)
+std::tuple<torch::Tensor, torch::Tensor> BVH::query(const torch::Tensor &query_aabb_mins,
+                                                    const torch::Tensor &query_aabb_maxs)
 {
     CHECK_INPUT(query_aabb_mins);
     CHECK_INPUT(query_aabb_maxs);
@@ -94,27 +88,21 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query(
 
     torch::Tensor hit_counter = torch::zeros({1}, options_int64);
 
-    bvh::query(
-        num_queries,
-        this->num_objects,
-        reinterpret_cast<const float3 *>(query_aabb_mins.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(query_aabb_maxs.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
-        reinterpret_cast<const int2 *>(this->bvh_children.data_ptr<int>()),
-        reinterpret_cast<const int *>(this->object_ids.data_ptr<int>()),
-        reinterpret_cast<int64_t *>(out_query_ids.data_ptr<int64_t>()),
-        reinterpret_cast<int64_t *>(out_object_ids.data_ptr<int64_t>()),
-        reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()),
-        static_cast<int64_t>(BVH_MAX_CAPACITY));
+    bvh::query(num_queries, this->num_objects, reinterpret_cast<const float3 *>(query_aabb_mins.data_ptr<float>()),
+               reinterpret_cast<const float3 *>(query_aabb_maxs.data_ptr<float>()),
+               reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
+               reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
+               reinterpret_cast<const int2 *>(this->bvh_children.data_ptr<int>()),
+               reinterpret_cast<const int *>(this->object_ids.data_ptr<int>()),
+               reinterpret_cast<int64_t *>(out_query_ids.data_ptr<int64_t>()),
+               reinterpret_cast<int64_t *>(out_object_ids.data_ptr<int64_t>()),
+               reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()), static_cast<int64_t>(BVH_MAX_CAPACITY));
 
     int64_t num_hits = hit_counter.item<int64_t>();
 
     num_hits = std::min(num_hits, static_cast<int64_t>(BVH_MAX_CAPACITY));
 
-    return std::make_tuple(
-        out_query_ids.slice(0, 0, num_hits),
-        out_object_ids.slice(0, 0, num_hits));
+    return std::make_tuple(out_query_ids.slice(0, 0, num_hits), out_object_ids.slice(0, 0, num_hits));
 }
 
 std::tuple<torch::Tensor, torch::Tensor> BVH::query_self()
@@ -130,29 +118,23 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query_self()
     torch::Tensor out_object_ids = torch::empty({BVH_MAX_CAPACITY}, options_int64);
     torch::Tensor hit_counter = torch::zeros({1}, options_int64);
 
-    bvh::query_self(
-        this->num_objects,
-        reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
-        reinterpret_cast<const int2 *>(this->bvh_children.data_ptr<int>()),
-        reinterpret_cast<const int *>(this->object_ids.data_ptr<int>()),
-        reinterpret_cast<int64_t *>(out_query_ids.data_ptr<int64_t>()),
-        reinterpret_cast<int64_t *>(out_object_ids.data_ptr<int64_t>()),
-        reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()),
-        static_cast<int64_t>(BVH_MAX_CAPACITY));
+    bvh::query_self(this->num_objects, reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
+                    reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
+                    reinterpret_cast<const int2 *>(this->bvh_children.data_ptr<int>()),
+                    reinterpret_cast<const int *>(this->object_ids.data_ptr<int>()),
+                    reinterpret_cast<int64_t *>(out_query_ids.data_ptr<int64_t>()),
+                    reinterpret_cast<int64_t *>(out_object_ids.data_ptr<int64_t>()),
+                    reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()),
+                    static_cast<int64_t>(BVH_MAX_CAPACITY));
 
     int64_t num_hits = hit_counter.item<int64_t>();
     num_hits = std::min(num_hits, static_cast<int64_t>(BVH_MAX_CAPACITY));
 
-    return std::make_tuple(
-        out_query_ids.slice(0, 0, num_hits),
-        out_object_ids.slice(0, 0, num_hits));
+    return std::make_tuple(out_query_ids.slice(0, 0, num_hits), out_object_ids.slice(0, 0, num_hits));
 }
 
-std::tuple<torch::Tensor, torch::Tensor> BVH::query_ray(
-    const torch::Tensor &ray_origins,
-    const torch::Tensor &ray_dirs,
-    int64_t max_capacity)
+std::tuple<torch::Tensor, torch::Tensor> BVH::query_ray(const torch::Tensor &ray_origins, const torch::Tensor &ray_dirs,
+                                                        int64_t max_capacity)
 {
     CHECK_INPUT(ray_origins);
     CHECK_INPUT(ray_dirs);
@@ -165,19 +147,11 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query_ray(
     torch::Tensor out_object_ids = torch::empty({max_capacity}, options_i64);
     torch::Tensor hit_counter = torch::zeros({1}, options_i64);
 
-    bvh::query_ray(
-        num_queries,
-        this->num_objects,
-        (const float3 *)ray_origins.data_ptr<float>(),
-        (const float3 *)ray_dirs.data_ptr<float>(),
-        (const float3 *)this->aabb_mins.data_ptr<float>(),
-        (const float3 *)this->aabb_maxs.data_ptr<float>(),
-        (const int2 *)this->bvh_children.data_ptr<int>(),
-        this->object_ids.data_ptr<int>(),
-        out_query_ids.data_ptr<int64_t>(),
-        out_object_ids.data_ptr<int64_t>(),
-        hit_counter.data_ptr<int64_t>(),
-        max_capacity);
+    bvh::query_ray(num_queries, this->num_objects, (const float3 *)ray_origins.data_ptr<float>(),
+                   (const float3 *)ray_dirs.data_ptr<float>(), (const float3 *)this->aabb_mins.data_ptr<float>(),
+                   (const float3 *)this->aabb_maxs.data_ptr<float>(), (const int2 *)this->bvh_children.data_ptr<int>(),
+                   this->object_ids.data_ptr<int>(), out_query_ids.data_ptr<int64_t>(),
+                   out_object_ids.data_ptr<int64_t>(), hit_counter.data_ptr<int64_t>(), max_capacity);
 
     int64_t h_hit_counter = hit_counter.item<int64_t>();
 
@@ -189,18 +163,13 @@ std::tuple<torch::Tensor, torch::Tensor> BVH::query_ray(
 
     if (h_hit_counter == 0)
     {
-        return std::make_tuple(
-            torch::empty({0}, options_i64),
-            torch::empty({0}, options_i64));
+        return std::make_tuple(torch::empty({0}, options_i64), torch::empty({0}, options_i64));
     }
 
-    return std::make_tuple(
-        out_query_ids.slice(0, 0, h_hit_counter),
-        out_object_ids.slice(0, 0, h_hit_counter));
+    return std::make_tuple(out_query_ids.slice(0, 0, h_hit_counter), out_object_ids.slice(0, 0, h_hit_counter));
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> BVH::query_point(
-    const torch::Tensor &query_points)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> BVH::query_point(const torch::Tensor &query_points)
 {
     CHECK_INPUT(query_points);
 
@@ -214,21 +183,16 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> BVH::query_point(
     torch::Tensor out_distances = torch::empty({num_queries}, options_f32);
 
     bvh::query_point(
-        num_queries,
-        this->num_objects,
-        (const float3 *)query_points.data_ptr<float>(),
-        (const float3 *)this->aabb_mins.data_ptr<float>(),
-        (const float3 *)this->aabb_maxs.data_ptr<float>(),
-        (const int2 *)this->bvh_children.data_ptr<int>(),
-        this->object_ids.data_ptr<int>(),
-        out_query_ids.data_ptr<int64_t>(),
-        out_object_ids.data_ptr<int64_t>(),
-        out_distances.data_ptr<float>());
+        num_queries, this->num_objects, (const float3 *)query_points.data_ptr<float>(),
+        (const float3 *)this->aabb_mins.data_ptr<float>(), (const float3 *)this->aabb_maxs.data_ptr<float>(),
+        (const int2 *)this->bvh_children.data_ptr<int>(), this->object_ids.data_ptr<int>(),
+        out_query_ids.data_ptr<int64_t>(), out_object_ids.data_ptr<int64_t>(), out_distances.data_ptr<float>());
 
     return std::make_tuple(out_query_ids, out_object_ids, out_distances);
 }
 
-void bind_ds_bvh(py::module_ &m) {
+void bind_ds_bvh(py::module_ &m)
+{
     py::class_<BVH>(m, "BVH", R"pbdoc(
         GPU-accelerated Linear Bounding Volume Hierarchy (LBVH) built using Karras (2012) Radix LBVH algorithm.
 
@@ -238,8 +202,7 @@ void bind_ds_bvh(py::module_ &m) {
             >>> bvh = BVH(aabb_mins, aabb_maxs)
             >>> query_ids, obj_ids = bvh.query(query_mins, query_maxs)
         )pbdoc")
-        .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
-             py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
+        .def(py::init<const torch::Tensor &, const torch::Tensor &>(), py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
              R"pbdoc(
              Constructs and builds the GPU BVH from primitive AABBs.
 
@@ -250,8 +213,7 @@ void bind_ds_bvh(py::module_ &m) {
              Example:
                  >>> bvh = BVH(aabb_mins, aabb_maxs)
              )pbdoc")
-        .def("query", &BVH::query,
-             py::arg("query_aabb_mins"), py::arg("query_aabb_maxs"),
+        .def("query", &BVH::query, py::arg("query_aabb_mins"), py::arg("query_aabb_maxs"),
              R"pbdoc(
              Queries the BVH with bounding boxes for broad-phase collision.
 
@@ -279,8 +241,8 @@ void bind_ds_bvh(py::module_ &m) {
              Example:
                  >>> q_ids, obj_ids = bvh.query_self()
              )pbdoc")
-        .def("query_ray", &BVH::query_ray,
-             py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("max_capacity") = BVH_MAX_CAPACITY,
+        .def("query_ray", &BVH::query_ray, py::arg("ray_origins"), py::arg("ray_dirs"),
+             py::arg("max_capacity") = BVH_MAX_CAPACITY,
              R"pbdoc(
              Finds all ray-AABB intersections using fast Kay-Kajiya slab testing.
 
@@ -297,8 +259,7 @@ void bind_ds_bvh(py::module_ &m) {
              Example:
                  >>> ray_ids, obj_ids = bvh.query_ray(origins, dirs)
              )pbdoc")
-        .def("query_point", &BVH::query_point,
-             py::arg("query_points"),
+        .def("query_point", &BVH::query_point, py::arg("query_points"),
              R"pbdoc(
              Finds the closest leaf AABB and distance to each 3D query point.
 

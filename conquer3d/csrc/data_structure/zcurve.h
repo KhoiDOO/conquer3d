@@ -57,6 +57,6 @@ namespace zcurve
      * @param[out] codes Output device buffer of size $N$ for 64-bit Morton codes.
      */
     void compute_zcurve(const float *points, uint32_t num_points, int64_t *codes);
-}
+} // namespace zcurve
 
 #endif // ZCURVE_H

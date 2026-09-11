@@ -11,7 +11,8 @@
 #include <vector>
 #include <cstdint>
 
-namespace ops {
+namespace ops
+{
     /**
      * @brief Computes a 3D volumetric binary flood-fill occupancy mask on GPU.
      *
@@ -31,18 +32,11 @@ namespace ops {
      *
      * @return torch.Tensor: 3D int8 mask of shape `(rx, ry, rz)` (0: exterior, 1: surface, -1: interior).
      */
-    torch::Tensor compute_flood_fill(
-        const torch::Tensor& vertices,
-        const torch::Tensor& triangles,
-        const torch::Tensor& aabb_mins,
-        const torch::Tensor& aabb_maxs,
-        const torch::Tensor& bvh_children,
-        const torch::Tensor& object_ids,
-        std::vector<float> grid_min,
-        std::vector<float> grid_max,
-        std::vector<int64_t> grid_res,
-        int connectivity = 6
-    );
-}
+    torch::Tensor compute_flood_fill(const torch::Tensor &vertices, const torch::Tensor &triangles,
+                                     const torch::Tensor &aabb_mins, const torch::Tensor &aabb_maxs,
+                                     const torch::Tensor &bvh_children, const torch::Tensor &object_ids,
+                                     std::vector<float> grid_min, std::vector<float> grid_max,
+                                     std::vector<int64_t> grid_res, int connectivity = 6);
+} // namespace ops
 
 #endif // FLOOD_FILL_H

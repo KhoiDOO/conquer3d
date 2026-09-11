@@ -14,22 +14,20 @@
  * @def CHECK_CUDA(x)
  * @brief Asserts that tensor `x` resides on a CUDA device.
  */
-#define CHECK_CUDA(x) \
-    TORCH_CHECK((x).device().is_cuda(), #x " must be a CUDA tensor")
+#define CHECK_CUDA(x) TORCH_CHECK((x).device().is_cuda(), #x " must be a CUDA tensor")
 
 /**
  * @def CHECK_CONTIGUOUS(x)
  * @brief Asserts that tensor `x` has contiguous memory layout in global device memory.
  */
-#define CHECK_CONTIGUOUS(x) \
-    TORCH_CHECK((x).is_contiguous(), #x " must be contiguous")
+#define CHECK_CONTIGUOUS(x) TORCH_CHECK((x).is_contiguous(), #x " must be contiguous")
 
 /**
  * @def CHECK_INPUT(x)
  * @brief Asserts that tensor `x` is both residing on CUDA and memory-contiguous.
  */
-#define CHECK_INPUT(x) \
-    CHECK_CUDA(x);     \
+#define CHECK_INPUT(x)                                                                                                 \
+    CHECK_CUDA(x);                                                                                                     \
     CHECK_CONTIGUOUS(x)
 
 /**

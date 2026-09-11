@@ -13,7 +13,8 @@
 /**
  * @brief Canonical undirected edge between vertex indices $(v_0 \le v_1)$.
  */
-struct Edge {
+struct Edge
+{
     uint32_t v0; ///< Minimum vertex index.
     uint32_t v1; ///< Maximum vertex index.
 
@@ -23,7 +24,8 @@ struct Edge {
     /**
      * @brief Constructs a canonically sorted edge where $v_0 = \min(a, b)$ and $v_1 = \max(a, b)$.
      */
-    __host__ __device__ Edge(uint32_t a, uint32_t b) {
+    __host__ __device__ Edge(uint32_t a, uint32_t b)
+    {
         v0 = a < b ? a : b;
         v1 = a > b ? a : b;
     }
@@ -36,18 +38,14 @@ struct Edge {
      * @param[in] other Edge to compare against.
      * @return True if both endpoints match.
      */
-    __host__ __device__ bool operator==(const Edge& other) const {
-        return v0 == other.v0 && v1 == other.v1;
-    }
+    __host__ __device__ bool operator==(const Edge &other) const { return v0 == other.v0 && v1 == other.v1; }
 
     /**
      * @brief Inequality comparison.
      * @param[in] other Edge to compare against.
      * @return True if the endpoints differ.
      */
-    __host__ __device__ bool operator!=(const Edge& other) const {
-        return v0 != other.v0 || v1 != other.v1;
-    }
+    __host__ __device__ bool operator!=(const Edge &other) const { return v0 != other.v0 || v1 != other.v1; }
 
     /**
      * @brief Lexicographic ordering by endpoint indices.
@@ -56,15 +54,18 @@ struct Edge {
      * @param[in] other Edge to compare against.
      * @return True if this edge orders before @p other.
      */
-    __host__ __device__ bool operator<(const Edge& other) const {
-        if (v0 != other.v0) return v0 < other.v0;
+    __host__ __device__ bool operator<(const Edge &other) const
+    {
+        if (v0 != other.v0)
+            return v0 < other.v0;
         return v1 < other.v1;
     }
 
     /**
      * @brief Computes 3D Euclidean midpoint of this edge.
      */
-    __host__ __device__ float3 compute_midpoint(const float3* vertices) const {
+    __host__ __device__ float3 compute_midpoint(const float3 *vertices) const
+    {
         float3 p0 = vertices[v0];
         float3 p1 = vertices[v1];
         return (p0 + p1) * 0.5f;

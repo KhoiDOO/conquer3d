@@ -13,27 +13,19 @@ namespace py = pybind11;
  * free of checks and gives Python callers a clear error instead of a device fault.
  * @return The operator's results as PyTorch tensors.
  */
-std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> marching_cubes_asymptotic_wrapper(
-    torch::Tensor grid_vertices,
-    torch::Tensor voxels,
-    torch::Tensor sdf,
-    std::optional<torch::Tensor> colors,
-    float iso
-) {
+std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>>
+marching_cubes_asymptotic_wrapper(torch::Tensor grid_vertices, torch::Tensor voxels, torch::Tensor sdf,
+                                  std::optional<torch::Tensor> colors, float iso)
+{
     CHECK_INPUT(grid_vertices);
     CHECK_INPUT(voxels);
     CHECK_INPUT(sdf);
-    if (colors.has_value() && colors.value().defined()) {
+    if (colors.has_value() && colors.value().defined())
+    {
         CHECK_INPUT(colors.value());
     }
 
-    return mca::marching_cubes_asymptotic(
-        grid_vertices,
-        voxels,
-        sdf,
-        colors,
-        iso
-    );
+    return mca::marching_cubes_asymptotic(grid_vertices, voxels, sdf, colors, iso);
 }
 
 /**
@@ -44,36 +36,27 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> marching_
  * @warning Requires the same inputs the forward pass received; the adjoint recomputes
  * topology rather than storing it.
  */
-std::tuple<torch::Tensor, std::optional<torch::Tensor>> marching_cubes_asymptotic_backward_wrapper(
-    torch::Tensor grad_vertices,
-    std::optional<torch::Tensor> grad_colors,
-    torch::Tensor grid_vertices,
-    torch::Tensor unique_edges,
-    torch::Tensor sdf,
-    std::optional<torch::Tensor> colors,
-    float iso
-) {
+std::tuple<torch::Tensor, std::optional<torch::Tensor>>
+marching_cubes_asymptotic_backward_wrapper(torch::Tensor grad_vertices, std::optional<torch::Tensor> grad_colors,
+                                           torch::Tensor grid_vertices, torch::Tensor unique_edges, torch::Tensor sdf,
+                                           std::optional<torch::Tensor> colors, float iso)
+{
     CHECK_INPUT(grad_vertices);
     CHECK_INPUT(grid_vertices);
     CHECK_INPUT(unique_edges);
     CHECK_INPUT(sdf);
 
-    if (grad_colors.has_value() && grad_colors.value().defined()) {
+    if (grad_colors.has_value() && grad_colors.value().defined())
+    {
         CHECK_INPUT(grad_colors.value());
     }
-    if (colors.has_value() && colors.value().defined()) {
+    if (colors.has_value() && colors.value().defined())
+    {
         CHECK_INPUT(colors.value());
     }
 
-    return mca::marching_cubes_asymptotic_backward(
-        grad_vertices,
-        grad_colors,
-        grid_vertices,
-        unique_edges,
-        sdf,
-        colors,
-        iso
-    );
+    return mca::marching_cubes_asymptotic_backward(grad_vertices, grad_colors, grid_vertices, unique_edges, sdf, colors,
+                                                   iso);
 }
 
 /**
@@ -82,10 +65,10 @@ std::tuple<torch::Tensor, std::optional<torch::Tensor>> marching_cubes_asymptoti
  * here lands directly on `conquer3d._C`.
  * @param[in,out] m The `conquer3d._C` module object.
  */
-void bind_ops_mca(py::module &m) {
-    m.def("marching_cubes_asymptotic", &marching_cubes_asymptotic_wrapper,
-          py::arg("grid_vertices"), py::arg("voxels"), py::arg("sdf"),
-          py::arg("colors") = py::none(), py::arg("iso") = 0.0f,
+void bind_ops_mca(py::module &m)
+{
+    m.def("marching_cubes_asymptotic", &marching_cubes_asymptotic_wrapper, py::arg("grid_vertices"), py::arg("voxels"),
+          py::arg("sdf"), py::arg("colors") = py::none(), py::arg("iso") = 0.0f,
           R"pbdoc(
           Extracts a watertight 2-manifold surface using Marching Cubes with Asymptotic Deciders (Nielson & Hamann 1991).
 
@@ -107,9 +90,9 @@ void bind_ops_mca(py::module &m) {
               >>> from conquer3d._C import marching_cubes_asymptotic
               >>> verts, tris, colors = marching_cubes_asymptotic(grid_verts, voxels, sdf, colors, iso=0.0)
           )pbdoc");
-    m.def("marching_cubes_asymptotic_backward", &marching_cubes_asymptotic_backward_wrapper,
-          py::arg("grad_vertices"), py::arg("grad_colors"), py::arg("grid_vertices"),
-          py::arg("unique_edges"), py::arg("sdf"), py::arg("colors"), py::arg("iso") = 0.0f,
+    m.def("marching_cubes_asymptotic_backward", &marching_cubes_asymptotic_backward_wrapper, py::arg("grad_vertices"),
+          py::arg("grad_colors"), py::arg("grid_vertices"), py::arg("unique_edges"), py::arg("sdf"), py::arg("colors"),
+          py::arg("iso") = 0.0f,
           R"pbdoc(
           Analytical backward gradient propagation for Marching Cubes with Asymptotic Deciders on GPU.
 

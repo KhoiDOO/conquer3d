@@ -37,38 +37,27 @@ namespace sq
     /**
      * @brief Samples every primitive's two superellipses at approximately equal arc length.
      */
-    __host__ void compute_superellipse_angles(
-        const uint32_t num_quadrics,
-        const uint32_t resolution,
-        const float3 *__restrict__ scales,
-        const float2 *__restrict__ exponents,
-        SuperellipseFrame *__restrict__ stack_scratch,
-        double *__restrict__ out_azimuths,
-        double *__restrict__ out_polars);
+    __host__ void compute_superellipse_angles(const uint32_t num_quadrics, const uint32_t resolution,
+                                              const float3 *__restrict__ scales, const float2 *__restrict__ exponents,
+                                              SuperellipseFrame *__restrict__ stack_scratch,
+                                              double *__restrict__ out_azimuths, double *__restrict__ out_polars);
 
     /**
      * @brief Evaluates the parametric superquadric surface at every tessellation vertex.
      */
-    __host__ void compute_superquadric_vertices(
-        const uint32_t num_quadrics,
-        const uint32_t resolution,
-        const float3 *__restrict__ scales,
-        const float2 *__restrict__ exponents,
-        const float *__restrict__ rotations,
-        const float3 *__restrict__ translations,
-        const double *__restrict__ azimuths,
-        const double *__restrict__ polars,
-        const bool return_labels,
-        float3 *__restrict__ out_vertices,
-        int32_t *__restrict__ out_labels);
+    __host__ void compute_superquadric_vertices(const uint32_t num_quadrics, const uint32_t resolution,
+                                                const float3 *__restrict__ scales, const float2 *__restrict__ exponents,
+                                                const float *__restrict__ rotations,
+                                                const float3 *__restrict__ translations,
+                                                const double *__restrict__ azimuths, const double *__restrict__ polars,
+                                                const bool return_labels, float3 *__restrict__ out_vertices,
+                                                int32_t *__restrict__ out_labels);
 
     /**
      * @brief Writes the triangle connectivity shared by every tessellated primitive.
      */
-    __host__ void compute_superquadric_faces(
-        const uint32_t num_quadrics,
-        const uint32_t resolution,
-        int3 *__restrict__ out_triangles);
-}
+    __host__ void compute_superquadric_faces(const uint32_t num_quadrics, const uint32_t resolution,
+                                             int3 *__restrict__ out_triangles);
+} // namespace sq
 
 #endif // SUPERQUADRIC_H

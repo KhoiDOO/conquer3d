@@ -34,16 +34,10 @@ namespace gs_aabb
      * @param[out] out_max AABB upper bound.
      * @param[out] contact_points Representative surface points, or `nullptr`.
      */
-    __device__ __forceinline__ void compute_gs_single_aabb(
-        const float3 &mean,
-        const float3 &scale,
-        const float *__restrict__ covi,
-        const float &iso,
-        const float &tol,
-        const uint32_t level,
-        float3 &out_min,
-        float3 &out_max,
-        float3 *contact_points)
+    __device__ __forceinline__ void compute_gs_single_aabb(const float3 &mean, const float3 &scale,
+                                                           const float *__restrict__ covi, const float &iso,
+                                                           const float &tol, const uint32_t level, float3 &out_min,
+                                                           float3 &out_max, float3 *contact_points)
     {
         float two_level = (float)(1U << level);
         float voxelSize = 2.0f / two_level;
@@ -81,7 +75,7 @@ namespace gs_aabb
         Q[2] = make_double3(h2, h4, h5);
 
         float3 P[6];
-        #pragma unroll
+#pragma unroll
         for (int i = 0; i < 3; i++)
         {
             P[2 * i] = make_float3((float)(w[i] * Q[i].x), (float)(w[i] * Q[i].y), (float)(w[i] * Q[i].z));
@@ -95,7 +89,7 @@ namespace gs_aabb
         float3 Pmin = make_float3(FLT_MAX, FLT_MAX, FLT_MAX);
         float3 Pmax = make_float3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 
-        #pragma unroll
+#pragma unroll
         for (int i = 0; i < 6; i++)
         {
             Pmin.x = fminf(Pmin.x, P[i].x);
@@ -111,7 +105,7 @@ namespace gs_aabb
     }
 
     template <bool multiple_isos>
-/**
+    /**
  * @brief Computes a tight AABB and contact point for each Gaussian at its isovalue.
  * @details One thread per Gaussian. The bounding box of an ellipsoidal isosurface is
  * obtained in closed form from the inverse covariance, giving a far tighter fit than a
@@ -131,18 +125,11 @@ namespace gs_aabb
  * @param[out] contact_points Device array of $N$ representative surface points.
  * @note Templated on `multiple_isos`; the host instantiates the variant it needs.
  */
-__global__ void compute_gs_aabb_kernel(
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ means,
-        const float3 *__restrict__ scales,
-        const float *__restrict__ covis,
-        const float *__restrict__ isos,
-        const float iso,
-        const float tol,
-        const uint32_t level,
-        float3 *__restrict__ aabb_min,
-        float3 *__restrict__ aabb_max,
-        float3 *__restrict__ contact_points)
+    __global__ void compute_gs_aabb_kernel(const uint32_t num_gaussians, const float3 *__restrict__ means,
+                                           const float3 *__restrict__ scales, const float *__restrict__ covis,
+                                           const float *__restrict__ isos, const float iso, const float tol,
+                                           const uint32_t level, float3 *__restrict__ aabb_min,
+                                           float3 *__restrict__ aabb_max, float3 *__restrict__ contact_points)
     {
         uint32_t g_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -151,64 +138,28 @@ __global__ void compute_gs_aabb_kernel(
 
         float __iso = multiple_isos ? isos[g_idx] : iso;
 
-        compute_gs_single_aabb(
-            means[g_idx],
-            scales[g_idx],
-            covis + (g_idx * 6),
-            __iso,
-            tol,
-            level,
-            aabb_min[g_idx],
-            aabb_max[g_idx],
-            contact_points + (g_idx * 3));
+        compute_gs_single_aabb(means[g_idx], scales[g_idx], covis + (g_idx * 6), __iso, tol, level, aabb_min[g_idx],
+                               aabb_max[g_idx], contact_points + (g_idx * 3));
     }
 
-    void compute_gs_aabb(
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ means,
-        const float3 *__restrict__ scales,
-        const float *__restrict__ covis,
-        const float *__restrict__ isos,
-        const float iso,
-        const float tol,
-        const uint32_t level,
-        float3 *__restrict__ aabb_min,
-        float3 *__restrict__ aabb_max,
-        float3 *__restrict__ contact_points)
+    void compute_gs_aabb(const uint32_t num_gaussians, const float3 *__restrict__ means,
+                         const float3 *__restrict__ scales, const float *__restrict__ covis,
+                         const float *__restrict__ isos, const float iso, const float tol, const uint32_t level,
+                         float3 *__restrict__ aabb_min, float3 *__restrict__ aabb_max,
+                         float3 *__restrict__ contact_points)
     {
-
         uint32_t threads = NTHREADS;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
         if (isos != nullptr)
         {
-            compute_gs_aabb_kernel<true><<<blocks, threads>>>(
-                num_gaussians,
-                means,
-                scales,
-                covis,
-                isos,
-                iso,
-                tol,
-                level,
-                aabb_min,
-                aabb_max,
-                contact_points);
+            compute_gs_aabb_kernel<true><<<blocks, threads>>>(num_gaussians, means, scales, covis, isos, iso, tol,
+                                                              level, aabb_min, aabb_max, contact_points);
         }
         else
         {
-            compute_gs_aabb_kernel<false><<<blocks, threads>>>(
-                num_gaussians,
-                means,
-                scales,
-                covis,
-                isos,
-                iso,
-                tol,
-                level,
-                aabb_min,
-                aabb_max,
-                contact_points);
+            compute_gs_aabb_kernel<false><<<blocks, threads>>>(num_gaussians, means, scales, covis, isos, iso, tol,
+                                                               level, aabb_min, aabb_max, contact_points);
         }
     }
 
@@ -225,14 +176,10 @@ __global__ void compute_gs_aabb_kernel(
      * @return True if the surface crosses an edge.
      * @note Assumes a cubic voxel.
      */
-    __device__ __forceinline__ bool test_gs_intersect_voxel_edge(
-        const float3 &mean,
-        const float *covi,
-        const float3 &vx_ab_min,
-        const float3 &vx_ab_max,
-        const float iso)
+    __device__ __forceinline__ bool test_gs_intersect_voxel_edge(const float3 &mean, const float *covi,
+                                                                 const float3 &vx_ab_min, const float3 &vx_ab_max,
+                                                                 const float iso)
     {
-
         float3 p = vx_ab_min - mean;             // move to local space of Gaussian
         float vsize = vx_ab_max.x - vx_ab_min.x; // assume cubic voxel
 
@@ -241,29 +188,26 @@ __global__ void compute_gs_aabb_kernel(
         {
             float dummy_t0, dummy_t1;
 
-            if (gs::test_gs_segment(
-                    covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
-                    make_float3(p.x, p.y + (i / 2 ? vsize : 0.0), p.z + (i % 2 ? vsize : 0.0)),
-                    make_float3(p.x + vsize, p.y + (i / 2 ? vsize : 0.0), p.z + (i % 2 ? vsize : 0.0)),
-                    false, dummy_t0, dummy_t1))
+            if (gs::test_gs_segment(covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
+                                    make_float3(p.x, p.y + (i / 2 ? vsize : 0.0), p.z + (i % 2 ? vsize : 0.0)),
+                                    make_float3(p.x + vsize, p.y + (i / 2 ? vsize : 0.0), p.z + (i % 2 ? vsize : 0.0)),
+                                    false, dummy_t0, dummy_t1))
             {
                 return true;
             }
 
-            if (gs::test_gs_segment(
-                    covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
-                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y, p.z + (i % 2 ? vsize : 0.0)),
-                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + vsize, p.z + (i % 2 ? vsize : 0.0)),
-                    false, dummy_t0, dummy_t1))
+            if (gs::test_gs_segment(covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
+                                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y, p.z + (i % 2 ? vsize : 0.0)),
+                                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + vsize, p.z + (i % 2 ? vsize : 0.0)),
+                                    false, dummy_t0, dummy_t1))
             {
                 return true;
             }
 
-            if (gs::test_gs_segment(
-                    covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
-                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + (i % 2 ? vsize : 0.0), p.z),
-                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + (i % 2 ? vsize : 0.0), p.z + vsize),
-                    false, dummy_t0, dummy_t1))
+            if (gs::test_gs_segment(covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], iso,
+                                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + (i % 2 ? vsize : 0.0), p.z),
+                                    make_float3(p.x + (i / 2 ? vsize : 0.0), p.y + (i % 2 ? vsize : 0.0), p.z + vsize),
+                                    false, dummy_t0, dummy_t1))
             {
                 return true;
             }
@@ -285,14 +229,8 @@ __global__ void compute_gs_aabb_kernel(
      * @param[in] vs Face offset along the normal axis.
      * @return True if the face intersects the surface.
      */
-    __device__ __forceinline__ bool test_gs_vx_face(
-        const float *p,
-        float *q,
-        const float vsize,
-        const int i,
-        const int j,
-        const int k,
-        const float vs)
+    __device__ __forceinline__ bool test_gs_vx_face(const float *p, float *q, const float vsize, const int i,
+                                                    const int j, const int k, const float vs)
     {
         float t = (q[i] - (p[i] + vs)) / (2.0 * q[i]);
 
@@ -321,13 +259,8 @@ __global__ void compute_gs_aabb_kernel(
      * @return True if the surface crosses a face.
      * @note Assumes a cubic voxel.
      */
-    __device__ __forceinline__ bool test_gs_intersect_voxel_face(
-        const float3 &mean,
-        float3 cp0,
-        float3 cp1,
-        float3 cp2,
-        const float3 &vx_ab_min,
-        const float3 &vx_ab_max)
+    __device__ __forceinline__ bool test_gs_intersect_voxel_face(const float3 &mean, float3 cp0, float3 cp1, float3 cp2,
+                                                                 const float3 &vx_ab_min, const float3 &vx_ab_max)
     {
         float3 p = vx_ab_min - mean;
         float vsize = vx_ab_max.x - vx_ab_min.x; // assume cubic voxel
@@ -363,20 +296,11 @@ __global__ void compute_gs_aabb_kernel(
      * @param[in] vx_ab_max Voxel upper bound.
      * @return True if the Gaussian's isosurface meets the voxel.
      */
-    __device__ __forceinline__ bool test_gs_intersect_voxel(
-        const uint64_t gaus_idx,
-        const float3 &mean,
-        const float *covi,
-        const float3 &gs_ab_min,
-        const float3 &gs_ab_max,
-        const float3 &cp0,
-        const float3 &cp1,
-        const float3 &cp2,
-        const float3 &vx_ab_min,
-        const float3 &vx_ab_max,
-        const float iso)
+    __device__ __forceinline__ bool
+    test_gs_intersect_voxel(const uint64_t gaus_idx, const float3 &mean, const float *covi, const float3 &gs_ab_min,
+                            const float3 &gs_ab_max, const float3 &cp0, const float3 &cp1, const float3 &cp2,
+                            const float3 &vx_ab_min, const float3 &vx_ab_max, const float iso)
     {
-
         if (aabb::test_aabb_inside(gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max))
             return true;
 
@@ -405,19 +329,12 @@ __global__ void compute_gs_aabb_kernel(
      * @param[out] out_centroid Centroid of the overlap region.
      * @param[out] out_density Density integrated over the overlap.
      */
-    __device__ __forceinline__ void compute_overlap_metrics(
-        const float3 &gs_ab_min,
-        const float3 &gs_ab_max,
-        const float3 &vx_ab_min,
-        const float3 &vx_ab_max,
-        const float3 &mean,
-        const float *covi,
-        const float opacity,
-        const bool return_centroids,
-        float3 &out_centroid,
-        float &out_density,
-        float &out_aspect_ratio,
-        float &out_penetration)
+    __device__ __forceinline__ void compute_overlap_metrics(const float3 &gs_ab_min, const float3 &gs_ab_max,
+                                                            const float3 &vx_ab_min, const float3 &vx_ab_max,
+                                                            const float3 &mean, const float *covi, const float opacity,
+                                                            const bool return_centroids, float3 &out_centroid,
+                                                            float &out_density, float &out_aspect_ratio,
+                                                            float &out_penetration)
     {
         // 1. Calculate Overlap Box boundaries
         float3 overlap_min;
@@ -447,7 +364,7 @@ __global__ void compute_gs_aabb_kernel(
     }
 
     template <bool multiple_isos>
-/**
+    /**
  * @brief Reports every (voxel, Gaussian) pair whose supports overlap.
  * @details One thread per voxel, descending the Gaussian BVH with a private stack. Leaves
  * surviving the AABB test are re-examined exactly: the Gaussian's density is evaluated
@@ -484,33 +401,17 @@ __global__ void compute_gs_aabb_kernel(
  * Emission stops at @p max_capacity; compare the final counter against it to detect
  * truncation.
  */
-__global__ void query_gs_voxel_pair_intersection_bvh_kernel(
-        const uint32_t num_voxels,
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ vx_aabb_mins,
-        const float3 *__restrict__ vx_aabb_maxs,
-        const float3 *__restrict__ bvh_aabb_mins,
-        const float3 *__restrict__ bvh_aabb_maxs,
-        const int2 *__restrict__ bvh_children,
-        const int *__restrict__ object_ids,
-        const float3 *__restrict__ means,
-        const float *__restrict__ covis,
-        const float *__restrict__ opacities,
-        const float3 *__restrict__ gs_aabb_mins,
-        const float3 *__restrict__ gs_aabb_maxs,
-        const float3 *__restrict__ contact_points,
-        const float *__restrict__ isos,
-        const float iso,
-        const float ar_threshold,
-        const float p_threshold,
-        const bool return_centroids,
-        bool *__restrict__ hit_mask,
-        int64_t *__restrict__ out_voxel_ids,
-        int64_t *__restrict__ out_gaus_ids,
-        float3 *__restrict__ centroids,
-        float *__restrict__ densities,
-        int64_t *__restrict__ global_counter,
-        const int64_t max_capacity)
+    __global__ void query_gs_voxel_pair_intersection_bvh_kernel(
+        const uint32_t num_voxels, const uint32_t num_gaussians, const float3 *__restrict__ vx_aabb_mins,
+        const float3 *__restrict__ vx_aabb_maxs, const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs, const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids, const float3 *__restrict__ means, const float *__restrict__ covis,
+        const float *__restrict__ opacities, const float3 *__restrict__ gs_aabb_mins,
+        const float3 *__restrict__ gs_aabb_maxs, const float3 *__restrict__ contact_points,
+        const float *__restrict__ isos, const float iso, const float ar_threshold, const float p_threshold,
+        const bool return_centroids, bool *__restrict__ hit_mask, int64_t *__restrict__ out_voxel_ids,
+        int64_t *__restrict__ out_gaus_ids, float3 *__restrict__ centroids, float *__restrict__ densities,
+        int64_t *__restrict__ global_counter, const int64_t max_capacity)
     {
         uint32_t v_idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (v_idx >= num_voxels)
@@ -522,69 +423,57 @@ __global__ void query_gs_voxel_pair_intersection_bvh_kernel(
         bool any_hit = false;
 
         // --- BVH LOCAL STACK ---
-        bvh::traverse(num_gaussians, bvh_children,
-            [&] (int node_idx) {
-                return aabb::test_aabb_overlap(vx_ab_min, vx_ab_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]);
-            },
-            [&] (int leaf_idx) {
-                        // Recover the original Gaussian index
-                        uint32_t g_idx = object_ids[leaf_idx];
-    
-                        // Fetch Gaussian properties
-                        float3 mean = means[g_idx];
-                        const float *covi = covis + (g_idx * 6);
-                        float opacity = opacities[g_idx];
-                        float3 gs_ab_min = gs_aabb_mins[g_idx];
-                        float3 gs_ab_max = gs_aabb_maxs[g_idx];
-                        float3 cp0 = contact_points[g_idx * 3 + 0];
-                        float3 cp1 = contact_points[g_idx * 3 + 1];
-                        float3 cp2 = contact_points[g_idx * 3 + 2];
-                        float __iso = multiple_isos ? isos[g_idx] : iso;
-    
-                        bool hit = test_gs_intersect_voxel(
-                            g_idx,
-                            mean,
-                            covi,
-                            gs_ab_min,
-                            gs_ab_max,
-                            cp0,
-                            cp1,
-                            cp2,
-                            vx_ab_min,
-                            vx_ab_max,
-                            __iso);
-    
-                        if (hit)
+        bvh::traverse(
+            num_gaussians, bvh_children, [&](int node_idx)
+            { return aabb::test_aabb_overlap(vx_ab_min, vx_ab_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]); },
+            [&](int leaf_idx)
+            {
+                // Recover the original Gaussian index
+                uint32_t g_idx = object_ids[leaf_idx];
+
+                // Fetch Gaussian properties
+                float3 mean = means[g_idx];
+                const float *covi = covis + (g_idx * 6);
+                float opacity = opacities[g_idx];
+                float3 gs_ab_min = gs_aabb_mins[g_idx];
+                float3 gs_ab_max = gs_aabb_maxs[g_idx];
+                float3 cp0 = contact_points[g_idx * 3 + 0];
+                float3 cp1 = contact_points[g_idx * 3 + 1];
+                float3 cp2 = contact_points[g_idx * 3 + 2];
+                float __iso = multiple_isos ? isos[g_idx] : iso;
+
+                bool hit = test_gs_intersect_voxel(g_idx, mean, covi, gs_ab_min, gs_ab_max, cp0, cp1, cp2, vx_ab_min,
+                                                   vx_ab_max, __iso);
+
+                if (hit)
+                {
+                    float3 centroid;
+                    float density;
+                    float aspect_ratio;
+                    float penetration;
+
+                    compute_overlap_metrics(gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max, mean, covi, opacity,
+                                            return_centroids, centroid, density, aspect_ratio, penetration);
+
+                    // Threshold check
+                    if (aspect_ratio >= ar_threshold && penetration >= p_threshold)
+                    {
+                        any_hit = true;
+                        uint64_t write_idx = (uint64_t)atomicAdd((unsigned long long int *)global_counter, 1ULL);
+
+                        if (write_idx < max_capacity)
                         {
-                            float3 centroid;
-                            float density;
-                            float aspect_ratio;
-                            float penetration;
-    
-                            compute_overlap_metrics(
-                                gs_ab_min, gs_ab_max, vx_ab_min, vx_ab_max,
-                                mean, covi, opacity, return_centroids,
-                                centroid, density, aspect_ratio, penetration);
-    
-                            // Threshold check
-                            if (aspect_ratio >= ar_threshold && penetration >= p_threshold)
+                            out_voxel_ids[write_idx] = v_idx;
+                            out_gaus_ids[write_idx] = g_idx;
+
+                            if (return_centroids)
                             {
-                                any_hit = true;
-                                uint64_t write_idx = (uint64_t)atomicAdd((unsigned long long int *)global_counter, 1ULL);
-    
-                                if (write_idx < max_capacity)
-                                {
-                                    out_voxel_ids[write_idx] = v_idx;
-                                    out_gaus_ids[write_idx] = g_idx;
-    
-                                    if (return_centroids)
-                                    {
-                                        centroids[write_idx] = centroid;
-                                        densities[write_idx] = density;
-                                    }
-                                }
+                                centroids[write_idx] = centroid;
+                                densities[write_idx] = density;
                             }
                         }
+                    }
+                }
                 return true;
             });
 
@@ -592,32 +481,16 @@ __global__ void query_gs_voxel_pair_intersection_bvh_kernel(
     }
 
     void query_gs_voxel_pair_intersection_bvh(
-        const uint32_t num_voxels,
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ vx_aabb_mins,
-        const float3 *__restrict__ vx_aabb_maxs,
-        const float3 *__restrict__ bvh_aabb_mins,
-        const float3 *__restrict__ bvh_aabb_maxs,
-        const int2 *__restrict__ bvh_children,
-        const int *__restrict__ object_ids,
-        const float3 *__restrict__ means,
-        const float *__restrict__ covis,
-        const float *__restrict__ opacities,
-        const float3 *__restrict__ gs_aabb_mins,
-        const float3 *__restrict__ gs_aabb_maxs,
-        const float3 *__restrict__ contact_points,
-        const float *__restrict__ isos,
-        const float iso,
-        const float ar_threshold,
-        const float p_threshold,
-        const bool return_centroids,
-        bool *__restrict__ hit_mask,
-        int64_t *__restrict__ out_voxel_ids,
-        int64_t *__restrict__ out_gaus_ids,
-        float3 *__restrict__ centroids,
-        float *__restrict__ densities,
-        int64_t *__restrict__ global_counter,
-        const int64_t max_capacity)
+        const uint32_t num_voxels, const uint32_t num_gaussians, const float3 *__restrict__ vx_aabb_mins,
+        const float3 *__restrict__ vx_aabb_maxs, const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs, const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids, const float3 *__restrict__ means, const float *__restrict__ covis,
+        const float *__restrict__ opacities, const float3 *__restrict__ gs_aabb_mins,
+        const float3 *__restrict__ gs_aabb_maxs, const float3 *__restrict__ contact_points,
+        const float *__restrict__ isos, const float iso, const float ar_threshold, const float p_threshold,
+        const bool return_centroids, bool *__restrict__ hit_mask, int64_t *__restrict__ out_voxel_ids,
+        int64_t *__restrict__ out_gaus_ids, float3 *__restrict__ centroids, float *__restrict__ densities,
+        int64_t *__restrict__ global_counter, const int64_t max_capacity)
     {
         uint32_t threads = NTHREADS;
         uint32_t blocks = (num_voxels + threads - 1) / threads;
@@ -625,67 +498,23 @@ __global__ void query_gs_voxel_pair_intersection_bvh_kernel(
         if (isos != nullptr)
         {
             query_gs_voxel_pair_intersection_bvh_kernel<true><<<blocks, threads>>>(
-                num_voxels,
-                num_gaussians,
-                vx_aabb_mins,
-                vx_aabb_maxs,
-                bvh_aabb_mins,
-                bvh_aabb_maxs,
-                bvh_children,
-                object_ids,
-                means,
-                covis,
-                opacities,
-                gs_aabb_mins,
-                gs_aabb_maxs,
-                contact_points,
-                isos,
-                iso,
-                ar_threshold,
-                p_threshold,
-                return_centroids,
-                hit_mask,
-                out_voxel_ids,
-                out_gaus_ids,
-                centroids,
-                densities,
-                global_counter,
-                max_capacity);
+                num_voxels, num_gaussians, vx_aabb_mins, vx_aabb_maxs, bvh_aabb_mins, bvh_aabb_maxs, bvh_children,
+                object_ids, means, covis, opacities, gs_aabb_mins, gs_aabb_maxs, contact_points, isos, iso,
+                ar_threshold, p_threshold, return_centroids, hit_mask, out_voxel_ids, out_gaus_ids, centroids,
+                densities, global_counter, max_capacity);
         }
         else
         {
             query_gs_voxel_pair_intersection_bvh_kernel<false><<<blocks, threads>>>(
-                num_voxels,
-                num_gaussians,
-                vx_aabb_mins,
-                vx_aabb_maxs,
-                bvh_aabb_mins,
-                bvh_aabb_maxs,
-                bvh_children,
-                object_ids,
-                means,
-                covis,
-                opacities,
-                gs_aabb_mins,
-                gs_aabb_maxs,
-                contact_points,
-                isos,
-                iso,
-                ar_threshold,
-                p_threshold,
-                return_centroids,
-                hit_mask,
-                out_voxel_ids,
-                out_gaus_ids,
-                centroids,
-                densities,
-                global_counter,
-                max_capacity);
+                num_voxels, num_gaussians, vx_aabb_mins, vx_aabb_maxs, bvh_aabb_mins, bvh_aabb_maxs, bvh_children,
+                object_ids, means, covis, opacities, gs_aabb_mins, gs_aabb_maxs, contact_points, isos, iso,
+                ar_threshold, p_threshold, return_centroids, hit_mask, out_voxel_ids, out_gaus_ids, centroids,
+                densities, global_counter, max_capacity);
         }
     }
 
     template <bool multiple_isos>
-/**
+    /**
  * @brief Reports every (edge, Gaussian) pair whose supports intersect.
  * @details One thread per edge. A broad-phase AABB around the segment prunes the BVH,
  * then surviving Gaussians receive an exact segment-versus-ellipsoid test. Used to decide
@@ -712,23 +541,13 @@ __global__ void query_gs_voxel_pair_intersection_bvh_kernel(
  * Emission stops at @p max_capacity; compare the final counter against it to detect
  * truncation.
  */
-__global__ void query_gs_edge_pair_intersection_bvh_kernel(
-        const uint32_t num_edges,
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ edge_starts,
-        const float3 *__restrict__ edge_ends,
-        const float3 *__restrict__ bvh_aabb_mins,
-        const float3 *__restrict__ bvh_aabb_maxs,
-        const int2 *__restrict__ bvh_children,
-        const int *__restrict__ object_ids,
-        const float3 *__restrict__ means,
-        const float *__restrict__ covis,
-        const float *__restrict__ isos,
-        const float iso,
-        bool *__restrict__ hit_mask,
-        int64_t *__restrict__ out_edge_ids,
-        int64_t *__restrict__ out_gaus_ids,
-        int64_t *__restrict__ global_counter,
+    __global__ void query_gs_edge_pair_intersection_bvh_kernel(
+        const uint32_t num_edges, const uint32_t num_gaussians, const float3 *__restrict__ edge_starts,
+        const float3 *__restrict__ edge_ends, const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs, const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids, const float3 *__restrict__ means, const float *__restrict__ covis,
+        const float *__restrict__ isos, const float iso, bool *__restrict__ hit_mask,
+        int64_t *__restrict__ out_edge_ids, int64_t *__restrict__ out_gaus_ids, int64_t *__restrict__ global_counter,
         const int64_t max_capacity)
     {
         uint32_t e_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -739,65 +558,56 @@ __global__ void query_gs_edge_pair_intersection_bvh_kernel(
         float3 edge_end = edge_ends[e_idx];
 
         // Create a fast Broad-Phase AABB for the edge
-        float3 e_ab_min = make_float3(fminf(edge_start.x, edge_end.x), fminf(edge_start.y, edge_end.y), fminf(edge_start.z, edge_end.z));
-        float3 e_ab_max = make_float3(fmaxf(edge_start.x, edge_end.x), fmaxf(edge_start.y, edge_end.y), fmaxf(edge_start.z, edge_end.z));
+        float3 e_ab_min = make_float3(fminf(edge_start.x, edge_end.x), fminf(edge_start.y, edge_end.y),
+                                      fminf(edge_start.z, edge_end.z));
+        float3 e_ab_max = make_float3(fmaxf(edge_start.x, edge_end.x), fmaxf(edge_start.y, edge_end.y),
+                                      fmaxf(edge_start.z, edge_end.z));
 
         bool any_hit = false;
 
         // --- BVH LOCAL STACK ---
-        bvh::traverse(num_gaussians, bvh_children,
-            [&] (int node_idx) {
-                return aabb::test_aabb_overlap(e_ab_min, e_ab_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]);
-            },
-            [&] (int leaf_idx) {
-                        // 2. NARROW PHASE
-                        uint32_t g_idx = object_ids[leaf_idx];
-    
-                        float3 mean = means[g_idx];
-                        const float *covi = covis + (g_idx * 6);
-                        float __iso = multiple_isos ? isos[g_idx] : iso;
-    
-                        float3 local_start = edge_start - mean;
-                        float3 local_end = edge_end - mean;
-                        float dummy_t_entry, dummy_t_exit;
-    
-                        bool hit = gs::test_gs_segment(
-                            covi[0], covi[1], covi[2], covi[3], covi[4], covi[5],
-                            __iso, local_start, local_end, false, dummy_t_entry, dummy_t_exit);
-    
-                        if (hit)
-                        {
-                            any_hit = true;
-                            uint64_t write_idx = (uint64_t)atomicAdd((unsigned long long int *)global_counter, 1ULL);
-    
-                            if (write_idx < max_capacity)
-                            {
-                                out_edge_ids[write_idx] = e_idx;
-                                out_gaus_ids[write_idx] = g_idx;
-                            }
-                        }
+        bvh::traverse(
+            num_gaussians, bvh_children, [&](int node_idx)
+            { return aabb::test_aabb_overlap(e_ab_min, e_ab_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]); },
+            [&](int leaf_idx)
+            {
+                // 2. NARROW PHASE
+                uint32_t g_idx = object_ids[leaf_idx];
+
+                float3 mean = means[g_idx];
+                const float *covi = covis + (g_idx * 6);
+                float __iso = multiple_isos ? isos[g_idx] : iso;
+
+                float3 local_start = edge_start - mean;
+                float3 local_end = edge_end - mean;
+                float dummy_t_entry, dummy_t_exit;
+
+                bool hit = gs::test_gs_segment(covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], __iso, local_start,
+                                               local_end, false, dummy_t_entry, dummy_t_exit);
+
+                if (hit)
+                {
+                    any_hit = true;
+                    uint64_t write_idx = (uint64_t)atomicAdd((unsigned long long int *)global_counter, 1ULL);
+
+                    if (write_idx < max_capacity)
+                    {
+                        out_edge_ids[write_idx] = e_idx;
+                        out_gaus_ids[write_idx] = g_idx;
+                    }
+                }
                 return true;
             });
         hit_mask[e_idx] = any_hit;
     }
 
     void query_gs_edge_pair_intersection_bvh(
-        const uint32_t num_edges,
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ edge_starts,
-        const float3 *__restrict__ edge_ends,
-        const float3 *__restrict__ bvh_aabb_mins,
-        const float3 *__restrict__ bvh_aabb_maxs,
-        const int2 *__restrict__ bvh_children,
-        const int *__restrict__ object_ids,
-        const float3 *__restrict__ means,
-        const float *__restrict__ covis,
-        const float *__restrict__ isos,
-        const float iso,
-        bool *__restrict__ hit_mask,
-        int64_t *__restrict__ out_edge_ids,
-        int64_t *__restrict__ out_gaus_ids,
-        int64_t *__restrict__ global_counter,
+        const uint32_t num_edges, const uint32_t num_gaussians, const float3 *__restrict__ edge_starts,
+        const float3 *__restrict__ edge_ends, const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs, const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids, const float3 *__restrict__ means, const float *__restrict__ covis,
+        const float *__restrict__ isos, const float iso, bool *__restrict__ hit_mask,
+        int64_t *__restrict__ out_edge_ids, int64_t *__restrict__ out_gaus_ids, int64_t *__restrict__ global_counter,
         const int64_t max_capacity)
     {
         uint32_t threads = NTHREADS;
@@ -805,49 +615,22 @@ __global__ void query_gs_edge_pair_intersection_bvh_kernel(
 
         if (isos != nullptr)
         {
-            query_gs_edge_pair_intersection_bvh_kernel<true><<<blocks, threads>>>(
-                num_edges,
-                num_gaussians,
-                edge_starts,
-                edge_ends,
-                bvh_aabb_mins,
-                bvh_aabb_maxs,
-                bvh_children,
-                object_ids,
-                means, covis,
-                isos,
-                iso,
-                hit_mask,
-                out_edge_ids,
-                out_gaus_ids,
-                global_counter,
-                max_capacity);
+            query_gs_edge_pair_intersection_bvh_kernel<true>
+                <<<blocks, threads>>>(num_edges, num_gaussians, edge_starts, edge_ends, bvh_aabb_mins, bvh_aabb_maxs,
+                                      bvh_children, object_ids, means, covis, isos, iso, hit_mask, out_edge_ids,
+                                      out_gaus_ids, global_counter, max_capacity);
         }
         else
         {
-            query_gs_edge_pair_intersection_bvh_kernel<false><<<blocks, threads>>>(
-                num_edges,
-                num_gaussians,
-                edge_starts,
-                edge_ends,
-                bvh_aabb_mins,
-                bvh_aabb_maxs,
-                bvh_children,
-                object_ids,
-                means,
-                covis,
-                isos,
-                iso,
-                hit_mask,
-                out_edge_ids,
-                out_gaus_ids,
-                global_counter,
-                max_capacity);
+            query_gs_edge_pair_intersection_bvh_kernel<false>
+                <<<blocks, threads>>>(num_edges, num_gaussians, edge_starts, edge_ends, bvh_aabb_mins, bvh_aabb_maxs,
+                                      bvh_children, object_ids, means, covis, isos, iso, hit_mask, out_edge_ids,
+                                      out_gaus_ids, global_counter, max_capacity);
         }
     }
 
     template <bool multiple_isos>
-/**
+    /**
  * @brief Finds the first Gaussian each edge intersects.
  * @details One thread per edge. Unlike the pair-emitting variant this kernel records a
  * single Gaussian per edge at a fixed output slot, so it needs no atomic counter and its
@@ -871,21 +654,12 @@ __global__ void query_gs_edge_pair_intersection_bvh_kernel(
  * @note Reports the first qualifying Gaussian encountered, which is not necessarily the
  * nearest along the segment.
  */
-__global__ void query_gs_edge_intersection_bvh_kernel(
-        const uint32_t num_edges,
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ edge_starts,
-        const float3 *__restrict__ edge_ends,
-        const float3 *__restrict__ bvh_aabb_mins,
-        const float3 *__restrict__ bvh_aabb_maxs,
-        const int2 *__restrict__ bvh_children,
-        const int *__restrict__ object_ids,
-        const float3 *__restrict__ means,
-        const float *__restrict__ opacities,
-        const float *__restrict__ covis,
-        const float *__restrict__ isos,
-        const float iso,
-        bool *__restrict__ hit_mask,
+    __global__ void query_gs_edge_intersection_bvh_kernel(
+        const uint32_t num_edges, const uint32_t num_gaussians, const float3 *__restrict__ edge_starts,
+        const float3 *__restrict__ edge_ends, const float3 *__restrict__ bvh_aabb_mins,
+        const float3 *__restrict__ bvh_aabb_maxs, const int2 *__restrict__ bvh_children,
+        const int *__restrict__ object_ids, const float3 *__restrict__ means, const float *__restrict__ opacities,
+        const float *__restrict__ covis, const float *__restrict__ isos, const float iso, bool *__restrict__ hit_mask,
         int64_t *__restrict__ out_gaus_ids)
     {
         uint32_t e_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -895,47 +669,48 @@ __global__ void query_gs_edge_intersection_bvh_kernel(
         float3 edge_start = edge_starts[e_idx];
         float3 edge_end = edge_ends[e_idx];
 
-        float3 e_ab_min = make_float3(fminf(edge_start.x, edge_end.x), fminf(edge_start.y, edge_end.y), fminf(edge_start.z, edge_end.z));
-        float3 e_ab_max = make_float3(fmaxf(edge_start.x, edge_end.x), fmaxf(edge_start.y, edge_end.y), fmaxf(edge_start.z, edge_end.z));
+        float3 e_ab_min = make_float3(fminf(edge_start.x, edge_end.x), fminf(edge_start.y, edge_end.y),
+                                      fminf(edge_start.z, edge_end.z));
+        float3 e_ab_max = make_float3(fmaxf(edge_start.x, edge_end.x), fmaxf(edge_start.y, edge_end.y),
+                                      fmaxf(edge_start.z, edge_end.z));
 
         bool any_hit = false;
         float max_density = -1.0f;
         int best_gs = -1;
 
-        bvh::traverse(num_gaussians, bvh_children,
-            [&] (int node_idx) {
-                return aabb::test_aabb_overlap(e_ab_min, e_ab_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]);
-            },
-            [&] (int leaf_idx) {
-                        uint32_t g_idx = object_ids[leaf_idx];
-    
-                        float3 mean = means[g_idx];
-                        const float *covi = covis + (g_idx * 6);
-                        float __iso = multiple_isos ? isos[g_idx] : iso;
-    
-                        float3 local_start = edge_start - mean;
-                        float3 local_end = edge_end - mean;
-                        float t_entry, t_exit;
-    
-                        bool hit = gs::test_gs_segment(
-                            covi[0], covi[1], covi[2], covi[3], covi[4], covi[5],
-                            __iso, local_start, local_end, true, t_entry, t_exit);
-    
-                        if (hit)
-                        {
-                            any_hit = true;
-                            float t_mid = (fmaxf(t_entry, 0.0f) + fminf(t_exit, 1.0f)) * 0.5f;
-                            float3 p_mid = local_start + t_mid * (local_end - local_start);
-    
-                            float density;
-                            gs::compute_density_local(p_mid, covi, opacities[g_idx], density);
-    
-                            if (density > max_density)
-                            {
-                                max_density = density;
-                                best_gs = g_idx;
-                            }
-                        }
+        bvh::traverse(
+            num_gaussians, bvh_children, [&](int node_idx)
+            { return aabb::test_aabb_overlap(e_ab_min, e_ab_max, bvh_aabb_mins[node_idx], bvh_aabb_maxs[node_idx]); },
+            [&](int leaf_idx)
+            {
+                uint32_t g_idx = object_ids[leaf_idx];
+
+                float3 mean = means[g_idx];
+                const float *covi = covis + (g_idx * 6);
+                float __iso = multiple_isos ? isos[g_idx] : iso;
+
+                float3 local_start = edge_start - mean;
+                float3 local_end = edge_end - mean;
+                float t_entry, t_exit;
+
+                bool hit = gs::test_gs_segment(covi[0], covi[1], covi[2], covi[3], covi[4], covi[5], __iso, local_start,
+                                               local_end, true, t_entry, t_exit);
+
+                if (hit)
+                {
+                    any_hit = true;
+                    float t_mid = (fmaxf(t_entry, 0.0f) + fminf(t_exit, 1.0f)) * 0.5f;
+                    float3 p_mid = local_start + t_mid * (local_end - local_start);
+
+                    float density;
+                    gs::compute_density_local(p_mid, covi, opacities[g_idx], density);
+
+                    if (density > max_density)
+                    {
+                        max_density = density;
+                        best_gs = g_idx;
+                    }
+                }
                 return true;
             });
 
@@ -944,22 +719,14 @@ __global__ void query_gs_edge_intersection_bvh_kernel(
         hit_mask[e_idx] = any_hit;
     }
 
-    void query_gs_edge_intersection_bvh(
-        const uint32_t num_edges,
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ edge_starts,
-        const float3 *__restrict__ edge_ends,
-        const float3 *__restrict__ bvh_aabb_mins,
-        const float3 *__restrict__ bvh_aabb_maxs,
-        const int2 *__restrict__ bvh_children,
-        const int *__restrict__ object_ids,
-        const float3 *__restrict__ means,
-        const float *__restrict__ opacities,
-        const float *__restrict__ covis,
-        const float *__restrict__ isos,
-        const float iso,
-        bool *__restrict__ hit_mask,
-        int64_t *__restrict__ out_gaus_ids)
+    void query_gs_edge_intersection_bvh(const uint32_t num_edges, const uint32_t num_gaussians,
+                                        const float3 *__restrict__ edge_starts, const float3 *__restrict__ edge_ends,
+                                        const float3 *__restrict__ bvh_aabb_mins,
+                                        const float3 *__restrict__ bvh_aabb_maxs, const int2 *__restrict__ bvh_children,
+                                        const int *__restrict__ object_ids, const float3 *__restrict__ means,
+                                        const float *__restrict__ opacities, const float *__restrict__ covis,
+                                        const float *__restrict__ isos, const float iso, bool *__restrict__ hit_mask,
+                                        int64_t *__restrict__ out_gaus_ids)
     {
         uint32_t threads = NTHREADS;
         uint32_t blocks = (num_edges + threads - 1) / threads;
@@ -967,40 +734,14 @@ __global__ void query_gs_edge_intersection_bvh_kernel(
         if (isos != nullptr)
         {
             query_gs_edge_intersection_bvh_kernel<true><<<blocks, threads>>>(
-                num_edges,
-                num_gaussians,
-                edge_starts,
-                edge_ends,
-                bvh_aabb_mins,
-                bvh_aabb_maxs,
-                bvh_children,
-                object_ids,
-                means,
-                opacities,
-                covis,
-                isos,
-                iso,
-                hit_mask,
-                out_gaus_ids);
+                num_edges, num_gaussians, edge_starts, edge_ends, bvh_aabb_mins, bvh_aabb_maxs, bvh_children,
+                object_ids, means, opacities, covis, isos, iso, hit_mask, out_gaus_ids);
         }
         else
         {
             query_gs_edge_intersection_bvh_kernel<false><<<blocks, threads>>>(
-                num_edges,
-                num_gaussians,
-                edge_starts,
-                edge_ends,
-                bvh_aabb_mins,
-                bvh_aabb_maxs,
-                bvh_children,
-                object_ids,
-                means,
-                opacities,
-                covis,
-                isos,
-                iso,
-                hit_mask,
-                out_gaus_ids);
+                num_edges, num_gaussians, edge_starts, edge_ends, bvh_aabb_mins, bvh_aabb_maxs, bvh_children,
+                object_ids, means, opacities, covis, isos, iso, hit_mask, out_gaus_ids);
         }
     }
-}
+} // namespace gs_aabb

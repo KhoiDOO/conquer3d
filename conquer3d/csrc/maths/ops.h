@@ -25,7 +25,8 @@
  * @return The value $1 / \sqrt{a}$.
  * @note Defined only when not compiling with nvcc, which supplies the intrinsic.
  */
-static inline __host__ __device__ double rsqrt(double a) {
+static inline __host__ __device__ double rsqrt(double a)
+{
     return 1. / sqrt(a);
 }
 
@@ -36,7 +37,8 @@ static inline __host__ __device__ double rsqrt(double a) {
  * @note Defined only when not compiling with nvcc. The device intrinsic is an
  * approximation, so host and device results may differ in the last bits.
  */
-static inline __host__ __device__ float rsqrtf(float a) {
+static inline __host__ __device__ float rsqrtf(float a)
+{
     return 1. / sqrtf(a);
 }
 #endif
@@ -52,7 +54,8 @@ namespace maths
      * @note Ordered `fmaxf(lo, fminf(hi, v))`. Irrelevant for finite input, but it decides
      * which bound a NaN collapses to, so the order is deliberate.
      */
-    static inline __host__ __device__ float clamp(float v, float min_val, float max_val) {
+    static inline __host__ __device__ float clamp(float v, float min_val, float max_val)
+    {
         return fmaxf(min_val, fminf(max_val, v));
     }
 
@@ -63,7 +66,8 @@ namespace maths
      * @param[in] v Value to clamp.
      * @return @p v confined to $[0, 1]$.
      */
-    static inline __host__ __device__ float saturate(float v) {
+    static inline __host__ __device__ float saturate(float v)
+    {
         return fmaxf(0.0f, fminf(1.0f, v));
     }
 
@@ -74,9 +78,10 @@ namespace maths
      * @param[in] t Interpolation parameter; not clamped.
      * @return $a + t\,(b - a)$.
      */
-    static inline __host__ __device__ float lerp(float a, float b, float t) {
+    static inline __host__ __device__ float lerp(float a, float b, float t)
+    {
         return a + (b - a) * t;
     }
-}
+} // namespace maths
 
 #endif // OPS_H

@@ -14,10 +14,11 @@ namespace py = pybind11;
  * @return The equivalent `float3`.
  * @warning Synchronises on a device-to-host copy; never call this per element in a loop.
  */
-inline float3 tensor_to_float3(const torch::Tensor& t) {
+inline float3 tensor_to_float3(const torch::Tensor &t)
+{
     TORCH_CHECK(t.dim() == 1 && t.size(0) == 3, "Tensor must be 1D with 3 elements");
     auto t_contig = t.contiguous().cpu().to(torch::kFloat32);
-    float* ptr = t_contig.data_ptr<float>();
+    float *ptr = t_contig.data_ptr<float>();
     return make_float3(ptr[0], ptr[1], ptr[2]);
 }
 
@@ -26,7 +27,8 @@ inline float3 tensor_to_float3(const torch::Tensor& t) {
  * @param[in] f The vector to convert.
  * @return A `(3,)` float32 tensor on the host.
  */
-inline torch::Tensor float3_to_tensor(const float3& f) {
+inline torch::Tensor float3_to_tensor(const float3 &f)
+{
     return torch::tensor({f.x, f.y, f.z}, torch::dtype(torch::kFloat32));
 }
 
@@ -36,7 +38,8 @@ inline torch::Tensor float3_to_tensor(const float3& f) {
  * defined here lands directly on `conquer3d._C`.
  * @param[in,out] m The `conquer3d._C` module object.
  */
-void bind_primitive_triangle(py::module_& m) {
+void bind_primitive_triangle(py::module_ &m)
+{
     py::class_<Triangle>(m, "Triangle", R"pbdoc(
         3D Triangle geometric primitive structure with hardware-optimized device methods.
 
@@ -46,9 +49,8 @@ void bind_primitive_triangle(py::module_& m) {
             >>> tri = Triangle(torch.tensor([0.,0.,0.]), torch.tensor([1.,0.,0.]), torch.tensor([0.,1.,0.]))
             >>> area = tri.compute_area()
         )pbdoc")
-        .def(py::init([](const torch::Tensor& v0, const torch::Tensor& v1, const torch::Tensor& v2) {
-                 return Triangle(tensor_to_float3(v0), tensor_to_float3(v1), tensor_to_float3(v2));
-             }),
+        .def(py::init([](const torch::Tensor &v0, const torch::Tensor &v1, const torch::Tensor &v2)
+                      { return Triangle(tensor_to_float3(v0), tensor_to_float3(v1), tensor_to_float3(v2)); }),
              py::arg("v0"), py::arg("v1"), py::arg("v2"),
              R"pbdoc(
              Constructs a 3D Triangle from 3 corner vertex coordinates.
@@ -61,13 +63,16 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> tri = Triangle(v0, v1, v2)
              )pbdoc")
-        .def("is_intersect_ray", [](const Triangle& self, const Ray& ray) {
-                 float t_hit, u, v;
-                 bool hit = self.is_intersect_ray(ray, t_hit, u, v);
-                 return py::make_tuple(hit, t_hit, u, v);
-             },
-             py::arg("ray"),
-             R"pbdoc(
+        .def(
+            "is_intersect_ray",
+            [](const Triangle &self, const Ray &ray)
+            {
+                float t_hit, u, v;
+                bool hit = self.is_intersect_ray(ray, t_hit, u, v);
+                return py::make_tuple(hit, t_hit, u, v);
+            },
+            py::arg("ray"),
+            R"pbdoc(
              Tests ray-triangle intersection using Möller-Trumbore algorithm.
 
              Args:
@@ -79,11 +84,10 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> hit, t, u, v = tri.is_intersect_ray(ray)
              )pbdoc")
-        .def("compute_closest_point", [](const Triangle& self, const torch::Tensor& p) {
-                 return float3_to_tensor(self.compute_closest_point(tensor_to_float3(p)));
-             },
-             py::arg("p"),
-             R"pbdoc(
+        .def(
+            "compute_closest_point", [](const Triangle &self, const torch::Tensor &p)
+            { return float3_to_tensor(self.compute_closest_point(tensor_to_float3(p))); }, py::arg("p"),
+            R"pbdoc(
              Computes closest projected point on triangle surface (Ericson real-time collision).
 
              Args:
@@ -95,10 +99,9 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> proj = tri.compute_closest_point(p)
              )pbdoc")
-        .def("compute_normal", [](const Triangle& self) {
-                 return float3_to_tensor(self.compute_normal());
-             },
-             R"pbdoc(
+        .def(
+            "compute_normal", [](const Triangle &self) { return float3_to_tensor(self.compute_normal()); },
+            R"pbdoc(
              Computes normalized outward unit face normal.
 
              Returns:
@@ -117,11 +120,10 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> a = tri.compute_area()
              )pbdoc")
-        .def("sample_point", [](const Triangle& self, float r1, float r2) {
-                 return float3_to_tensor(self.sample_point(r1, r2));
-             },
-             py::arg("r1"), py::arg("r2"),
-             R"pbdoc(
+        .def(
+            "sample_point", [](const Triangle &self, float r1, float r2)
+            { return float3_to_tensor(self.sample_point(r1, r2)); }, py::arg("r1"), py::arg("r2"),
+            R"pbdoc(
              Samples uniform area-weighted point on triangle surface using square root mapping.
 
              Args:
@@ -134,12 +136,15 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> p = tri.sample_point(0.2, 0.7)
              )pbdoc")
-        .def("compute_aabb", [](const Triangle& self) {
-                 float3 aabb_min, aabb_max;
-                 self.compute_aabb(aabb_min, aabb_max);
-                 return py::make_tuple(float3_to_tensor(aabb_min), float3_to_tensor(aabb_max));
-             },
-             R"pbdoc(
+        .def(
+            "compute_aabb",
+            [](const Triangle &self)
+            {
+                float3 aabb_min, aabb_max;
+                self.compute_aabb(aabb_min, aabb_max);
+                return py::make_tuple(float3_to_tensor(aabb_min), float3_to_tensor(aabb_max));
+            },
+            R"pbdoc(
              Computes tight axis-aligned bounding box.
 
              Returns:
@@ -148,11 +153,10 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> aabb_min, aabb_max = tri.compute_aabb()
              )pbdoc")
-        .def("test_intersection", [](const Triangle& self, const Triangle& other) {
-                 return self.test_intersection(other);
-             },
-             py::arg("other"),
-             R"pbdoc(
+        .def(
+            "test_intersection",
+            [](const Triangle &self, const Triangle &other) { return self.test_intersection(other); }, py::arg("other"),
+            R"pbdoc(
              Moeller (1997) triangle-triangle collision test.
 
              Args:
@@ -164,10 +168,9 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> collides = tri1.test_intersection(tri2)
              )pbdoc")
-        .def("is_obtuse", [](const Triangle& self) {
-                 return self.is_obtuse();
-             },
-             R"pbdoc(
+        .def(
+            "is_obtuse", [](const Triangle &self) { return self.is_obtuse(); },
+            R"pbdoc(
              Checks if triangle has any internal angle greater than 90 degrees.
 
              Returns:
@@ -176,10 +179,9 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> is_ob = tri.is_obtuse()
              )pbdoc")
-        .def("compute_centroid", [](const Triangle& self) {
-                 return float3_to_tensor(self.compute_centroid());
-             },
-             R"pbdoc(
+        .def(
+            "compute_centroid", [](const Triangle &self) { return float3_to_tensor(self.compute_centroid()); },
+            R"pbdoc(
              Computes barycentric centroid: $(v_0 + v_1 + v_2) / 3$.
 
              Returns:
@@ -188,11 +190,10 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> c = tri.compute_centroid()
              )pbdoc")
-        .def("compute_circumcenter", [](const Triangle& self, bool strict_inside) {
-                 return float3_to_tensor(self.compute_circumcenter(strict_inside));
-             },
-             py::arg("strict_inside") = false,
-             R"pbdoc(
+        .def(
+            "compute_circumcenter", [](const Triangle &self, bool strict_inside)
+            { return float3_to_tensor(self.compute_circumcenter(strict_inside)); }, py::arg("strict_inside") = false,
+            R"pbdoc(
              Computes circumcenter of the triangle.
 
              Args:
@@ -204,11 +205,10 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> cc = tri.compute_circumcenter()
              )pbdoc")
-        .def("test_point_on_tria_plane", [](const Triangle& self, const torch::Tensor& p, float eps) {
-                 return self.test_point_on_tria_plane(tensor_to_float3(p), eps);
-             },
-             py::arg("p"), py::arg("eps") = 1e-5f,
-             R"pbdoc(
+        .def(
+            "test_point_on_tria_plane", [](const Triangle &self, const torch::Tensor &p, float eps)
+            { return self.test_point_on_tria_plane(tensor_to_float3(p), eps); }, py::arg("p"), py::arg("eps") = 1e-5f,
+            R"pbdoc(
              Tests whether a point lies on the triangle's supporting plane.
 
              Evaluates the absolute point-to-plane distance
@@ -227,11 +227,10 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> tri.test_point_on_tria_plane(torch.tensor([0.2, 0.3, 0.0]))
              )pbdoc")
-        .def("test_point_inside_on_tria_plane", [](const Triangle& self, const torch::Tensor& p) {
-                 return self.test_point_inside_on_tria_plane(tensor_to_float3(p));
-             },
-             py::arg("p"),
-             R"pbdoc(
+        .def(
+            "test_point_inside_on_tria_plane", [](const Triangle &self, const torch::Tensor &p)
+            { return self.test_point_inside_on_tria_plane(tensor_to_float3(p)); }, py::arg("p"),
+            R"pbdoc(
              Tests whether a coplanar point falls inside the triangle.
 
              Solves for the barycentric coordinates $(u, v, w)$ of the point against the
@@ -252,11 +251,10 @@ void bind_primitive_triangle(py::module_& m) {
              Example:
                  >>> tri.test_point_inside_on_tria_plane(tri.compute_centroid())
              )pbdoc")
-        .def("test_point_inside", [](const Triangle& self, const torch::Tensor& p, float eps) {
-                 return self.test_point_inside(tensor_to_float3(p), eps);
-             },
-             py::arg("p"), py::arg("eps") = 1e-5f,
-             R"pbdoc(
+        .def(
+            "test_point_inside", [](const Triangle &self, const torch::Tensor &p, float eps)
+            { return self.test_point_inside(tensor_to_float3(p), eps); }, py::arg("p"), py::arg("eps") = 1e-5f,
+            R"pbdoc(
              Tests whether a point lies on the triangle itself.
 
              The full containment predicate: the point must be coplanar within `eps`
@@ -276,11 +274,12 @@ void bind_primitive_triangle(py::module_& m) {
                  >>> tri.test_point_inside(tri.compute_centroid())
                  True
              )pbdoc")
-        .def("is_voxel_intersect", [](const Triangle& self, const torch::Tensor& voxel_min, const torch::Tensor& voxel_max) {
-                 return self.is_voxel_intersect(tensor_to_float3(voxel_min), tensor_to_float3(voxel_max));
-             },
-             py::arg("voxel_min"), py::arg("voxel_max"),
-             R"pbdoc(
+        .def(
+            "is_voxel_intersect",
+            [](const Triangle &self, const torch::Tensor &voxel_min, const torch::Tensor &voxel_max)
+            { return self.is_voxel_intersect(tensor_to_float3(voxel_min), tensor_to_float3(voxel_max)); },
+            py::arg("voxel_min"), py::arg("voxel_max"),
+            R"pbdoc(
              Akenine-Moeller (2001) separating axis theorem (SAT) triangle-box overlap test.
 
              Args:

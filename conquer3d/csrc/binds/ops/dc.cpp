@@ -13,58 +13,47 @@ namespace py = pybind11;
  * free of checks and gives Python callers a clear error instead of a device fault.
  * @return The operator's results as PyTorch tensors.
  */
-std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> dual_contouring_wrapper(
-    torch::Tensor grid_vertices,
-    torch::Tensor voxels,
-    torch::Tensor sdf,
-    std::optional<torch::Tensor> grid_normals,
-    std::optional<torch::Tensor> colors,
-    std::optional<torch::Tensor> voxel_vertices,
-    float iso,
-    bool quad_split,
-    std::optional<torch::Tensor> edge_points,
-    std::optional<torch::Tensor> edge_normals
-) {
+std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>>
+dual_contouring_wrapper(torch::Tensor grid_vertices, torch::Tensor voxels, torch::Tensor sdf,
+                        std::optional<torch::Tensor> grid_normals, std::optional<torch::Tensor> colors,
+                        std::optional<torch::Tensor> voxel_vertices, float iso, bool quad_split,
+                        std::optional<torch::Tensor> edge_points, std::optional<torch::Tensor> edge_normals)
+{
     CHECK_INPUT(grid_vertices);
     CHECK_INPUT(voxels);
     CHECK_INPUT(sdf);
 
-    if (grid_normals.has_value() && grid_normals.value().defined()) {
+    if (grid_normals.has_value() && grid_normals.value().defined())
+    {
         CHECK_INPUT(grid_normals.value());
     }
-    if (colors.has_value() && colors.value().defined()) {
+    if (colors.has_value() && colors.value().defined())
+    {
         CHECK_INPUT(colors.value());
     }
-    if (voxel_vertices.has_value() && voxel_vertices.value().defined()) {
+    if (voxel_vertices.has_value() && voxel_vertices.value().defined())
+    {
         CHECK_INPUT(voxel_vertices.value());
     }
-    if (edge_points.has_value() && edge_points.value().defined()) {
+    if (edge_points.has_value() && edge_points.value().defined())
+    {
         CHECK_INPUT(edge_points.value());
-        TORCH_CHECK(edge_points.value().dim() == 3 && edge_points.value().size(1) == 12 && edge_points.value().size(2) == 3,
+        TORCH_CHECK(edge_points.value().dim() == 3 && edge_points.value().size(1) == 12 &&
+                        edge_points.value().size(2) == 3,
                     "edge_points must have shape (M, 12, 3)");
-        TORCH_CHECK(edge_points.value().size(0) == voxels.size(0),
-                    "edge_points must have one row per voxel");
+        TORCH_CHECK(edge_points.value().size(0) == voxels.size(0), "edge_points must have one row per voxel");
     }
-    if (edge_normals.has_value() && edge_normals.value().defined()) {
+    if (edge_normals.has_value() && edge_normals.value().defined())
+    {
         CHECK_INPUT(edge_normals.value());
-        TORCH_CHECK(edge_normals.value().dim() == 3 && edge_normals.value().size(1) == 12 && edge_normals.value().size(2) == 3,
+        TORCH_CHECK(edge_normals.value().dim() == 3 && edge_normals.value().size(1) == 12 &&
+                        edge_normals.value().size(2) == 3,
                     "edge_normals must have shape (M, 12, 3)");
-        TORCH_CHECK(edge_normals.value().size(0) == voxels.size(0),
-                    "edge_normals must have one row per voxel");
+        TORCH_CHECK(edge_normals.value().size(0) == voxels.size(0), "edge_normals must have one row per voxel");
     }
 
-    return conquer3d::ops::dual_contouring(
-        grid_vertices,
-        voxels,
-        sdf,
-        grid_normals,
-        colors,
-        voxel_vertices,
-        iso,
-        quad_split,
-        edge_points,
-        edge_normals
-    );
+    return conquer3d::ops::dual_contouring(grid_vertices, voxels, sdf, grid_normals, colors, voxel_vertices, iso,
+                                           quad_split, edge_points, edge_normals);
 }
 
 /**
@@ -75,41 +64,32 @@ std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>> dual_cont
  * @warning Requires the same inputs the forward pass received; the adjoint recomputes
  * topology rather than storing it.
  */
-std::tuple<torch::Tensor, std::optional<torch::Tensor>> dual_contouring_backward_wrapper(
-    torch::Tensor grad_verts,
-    std::optional<torch::Tensor> grad_colors,
-    torch::Tensor grid_vertices,
-    torch::Tensor voxels,
-    torch::Tensor sdf,
-    std::optional<torch::Tensor> grid_normals,
-    std::optional<torch::Tensor> colors,
-    float iso
-) {
+std::tuple<torch::Tensor, std::optional<torch::Tensor>>
+dual_contouring_backward_wrapper(torch::Tensor grad_verts, std::optional<torch::Tensor> grad_colors,
+                                 torch::Tensor grid_vertices, torch::Tensor voxels, torch::Tensor sdf,
+                                 std::optional<torch::Tensor> grid_normals, std::optional<torch::Tensor> colors,
+                                 float iso)
+{
     CHECK_INPUT(grad_verts);
     CHECK_INPUT(grid_vertices);
     CHECK_INPUT(voxels);
     CHECK_INPUT(sdf);
 
-    if (grad_colors.has_value() && grad_colors.value().defined()) {
+    if (grad_colors.has_value() && grad_colors.value().defined())
+    {
         CHECK_INPUT(grad_colors.value());
     }
-    if (grid_normals.has_value() && grid_normals.value().defined()) {
+    if (grid_normals.has_value() && grid_normals.value().defined())
+    {
         CHECK_INPUT(grid_normals.value());
     }
-    if (colors.has_value() && colors.value().defined()) {
+    if (colors.has_value() && colors.value().defined())
+    {
         CHECK_INPUT(colors.value());
     }
 
-    return conquer3d::ops::dual_contouring_backward(
-        grad_verts,
-        grad_colors,
-        grid_vertices,
-        voxels,
-        sdf,
-        grid_normals,
-        colors,
-        iso
-    );
+    return conquer3d::ops::dual_contouring_backward(grad_verts, grad_colors, grid_vertices, voxels, sdf, grid_normals,
+                                                    colors, iso);
 }
 
 /**
@@ -118,13 +98,12 @@ std::tuple<torch::Tensor, std::optional<torch::Tensor>> dual_contouring_backward
  * here lands directly on `conquer3d._C`.
  * @param[in,out] m The `conquer3d._C` module object.
  */
-void bind_ops_dc(py::module &m) {
-    m.def("dual_contouring", &dual_contouring_wrapper,
-          py::arg("grid_vertices"), py::arg("voxels"), py::arg("sdf"),
-          py::arg("grid_normals") = py::none(), py::arg("colors") = py::none(),
-          py::arg("voxel_vertices") = py::none(),
-          py::arg("iso") = 0.0f, py::arg("quad_split") = true,
-          py::arg("edge_points") = py::none(), py::arg("edge_normals") = py::none(),
+void bind_ops_dc(py::module &m)
+{
+    m.def("dual_contouring", &dual_contouring_wrapper, py::arg("grid_vertices"), py::arg("voxels"), py::arg("sdf"),
+          py::arg("grid_normals") = py::none(), py::arg("colors") = py::none(), py::arg("voxel_vertices") = py::none(),
+          py::arg("iso") = 0.0f, py::arg("quad_split") = true, py::arg("edge_points") = py::none(),
+          py::arg("edge_normals") = py::none(),
           R"pbdoc(
           Extracts a sharp-feature preserving surface mesh using Dual Contouring with GPU QEF solver (Ju et al. 2002) or precomputed voxel vertices.
 
@@ -149,9 +128,8 @@ void bind_ops_dc(py::module &m) {
               >>> from conquer3d._C import dual_contouring
               >>> verts, faces, _ = dual_contouring(grid_verts, voxels, sdf, iso=0.0)
           )pbdoc");
-    m.def("dual_contouring_backward", &dual_contouring_backward_wrapper,
-          py::arg("grad_verts"), py::arg("grad_colors"), py::arg("grid_vertices"),
-          py::arg("voxels"), py::arg("sdf"), py::arg("grid_normals") = py::none(),
+    m.def("dual_contouring_backward", &dual_contouring_backward_wrapper, py::arg("grad_verts"), py::arg("grad_colors"),
+          py::arg("grid_vertices"), py::arg("voxels"), py::arg("sdf"), py::arg("grid_normals") = py::none(),
           py::arg("colors") = py::none(), py::arg("iso") = 0.0f,
           R"pbdoc(
           Analytical backward gradient propagation for Dual Contouring w.r.t. SDF and colors.

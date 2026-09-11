@@ -16,7 +16,7 @@
 
 namespace gs
 {
-/**
+    /**
  * @brief Computes the inverse covariance of each 3D Gaussian.
  * @details One thread per Gaussian. The covariance is assembled from its rotation
  * quaternion and scale as $\Sigma = R S S^\top R^\top$, then inverted; only the six
@@ -33,14 +33,9 @@ namespace gs
  * @warning Quaternions are assumed normalised unless @p rotnorm is set; an unnormalised
  * quaternion silently scales the covariance.
  */
-__global__ void compute_gs_covi_kernel(
-        const uint32_t num_gaussians,
-        const float4 *__restrict__ rotations,
-        const float3 *__restrict__ scales,
-        const bool rotnorm,
-        const float tol,
-        const uint32_t level,
-        float *__restrict__ covis)
+    __global__ void compute_gs_covi_kernel(const uint32_t num_gaussians, const float4 *__restrict__ rotations,
+                                           const float3 *__restrict__ scales, const bool rotnorm, const float tol,
+                                           const uint32_t level, float *__restrict__ covis)
     {
         uint32_t g_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -65,29 +60,17 @@ __global__ void compute_gs_covi_kernel(
         gs::compute_cov_inverse(S_inv, R_T, covis + (g_idx * 6)); // $(S^{-1} R^T)^T (S^{-1} R^T)$
     }
 
-    void compute_gs_covi(
-        const uint32_t num_gaussians,
-        const float4 *__restrict__ rotations,
-        const float3 *__restrict__ scales,
-        const bool rotnorm,
-        const float tol,
-        const uint32_t level,
-        float *__restrict__ covis)
+    void compute_gs_covi(const uint32_t num_gaussians, const float4 *__restrict__ rotations,
+                         const float3 *__restrict__ scales, const bool rotnorm, const float tol, const uint32_t level,
+                         float *__restrict__ covis)
     {
         uint32_t threads = NTHREADS;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
-        compute_gs_covi_kernel<<<blocks, threads>>>(
-            num_gaussians,
-            rotations,
-            scales,
-            rotnorm,
-            tol,
-            level,
-            covis);
+        compute_gs_covi_kernel<<<blocks, threads>>>(num_gaussians, rotations, scales, rotnorm, tol, level, covis);
     }
 
-/**
+    /**
  * @brief Derives a per-Gaussian isovalue from the Mahalanobis distance to its neighbours.
  * @details One thread per Gaussian. Each finds its $k$ nearest neighbours in the KD-tree
  * and evaluates their Mahalanobis distance under its own inverse covariance, giving a
@@ -103,14 +86,12 @@ __global__ void compute_gs_covi_kernel(
  * @warning The neighbour queue is sized by `MAX_K` to stay in registers; raising it
  * increases register pressure and risks spilling to local memory.
  */
-__global__ void solve_gs_neighbor_mahalanobis_radius_kernel(
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ means,
-        const float *__restrict__ covis,
-        const float3 *__restrict__ tree_points,
-        const int64_t *__restrict__ tree_inds,
-        const int k,
-        float *__restrict__ isos)
+    __global__ void solve_gs_neighbor_mahalanobis_radius_kernel(const uint32_t num_gaussians,
+                                                                const float3 *__restrict__ means,
+                                                                const float *__restrict__ covis,
+                                                                const float3 *__restrict__ tree_points,
+                                                                const int64_t *__restrict__ tree_inds, const int k,
+                                                                float *__restrict__ isos)
     {
         uint32_t g_idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (g_idx >= num_gaussians)
@@ -122,7 +103,7 @@ __global__ void solve_gs_neighbor_mahalanobis_radius_kernel(
         float best_dists[MAX_K];
         int64_t best_inds[MAX_K];
 
-        #pragma unroll
+#pragma unroll
         for (int i = 0; i < MAX_K; i++)
         {
             best_dists[i] = FLT_MAX;
@@ -162,32 +143,21 @@ __global__ void solve_gs_neighbor_mahalanobis_radius_kernel(
         }
     }
 
-    void solve_gs_neighbor_mahalanobis_radius(
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ means,
-        const float *__restrict__ covis,
-        const int k,
-        float *__restrict__ isos)
+    void solve_gs_neighbor_mahalanobis_radius(const uint32_t num_gaussians, const float3 *__restrict__ means,
+                                              const float *__restrict__ covis, const int k, float *__restrict__ isos)
     {
         thrust::device_vector<float3> cloned_means(means, means + num_gaussians);
         thrust::device_vector<int64_t> oinds(num_gaussians);
         thrust::sequence(oinds.begin(), oinds.end());
 
-        kdtree::build(
-            num_gaussians,
-            thrust::raw_pointer_cast(cloned_means.data()),
-            thrust::raw_pointer_cast(oinds.data()));
+        kdtree::build(num_gaussians, thrust::raw_pointer_cast(cloned_means.data()),
+                      thrust::raw_pointer_cast(oinds.data()));
 
         uint32_t threads = NTHREADS;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
         solve_gs_neighbor_mahalanobis_radius_kernel<<<blocks, threads>>>(
-            num_gaussians,
-            means,
-            covis,
-            thrust::raw_pointer_cast(cloned_means.data()),
-            thrust::raw_pointer_cast(oinds.data()),
-            k,
-            isos);
+            num_gaussians, means, covis, thrust::raw_pointer_cast(cloned_means.data()),
+            thrust::raw_pointer_cast(oinds.data()), k, isos);
     }
-}
+} // namespace gs

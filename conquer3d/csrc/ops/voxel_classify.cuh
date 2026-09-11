@@ -21,9 +21,10 @@
 #include <cuda_runtime.h>
 #include <stdint.h>
 
-namespace voxel_classify {
+namespace voxel_classify
+{
 
-/**
+    /**
      * @brief Packs eight corner signs into a Marching Cubes case index.
      * @details Sets bit $i$ when corner $i$ lies below the isolevel, producing the 8-bit code
      * that indexes every topology table. Branch-free enough to compile to predicated
@@ -40,10 +41,8 @@ namespace voxel_classify {
      * @param[out] voxel_code The resulting 8-bit case index.
      * @note Codes 0 and 255 mean the cell is entirely outside or inside and emits nothing.
      */
-    __device__ __forceinline__ void compute_voxel_code(
-        float sv0, float sv1, float sv2, float sv3,
-        float sv4, float sv5, float sv6, float sv7,
-        float iso, uint8_t &voxel_code)
+    __device__ __forceinline__ void compute_voxel_code(float sv0, float sv1, float sv2, float sv3, float sv4, float sv5,
+                                                       float sv6, float sv7, float iso, uint8_t &voxel_code)
     {
         voxel_code = 0;
         if (sv0 < iso)
@@ -64,26 +63,23 @@ namespace voxel_classify {
             voxel_code |= 128;
     }
 
-/**
- * @brief Classifies every voxel by the sign pattern of its eight corners.
- * @details Stage 1 of extraction. One thread per voxel; each compares its corner values
- * against the isolevel and packs the results into a 256-case code. The code alone
- * determines the voxel's surface topology, so all later stages are table lookups rather
- * than searches. Inactive voxels -- entirely inside or outside -- receive code 0 and are
- * compacted away by the host before stage 2, which is what makes cost scale with surface
- * area rather than volume.
- * @param[in] num_voxels Number of voxels.
- * @param[in] voxels Device array of corner indices, eight per voxel.
- * @param[in] sdf Device array of scalar field values at the grid vertices.
- * @param[in] iso Isolevel separating inside from outside.
- * @param[out] voxel_codes Device array of one sign code per voxel.
- */
-static __global__ void compute_active_voxels_kernel(
-        const uint32_t num_voxels,
-        const uint32_t *__restrict__ voxels,
-        const float *__restrict__ sdf,
-        const float iso,
-        uint8_t *__restrict__ voxel_codes)
+    /**
+     * @brief Classifies every voxel by the sign pattern of its eight corners.
+     * @details Stage 1 of extraction. One thread per voxel; each compares its corner values
+     * against the isolevel and packs the results into a 256-case code. The code alone
+     * determines the voxel's surface topology, so all later stages are table lookups rather
+     * than searches. Inactive voxels -- entirely inside or outside -- receive code 0 and are
+     * compacted away by the host before stage 2, which is what makes cost scale with surface
+     * area rather than volume.
+     * @param[in] num_voxels Number of voxels.
+     * @param[in] voxels Device array of corner indices, eight per voxel.
+     * @param[in] sdf Device array of scalar field values at the grid vertices.
+     * @param[in] iso Isolevel separating inside from outside.
+     * @param[out] voxel_codes Device array of one sign code per voxel.
+     */
+    static __global__ void compute_active_voxels_kernel(const uint32_t num_voxels, const uint32_t *__restrict__ voxels,
+                                                        const float *__restrict__ sdf, const float iso,
+                                                        uint8_t *__restrict__ voxel_codes)
     {
         int idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx >= num_voxels)
@@ -99,15 +95,12 @@ static __global__ void compute_active_voxels_kernel(
         uint32_t v7 = voxels[idx * 8 + 7];
 
         uint8_t voxel_code = 0;
-        compute_voxel_code(
-            sdf[v0], sdf[v1], sdf[v2], sdf[v3],
-            sdf[v4], sdf[v5], sdf[v6], sdf[v7],
-            iso, voxel_code);
+        compute_voxel_code(sdf[v0], sdf[v1], sdf[v2], sdf[v3], sdf[v4], sdf[v5], sdf[v6], sdf[v7], iso, voxel_code);
 
         voxel_codes[idx] = voxel_code;
     }
 
-/**
+    /**
      * @brief Launches stage 1: classify every voxel by its corner signs.
      * @details Host wrapper sizing a 1D grid over all voxels and launching the classification
      * kernel. See the kernel for the parallel decomposition.
@@ -117,19 +110,14 @@ static __global__ void compute_active_voxels_kernel(
      * @param[in] iso Isolevel separating inside from outside.
      * @param[out] voxel_codes Device array of per-voxel sign codes.
      */
-    static inline void compute_active_voxels(
-        const uint32_t num_voxels,
-        const uint32_t *voxels,
-        const float *sdf,
-        const float iso,
-        uint8_t *voxel_codes)
+    static inline void compute_active_voxels(const uint32_t num_voxels, const uint32_t *voxels, const float *sdf,
+                                             const float iso, uint8_t *voxel_codes)
     {
         int block_size = NTHREADS;
         int grid_size = (num_voxels + block_size - 1) / block_size;
-        compute_active_voxels_kernel<<<grid_size, block_size>>>(
-            num_voxels, voxels, sdf, iso, voxel_codes);
+        compute_active_voxels_kernel<<<grid_size, block_size>>>(num_voxels, voxels, sdf, iso, voxel_codes);
     }
 
-}
+} // namespace voxel_classify
 
 #endif // VOXEL_CLASSIFY_CUH

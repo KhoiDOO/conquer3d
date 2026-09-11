@@ -8,7 +8,8 @@
 #include <torch/extension.h>
 #include "../maths/maths.h"
 
-namespace grid {
+namespace grid
+{
     /**
      * @brief Unprojects a depth map into 3D space and collects intersecting 1D voxel indices.
      *
@@ -26,22 +27,12 @@ namespace grid {
      * @param[in] activate_neighbor If true, activates 26-connected adjacent neighbors.
      * @param[in] trunc_margin Depth truncation margin in meters.
      */
-    void get_active_voxel_ids_from_depth(
-        const int num_pixels,
-        const float* depth_image,
-        const float4x4 c2w,
-        const float3x3 intrinsics_inv,
-        const int image_width,
-        const int image_height,
-        const float3 grid_min,
-        const float3 grid_max,
-        const int3 res,
-        int64_t* out_voxel_ids,
-        unsigned long long* valid_counter,
-        bool activate_neighbor,
-        float trunc_margin
-    );
-    
+    void get_active_voxel_ids_from_depth(const int num_pixels, const float *depth_image, const float4x4 c2w,
+                                         const float3x3 intrinsics_inv, const int image_width, const int image_height,
+                                         const float3 grid_min, const float3 grid_max, const int3 res,
+                                         int64_t *out_voxel_ids, unsigned long long *valid_counter,
+                                         bool activate_neighbor, float trunc_margin);
+
     /**
      * @brief Filters active voxel IDs to retain only voxels containing mesh vertices inside their 3D cell bounds.
      *
@@ -52,13 +43,9 @@ namespace grid {
      * @param[in] res Grid resolution int3 (rx, ry, rz).
      * @return torch.Tensor: Filtered active voxel IDs containing at least 1 mesh vertex.
      */
-    torch::Tensor filter_voxels_containing_vertices(
-        const torch::Tensor& active_voxel_ids,
-        const torch::Tensor& vertices,
-        std::vector<float> grid_min,
-        std::vector<float> grid_max,
-        std::vector<int64_t> res
-    );
+    torch::Tensor filter_voxels_containing_vertices(const torch::Tensor &active_voxel_ids,
+                                                    const torch::Tensor &vertices, std::vector<float> grid_min,
+                                                    std::vector<float> grid_max, std::vector<int64_t> res);
 
     /**
      * @brief Generates 8 vertex-centered 3D voxel corner coordinates for each mesh vertex on GPU.
@@ -69,10 +56,8 @@ namespace grid {
      * @param[in] res Grid resolution int3 (rx, ry, rz).
      * @return std::tuple<torch::Tensor, torch::Tensor>: Tuple of (raw_corners (N*8, 3), spacing_tensor (3,)).
      */
-    std::tuple<torch::Tensor, torch::Tensor> create_voxel_cloud_corners(
-        const torch::Tensor& vertices,
-        std::vector<float> grid_min,
-        std::vector<float> grid_max,
-        std::vector<int64_t> res
-    );
-}
+    std::tuple<torch::Tensor, torch::Tensor> create_voxel_cloud_corners(const torch::Tensor &vertices,
+                                                                        std::vector<float> grid_min,
+                                                                        std::vector<float> grid_max,
+                                                                        std::vector<int64_t> res);
+} // namespace grid
