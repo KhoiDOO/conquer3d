@@ -1310,7 +1310,7 @@ def fig_fix_normals(rnd):
     )
 
 
-AZ_DIFF = 205
+AZ_DIFF = 25
 
 #: The optimisation the figure runs, mirroring examples/differentiable_rendering
 #: with --method mc. Kept here rather than read from the example so the numbers
