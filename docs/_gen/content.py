@@ -248,11 +248,23 @@ FIGURES = [
 ]
 
 
+#: Every figure opens full size in the lightbox (site.js binds .fig-media). The
+#: cue for that has to be visible before any interaction -- a hover-only hint
+#: gives no sign at rest and never appears on a touch screen -- so it is a real,
+#: always-shown element rather than a pseudo-element revealed on hover.
+_EXPAND_BADGE = (
+    '<span class="fig-expand" aria-hidden="true">'
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" '
+    'stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span>'
+)
+
+
 def _figure_card(entry) -> str:
     name, title, kicker, prose, _lead = entry
     return (
         f'<figure class="fig">'
-        f'<div class="fig-media">'
+        f'<div class="fig-media">{_EXPAND_BADGE}'
         f'<img src="{img_src(name)}" alt="{esc(title)}" loading="lazy" decoding="async">'
         f"</div>"
         f'<figcaption class="fig-body">'
@@ -320,7 +332,7 @@ def _load_benchmarks() -> dict:
 
 
 def _fig(name: str, alt: str) -> str:
-    return (f'<figure class="fig" style="margin-top:22px"><div class="fig-media">'
+    return (f'<figure class="fig" style="margin-top:22px"><div class="fig-media">{_EXPAND_BADGE}'
             f'<img src="{img_src(name)}" alt="{esc(alt)}" loading="lazy">'
             f"</div></figure>")
 
