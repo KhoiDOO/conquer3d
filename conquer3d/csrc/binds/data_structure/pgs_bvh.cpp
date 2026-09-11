@@ -9,18 +9,12 @@
 
 namespace py = pybind11;
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>> PGSBVH::query_voxel_pair(
-    const torch::Tensor &vx_aabb_mins,
-    const torch::Tensor &vx_aabb_maxs,
-    const torch::Tensor &means,
-    const torch::Tensor &normals,
-    const torch::Tensor &covis,
-    const torch::Tensor &gs_aabb_mins,
-    const torch::Tensor &gs_aabb_maxs,
-    const std::variant<float, torch::Tensor> &isos,
-    const bool return_centroids,
-    const bool return_centroid_densities,
-    const int64_t max_capacity)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>>
+PGSBVH::query_voxel_pair(const torch::Tensor &vx_aabb_mins, const torch::Tensor &vx_aabb_maxs,
+                         const torch::Tensor &means, const torch::Tensor &normals, const torch::Tensor &covis,
+                         const torch::Tensor &gs_aabb_mins, const torch::Tensor &gs_aabb_maxs,
+                         const std::variant<float, torch::Tensor> &isos, const bool return_centroids,
+                         const bool return_centroid_densities, const int64_t max_capacity)
 {
     CHECK_INPUT(vx_aabb_mins);
     CHECK_INPUT(vx_aabb_maxs);
@@ -49,11 +43,11 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
         auto options_float32 = vx_aabb_mins.options().dtype(torch::kFloat32);
 
         return std::make_tuple(
-            torch::empty({0}, options_int64.dtype(torch::kBool)),
-            torch::empty({0}, options_int64),
+            torch::empty({0}, options_int64.dtype(torch::kBool)), torch::empty({0}, options_int64),
             torch::empty({0}, options_int64),
             return_centroids ? std::make_optional(torch::empty({0, 3}, options_float32)) : std::nullopt,
-            (return_centroids && return_centroid_densities) ? std::make_optional(torch::empty({0}, options_float32)) : std::nullopt);
+            (return_centroids && return_centroid_densities) ? std::make_optional(torch::empty({0}, options_float32))
+                                                            : std::nullopt);
     }
 
     TORCH_CHECK(num_gaussians == this->num_objects, "Number of PGS must match the BVH");
@@ -87,9 +81,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
     torch::Tensor hit_mask = torch::zeros({num_voxels}, options_int64.dtype(torch::kBool));
 
     pgs_aabb::query_pgs_voxel_pair_intersection_bvh(
-        num_voxels,
-        num_gaussians,
-        reinterpret_cast<const float3 *>(vx_aabb_mins.data_ptr<float>()),
+        num_voxels, num_gaussians, reinterpret_cast<const float3 *>(vx_aabb_mins.data_ptr<float>()),
         reinterpret_cast<const float3 *>(vx_aabb_maxs.data_ptr<float>()),
         reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
         reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
@@ -99,18 +91,12 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
         reinterpret_cast<const float3 *>(normals.data_ptr<float>()),
         reinterpret_cast<const float *>(covis.data_ptr<float>()),
         reinterpret_cast<const float3 *>(gs_aabb_mins.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(gs_aabb_maxs.data_ptr<float>()),
-        isos_ptr,
-        iso,
-        return_centroids,
-        return_centroid_densities,
-        reinterpret_cast<bool *>(hit_mask.data_ptr<bool>()),
+        reinterpret_cast<const float3 *>(gs_aabb_maxs.data_ptr<float>()), isos_ptr, iso, return_centroids,
+        return_centroid_densities, reinterpret_cast<bool *>(hit_mask.data_ptr<bool>()),
         reinterpret_cast<int64_t *>(out_voxel_ids.data_ptr<int64_t>()),
         reinterpret_cast<int64_t *>(out_gaus_ids.data_ptr<int64_t>()),
-        reinterpret_cast<float3 *>(centroids.data_ptr<float>()),
-        reinterpret_cast<float *>(densities.data_ptr<float>()),
-        reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()),
-        max_capacity);
+        reinterpret_cast<float3 *>(centroids.data_ptr<float>()), reinterpret_cast<float *>(densities.data_ptr<float>()),
+        reinterpret_cast<int64_t *>(hit_counter.data_ptr<int64_t>()), max_capacity);
 
     int64_t num_intersections = hit_counter.item<int64_t>();
     if (num_intersections > max_capacity)
@@ -121,32 +107,23 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, std::optional<torch::Ten
 
     if (return_centroids)
     {
-        return std::make_tuple(
-            hit_mask,
-            out_voxel_ids.slice(0, 0, valid_hits),
-            out_gaus_ids.slice(0, 0, valid_hits),
-            centroids.slice(0, 0, valid_hits),
-            return_centroid_densities ? std::make_optional(densities.slice(0, 0, valid_hits)) : std::nullopt);
+        return std::make_tuple(hit_mask, out_voxel_ids.slice(0, 0, valid_hits), out_gaus_ids.slice(0, 0, valid_hits),
+                               centroids.slice(0, 0, valid_hits),
+                               return_centroid_densities ? std::make_optional(densities.slice(0, 0, valid_hits))
+                                                         : std::nullopt);
     }
     else
     {
-        return std::make_tuple(
-            hit_mask,
-            out_voxel_ids.slice(0, 0, valid_hits),
-            out_gaus_ids.slice(0, 0, valid_hits),
-            std::nullopt,
-            std::nullopt);
+        return std::make_tuple(hit_mask, out_voxel_ids.slice(0, 0, valid_hits), out_gaus_ids.slice(0, 0, valid_hits),
+                               std::nullopt, std::nullopt);
     }
 }
 
-std::tuple<torch::Tensor, torch::Tensor> PGSBVH::query_edge(
-    const torch::Tensor &edge_starts,
-    const torch::Tensor &edge_ends,
-    const torch::Tensor &means,
-    const torch::Tensor &normals,
-    const torch::Tensor &opacities,
-    const torch::Tensor &covis,
-    const std::variant<float, torch::Tensor> &isos)
+std::tuple<torch::Tensor, torch::Tensor> PGSBVH::query_edge(const torch::Tensor &edge_starts,
+                                                            const torch::Tensor &edge_ends, const torch::Tensor &means,
+                                                            const torch::Tensor &normals,
+                                                            const torch::Tensor &opacities, const torch::Tensor &covis,
+                                                            const std::variant<float, torch::Tensor> &isos)
 {
     CHECK_INPUT(edge_starts);
     CHECK_INPUT(edge_ends);
@@ -170,9 +147,7 @@ std::tuple<torch::Tensor, torch::Tensor> PGSBVH::query_edge(
     if (num_edges == 0)
     {
         auto options_int64 = edge_starts.options().dtype(torch::kInt64);
-        return std::make_tuple(
-            torch::empty({0}, options_int64.dtype(torch::kBool)),
-            torch::empty({0}, options_int64));
+        return std::make_tuple(torch::empty({0}, options_int64.dtype(torch::kBool)), torch::empty({0}, options_int64));
     }
 
     TORCH_CHECK(num_gaussians == this->num_objects, "Number of PGS must match the BVH");
@@ -200,28 +175,25 @@ std::tuple<torch::Tensor, torch::Tensor> PGSBVH::query_edge(
     torch::Tensor hit_mask = torch::zeros({num_edges}, options.dtype(torch::kBool));
     torch::Tensor out_gaus_ids = torch::empty({num_edges}, options.dtype(torch::kInt64));
 
-    pgs_aabb::query_pgs_edge_intersection_bvh(
-        num_edges,
-        num_gaussians,
-        reinterpret_cast<const float3 *>(edge_starts.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(edge_ends.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
-        reinterpret_cast<const int2 *>(this->bvh_children.data_ptr<int>()),
-        reinterpret_cast<const int *>(this->object_ids.data_ptr<int>()),
-        reinterpret_cast<const float3 *>(means.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(normals.data_ptr<float>()),
-        reinterpret_cast<const float *>(opacities.data_ptr<float>()),
-        reinterpret_cast<const float *>(covis.data_ptr<float>()),
-        isos_ptr,
-        iso,
-        reinterpret_cast<bool *>(hit_mask.data_ptr<bool>()),
-        reinterpret_cast<int64_t *>(out_gaus_ids.data_ptr<int64_t>()));
+    pgs_aabb::query_pgs_edge_intersection_bvh(num_edges, num_gaussians,
+                                              reinterpret_cast<const float3 *>(edge_starts.data_ptr<float>()),
+                                              reinterpret_cast<const float3 *>(edge_ends.data_ptr<float>()),
+                                              reinterpret_cast<const float3 *>(this->aabb_mins.data_ptr<float>()),
+                                              reinterpret_cast<const float3 *>(this->aabb_maxs.data_ptr<float>()),
+                                              reinterpret_cast<const int2 *>(this->bvh_children.data_ptr<int>()),
+                                              reinterpret_cast<const int *>(this->object_ids.data_ptr<int>()),
+                                              reinterpret_cast<const float3 *>(means.data_ptr<float>()),
+                                              reinterpret_cast<const float3 *>(normals.data_ptr<float>()),
+                                              reinterpret_cast<const float *>(opacities.data_ptr<float>()),
+                                              reinterpret_cast<const float *>(covis.data_ptr<float>()), isos_ptr, iso,
+                                              reinterpret_cast<bool *>(hit_mask.data_ptr<bool>()),
+                                              reinterpret_cast<int64_t *>(out_gaus_ids.data_ptr<int64_t>()));
 
     return std::make_tuple(hit_mask, out_gaus_ids);
 }
 
-void bind_ds_pgs_bvh(py::module_ &m) {
+void bind_ds_pgs_bvh(py::module_ &m)
+{
     py::class_<PGSBVH, BVH>(m, "PGSBVH", R"pbdoc(
         GPU-accelerated Bounding Volume Hierarchy specialized for Planar Gaussian Splatting (PGS).
 
@@ -231,8 +203,7 @@ void bind_ds_pgs_bvh(py::module_ &m) {
             >>> pgs_bvh = PGSBVH(pgs_aabb_mins, pgs_aabb_maxs)
             >>> hit_mask, gaus_ids = pgs_bvh.query_edge(starts, ends, means, normals, opacities, covis)
         )pbdoc")
-        .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
-             py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
+        .def(py::init<const torch::Tensor &, const torch::Tensor &>(), py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
              R"pbdoc(
              Constructs and builds PGSBVH from Planar Gaussian AABB bounds.
 
@@ -243,12 +214,10 @@ void bind_ds_pgs_bvh(py::module_ &m) {
              Example:
                  >>> pgs_bvh = PGSBVH(pgs_aabb_mins, pgs_aabb_maxs)
              )pbdoc")
-        .def("query_voxel_pair", &PGSBVH::query_voxel_pair,
-             py::arg("vx_aabb_mins"), py::arg("vx_aabb_maxs"),
-             py::arg("means"), py::arg("normals"), py::arg("covis"),
-             py::arg("gs_aabb_mins"), py::arg("gs_aabb_maxs"),
-             py::arg("isos") = ISO, py::arg("return_centroids") = false,
-             py::arg("return_centroid_densities") = false, py::arg("max_capacity") = 10000000,
+        .def("query_voxel_pair", &PGSBVH::query_voxel_pair, py::arg("vx_aabb_mins"), py::arg("vx_aabb_maxs"),
+             py::arg("means"), py::arg("normals"), py::arg("covis"), py::arg("gs_aabb_mins"), py::arg("gs_aabb_maxs"),
+             py::arg("isos") = ISO, py::arg("return_centroids") = false, py::arg("return_centroid_densities") = false,
+             py::arg("max_capacity") = 10000000,
              R"pbdoc(
              Performs exact broad-to-narrow phase intersection testing between 3D voxel boxes and Planar Gaussians.
 
@@ -276,10 +245,8 @@ void bind_ds_pgs_bvh(py::module_ &m) {
              Example:
                  >>> hits, v_ids, g_ids, _, _ = pgs_bvh.query_voxel_pair(vx_mins, vx_maxs, means, normals, covis, pgs_mins, pgs_maxs)
              )pbdoc")
-        .def("query_edge", &PGSBVH::query_edge,
-             py::arg("edge_starts"), py::arg("edge_ends"),
-             py::arg("means"), py::arg("normals"), py::arg("opacities"), py::arg("covis"),
-             py::arg("isos") = ISO,
+        .def("query_edge", &PGSBVH::query_edge, py::arg("edge_starts"), py::arg("edge_ends"), py::arg("means"),
+             py::arg("normals"), py::arg("opacities"), py::arg("covis"), py::arg("isos") = ISO,
              R"pbdoc(
              Finds the single highest-density Planar Gaussian pierced by each line segment.
 

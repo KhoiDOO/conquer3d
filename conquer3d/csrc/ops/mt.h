@@ -17,7 +17,8 @@
 #include <tuple>
 #include <cstdint>
 
-namespace mt {
+namespace mt
+{
     /**
      * @brief Forward pass of Marching Tetrahedra on GPU.
      *
@@ -34,18 +35,13 @@ namespace mt {
      *
      * @return Tuple containing (vertices, triangles, out_normals, out_colors, unique_edges).
      */
-    std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>, std::optional<torch::Tensor>> marching_tetrahedra(
-        const uint32_t num_tets,
-        const float3* __restrict__ grid_vertices,
-        const uint32_t* __restrict__ tets,
-        const float* __restrict__ vert_values,
-        const float3* __restrict__ grid_normals,
-        const float3* __restrict__ grid_colors,
-        const float iso,
-        torch::TensorOptions vert_options,
-        torch::TensorOptions tri_options,
-        bool return_unique_edges = false
-    );
+    std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>,
+               std::optional<torch::Tensor>>
+    marching_tetrahedra(const uint32_t num_tets, const float3 *__restrict__ grid_vertices,
+                        const uint32_t *__restrict__ tets, const float *__restrict__ vert_values,
+                        const float3 *__restrict__ grid_normals, const float3 *__restrict__ grid_colors,
+                        const float iso, torch::TensorOptions vert_options, torch::TensorOptions tri_options,
+                        bool return_unique_edges = false);
 
     /**
      * @brief Analytical backward pass of Marching Tetrahedra on GPU.
@@ -61,18 +57,9 @@ namespace mt {
      * @param[out] adj_grid_colors Optional output gradient buffer for grid colors of size $N \times 3$.
      * @param[in] iso Isosurface extraction threshold.
      */
-    void backward(
-        const uint32_t n_verts,
-        const Edge *unique_edges,
-        const float3 *grid_vertices,
-        const float3 *grid_colors,
-        const float *values,
-        const float3 *adj_verts,
-        const float3 *adj_colors,
-        float *adj_values,
-        float3 *adj_grid_colors,
-        const float iso
-    );
-}
+    void backward(const uint32_t n_verts, const Edge *unique_edges, const float3 *grid_vertices,
+                  const float3 *grid_colors, const float *values, const float3 *adj_verts, const float3 *adj_colors,
+                  float *adj_values, float3 *adj_grid_colors, const float iso);
+} // namespace mt
 
 #endif // MT_H

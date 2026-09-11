@@ -33,9 +33,9 @@ torch::Tensor compute_zcurve_wrapper(torch::Tensor points)
     return codes;
 }
 
-void bind_ds_zcurve(py::module_ &m) {
-    m.def("compute_zcurve", &compute_zcurve_wrapper,
-          py::arg("points"),
+void bind_ds_zcurve(py::module_ &m)
+{
+    m.def("compute_zcurve", &compute_zcurve_wrapper, py::arg("points"),
           R"pbdoc(
           Computes 30-bit 3D Morton space-filling Z-curve codes for points in normalized [0, 1]^3.
 

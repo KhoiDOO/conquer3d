@@ -44,10 +44,8 @@ public:
      *         - distances (torch.Tensor): (M, k) float32 squared Euclidean distances.
      *         - indices (torch.Tensor): (M, k) int64 indices of nearest neighbors in original point set.
      */
-    std::tuple<torch::Tensor, torch::Tensor> query(
-        const torch::Tensor &query_points,
-        const int k,
-        bool exclude_self = false);
+    std::tuple<torch::Tensor, torch::Tensor> query(const torch::Tensor &query_points, const int k,
+                                                   bool exclude_self = false);
 };
 
 namespace kdtree
@@ -59,10 +57,7 @@ namespace kdtree
      * @param[in,out] points Array of (N, 3) float32 point coordinates permuted into tree order.
      * @param[in,out] original_inds Array of original indices tracking point permutations.
      */
-    void build(
-        const uint32_t num_points,
-        float3 *__restrict__ points,
-        int64_t *__restrict__ original_inds);
+    void build(const uint32_t num_points, float3 *__restrict__ points, int64_t *__restrict__ original_inds);
 
     /**
      * @brief Parallel batch k-NN query kernel dispatcher on GPU.
@@ -76,15 +71,9 @@ namespace kdtree
      * @param[out] out_dists Output buffer of size $M \times k$ for squared distances.
      * @param[out] out_inds Output buffer of size $M \times k$ for nearest neighbor indices.
      */
-    void query(
-        const uint32_t num_queries,
-        const uint32_t num_points,
-        const uint32_t k,
-        const float3 *__restrict__ query_points,
-        const float3 *__restrict__ tree_points,
-        const int64_t *__restrict__ tree_inds,
-        float *__restrict__ out_dists,
-        int64_t *__restrict__ out_inds);
+    void query(const uint32_t num_queries, const uint32_t num_points, const uint32_t k,
+               const float3 *__restrict__ query_points, const float3 *__restrict__ tree_points,
+               const int64_t *__restrict__ tree_inds, float *__restrict__ out_dists, int64_t *__restrict__ out_inds);
 
     /**
      * @brief Inserts a distance and index pair into a sorted fixed-size priority queue.
@@ -95,12 +84,7 @@ namespace kdtree
      * @param[in,out] best_inds Sorted array of best indices of size $k$.
      * @param[in] k Priority queue capacity.
      */
-    __device__ __forceinline__ void push_pq(
-        float dist,
-        int64_t id,
-        float *best_dists,
-        int64_t *best_inds,
-        const int k)
+    __device__ __forceinline__ void push_pq(float dist, int64_t id, float *best_dists, int64_t *best_inds, const int k)
     {
         if (dist >= best_dists[k - 1])
             return;
@@ -126,14 +110,10 @@ namespace kdtree
      * @param[in,out] best_dists Local priority queue of best distances.
      * @param[in,out] best_inds Local priority queue of best indices.
      */
-    __device__ __forceinline__ void query_kdtree_loop(
-        const float3 &qp,
-        const uint32_t num_points,
-        const float3 *__restrict__ tree_points,
-        const int64_t *__restrict__ tree_inds,
-        const int k,
-        float *best_dists,
-        int64_t *best_inds)
+    __device__ __forceinline__ void query_kdtree_loop(const float3 &qp, const uint32_t num_points,
+                                                      const float3 *__restrict__ tree_points,
+                                                      const int64_t *__restrict__ tree_inds, const int k,
+                                                      float *best_dists, int64_t *best_inds)
     {
         int stack[64];
         int stack_ptr = 0;
@@ -180,6 +160,6 @@ namespace kdtree
             }
         }
     }
-}
+} // namespace kdtree
 
 #endif // KDTREE_H

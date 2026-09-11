@@ -13,21 +13,25 @@
 #include <vector>
 #include <cstdint>
 
-namespace ops {
+namespace ops
+{
 
     /**
      * @brief Result container for Coarse-to-Fine Volumetric Flood Fill.
      */
-    struct CFFloodFillResult {
-        torch::Tensor coarse_mask; ///< (Cx, Cy, Cz) int8 labels: 2 exterior, -1 interior, 1 surface-crossing.
+    struct CFFloodFillResult
+    {
+        torch::Tensor coarse_mask;           ///< (Cx, Cy, Cz) int8 labels: 2 exterior, -1 interior, 1 surface-crossing.
         torch::Tensor boundary_block_coords; ///< (N, 3) int32 coarse coordinates of the surface-crossing blocks.
-        torch::Tensor boundary_block_lookup; ///< (Cx, Cy, Cz) int32 index into the boundary arrays, -1 when not a boundary block.
-        torch::Tensor fine_boundary_masks; ///< (N, Bx, By, Bz) int8 per-voxel labels inside each surface-crossing block.
+        torch::Tensor
+            boundary_block_lookup; ///< (Cx, Cy, Cz) int32 index into the boundary arrays, -1 when not a boundary block.
+        torch::Tensor
+            fine_boundary_masks;         ///< (N, Bx, By, Bz) int8 per-voxel labels inside each surface-crossing block.
         std::vector<int64_t> block_size; ///< Fine voxels per coarse block, [Bx, By, Bz].
         std::vector<int64_t> coarse_res; ///< Coarse grid resolution, [Cx, Cy, Cz].
-        std::vector<float> grid_min; ///< World coordinate of the grid's lower corner.
-        std::vector<float> grid_max; ///< World coordinate of the grid's upper corner.
-        std::vector<int64_t> grid_res; ///< Fine grid resolution.
+        std::vector<float> grid_min;     ///< World coordinate of the grid's lower corner.
+        std::vector<float> grid_max;     ///< World coordinate of the grid's upper corner.
+        std::vector<int64_t> grid_res;   ///< Fine grid resolution.
     };
 
     /**
@@ -46,18 +50,11 @@ namespace ops {
      * @param[in] connectivity Voxel neighbor connectivity (6, 18, 26).
      * @return CFFloodFillResult struct holding coarse mask and fine boundary masks.
      */
-    CFFloodFillResult compute_flood_fill_cf(
-        const torch::Tensor& vertices,
-        const torch::Tensor& triangles,
-        const torch::Tensor& aabb_mins,
-        const torch::Tensor& aabb_maxs,
-        const torch::Tensor& bvh_children,
-        const torch::Tensor& object_ids,
-        std::vector<float> grid_min,
-        std::vector<float> grid_max,
-        std::vector<int64_t> grid_res,
-        std::vector<int64_t> block_size = {},
-        int connectivity = 6
-    );
+    CFFloodFillResult compute_flood_fill_cf(const torch::Tensor &vertices, const torch::Tensor &triangles,
+                                            const torch::Tensor &aabb_mins, const torch::Tensor &aabb_maxs,
+                                            const torch::Tensor &bvh_children, const torch::Tensor &object_ids,
+                                            std::vector<float> grid_min, std::vector<float> grid_max,
+                                            std::vector<int64_t> grid_res, std::vector<int64_t> block_size = {},
+                                            int connectivity = 6);
 
 } // namespace ops

@@ -53,9 +53,8 @@ namespace sq
      * @param[out] out_x First coordinate of the point.
      * @param[out] out_y Second coordinate of the point.
      */
-    __device__ __forceinline__ void evaluate_superellipse(
-        const double theta, const double semi_a, const double semi_b,
-        const double exponent, double &out_x, double &out_y)
+    __device__ __forceinline__ void evaluate_superellipse(const double theta, const double semi_a, const double semi_b,
+                                                          const double exponent, double &out_x, double &out_y)
     {
         const double magnitude = fabs(theta);
         const double cos_theta = cos(magnitude);
@@ -77,8 +76,8 @@ namespace sq
      * @param[in] by Second coordinate of the second point.
      * @return The Euclidean distance between the two points.
      */
-    __device__ __forceinline__ double superellipse_chord(
-        const double ax, const double ay, const double bx, const double by)
+    __device__ __forceinline__ double superellipse_chord(const double ax, const double ay, const double bx,
+                                                         const double by)
     {
         const double dx = ax - bx;
         const double dy = ay - by;
@@ -106,10 +105,10 @@ namespace sq
      * @param[in,out] stack Scratch of at least `num + 2` frames owned by this thread.
      * @param[out] out_thetas Output buffer of `num` angles in traversal order.
      */
-    __device__ void sample_superellipse_arclength(
-        const double semi_a, const double semi_b, const double exponent,
-        const double theta_a, const double theta_b, const int num,
-        SuperellipseFrame *__restrict__ stack, double *__restrict__ out_thetas)
+    __device__ void sample_superellipse_arclength(const double semi_a, const double semi_b, const double exponent,
+                                                  const double theta_a, const double theta_b, const int num,
+                                                  SuperellipseFrame *__restrict__ stack,
+                                                  double *__restrict__ out_thetas)
     {
         for (int i = 0; i < num; ++i)
             out_thetas[i] = 0.0;
@@ -140,9 +139,8 @@ namespace sq
             const double span_b = superellipse_chord(mid_x, mid_y, frame.point_b_x, frame.point_b_y);
             const double total = span_a + span_b;
 
-            const int take_a = (total < 1e-12)
-                                   ? (frame.budget / 2)
-                                   : (int)rint(span_a / total * (double)(frame.budget - 1));
+            const int take_a =
+                (total < 1e-12) ? (frame.budget / 2) : (int)rint(span_a / total * (double)(frame.budget - 1));
             const int take_b = frame.budget - take_a - 1;
             out_thetas[take_a + frame.offset] = theta;
 
@@ -187,14 +185,12 @@ namespace sq
      * @param[out] out_azimuths Device array of $K \times (\text{resolution} + 1)$ angles.
      * @param[out] out_polars Device array of $K \times \text{resolution}$ angles.
      */
-    __global__ void compute_superellipse_angles_kernel(
-        const uint32_t num_quadrics,
-        const uint32_t resolution,
-        const float3 *__restrict__ scales,
-        const float2 *__restrict__ exponents,
-        SuperellipseFrame *__restrict__ stack_scratch,
-        double *__restrict__ out_azimuths,
-        double *__restrict__ out_polars)
+    __global__ void compute_superellipse_angles_kernel(const uint32_t num_quadrics, const uint32_t resolution,
+                                                       const float3 *__restrict__ scales,
+                                                       const float2 *__restrict__ exponents,
+                                                       SuperellipseFrame *__restrict__ stack_scratch,
+                                                       double *__restrict__ out_azimuths,
+                                                       double *__restrict__ out_polars)
     {
         const uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx >= 2u * num_quadrics)
@@ -212,18 +208,14 @@ namespace sq
         if (is_azimuth)
         {
             // The azimuthal cross-section lies in the (x, y) plane and is governed by e2.
-            sample_superellipse_arclength(
-                (double)scale.x, (double)scale.y, (double)exponent.y,
-                -CUDART_PI, CUDART_PI, n + 1,
-                stack, out_azimuths + (size_t)k * (size_t)(resolution + 1));
+            sample_superellipse_arclength((double)scale.x, (double)scale.y, (double)exponent.y, -CUDART_PI, CUDART_PI,
+                                          n + 1, stack, out_azimuths + (size_t)k * (size_t)(resolution + 1));
         }
         else
         {
             // The polar cross-section lies in the (x, z) plane and is governed by e1.
-            sample_superellipse_arclength(
-                (double)scale.x, (double)scale.z, (double)exponent.x,
-                -0.5 * CUDART_PI, 0.5 * CUDART_PI, n,
-                stack, out_polars + (size_t)k * (size_t)resolution);
+            sample_superellipse_arclength((double)scale.x, (double)scale.z, (double)exponent.x, -0.5 * CUDART_PI,
+                                          0.5 * CUDART_PI, n, stack, out_polars + (size_t)k * (size_t)resolution);
         }
     }
 
@@ -254,17 +246,10 @@ namespace sq
      * the azimuthal order is reversed in that case so normals keep facing outward.
      */
     __global__ void compute_superquadric_vertices_kernel(
-        const uint32_t num_quadrics,
-        const uint32_t resolution,
-        const float3 *__restrict__ scales,
-        const float2 *__restrict__ exponents,
-        const float *__restrict__ rotations,
-        const float3 *__restrict__ translations,
-        const double *__restrict__ azimuths,
-        const double *__restrict__ polars,
-        const bool return_labels,
-        float3 *__restrict__ out_vertices,
-        int32_t *__restrict__ out_labels)
+        const uint32_t num_quadrics, const uint32_t resolution, const float3 *__restrict__ scales,
+        const float2 *__restrict__ exponents, const float *__restrict__ rotations,
+        const float3 *__restrict__ translations, const double *__restrict__ azimuths, const double *__restrict__ polars,
+        const bool return_labels, float3 *__restrict__ out_vertices, int32_t *__restrict__ out_labels)
     {
         const uint32_t n = resolution;
         const uint32_t per_primitive = n * (n - 2u) + 2u;
@@ -301,8 +286,9 @@ namespace sq
             const uint32_t ring = interior / n;    // polar angle varies slowest
             uint32_t column = interior - ring * n; // azimuth varies fastest
 
-            const double det =
-                (double)rot[0] * ((double)rot[4] * (double)rot[8] - (double)rot[5] * (double)rot[7]) - (double)rot[1] * ((double)rot[3] * (double)rot[8] - (double)rot[5] * (double)rot[6]) + (double)rot[2] * ((double)rot[3] * (double)rot[7] - (double)rot[4] * (double)rot[6]);
+            const double det = (double)rot[0] * ((double)rot[4] * (double)rot[8] - (double)rot[5] * (double)rot[7]) -
+                               (double)rot[1] * ((double)rot[3] * (double)rot[8] - (double)rot[5] * (double)rot[6]) +
+                               (double)rot[2] * ((double)rot[3] * (double)rot[7] - (double)rot[4] * (double)rot[6]);
             if (det < 0.0)
                 column = n - 1u - column;
 
@@ -316,9 +302,12 @@ namespace sq
         }
 
         const float3 translation = translations[k];
-        const double world_x = (double)rot[0] * local_x + (double)rot[1] * local_y + (double)rot[2] * local_z + (double)translation.x;
-        const double world_y = (double)rot[3] * local_x + (double)rot[4] * local_y + (double)rot[5] * local_z + (double)translation.y;
-        const double world_z = (double)rot[6] * local_x + (double)rot[7] * local_y + (double)rot[8] * local_z + (double)translation.z;
+        const double world_x =
+            (double)rot[0] * local_x + (double)rot[1] * local_y + (double)rot[2] * local_z + (double)translation.x;
+        const double world_y =
+            (double)rot[3] * local_x + (double)rot[4] * local_y + (double)rot[5] * local_z + (double)translation.y;
+        const double world_z =
+            (double)rot[6] * local_x + (double)rot[7] * local_y + (double)rot[8] * local_z + (double)translation.z;
 
         out_vertices[idx] = make_float3((float)world_x, (float)world_y, (float)world_z);
         if (return_labels)
@@ -336,10 +325,8 @@ namespace sq
      * @param[in] resolution Angular samples along each axis.
      * @param[out] out_triangles Device array of $K \times 2n(n-2)$ vertex index triples.
      */
-    __global__ void compute_superquadric_faces_kernel(
-        const uint32_t num_quadrics,
-        const uint32_t resolution,
-        int3 *__restrict__ out_triangles)
+    __global__ void compute_superquadric_faces_kernel(const uint32_t num_quadrics, const uint32_t resolution,
+                                                      int3 *__restrict__ out_triangles)
     {
         const uint32_t n = resolution;
         const uint32_t rings = n - 2u;
@@ -385,14 +372,10 @@ namespace sq
         out_triangles[idx] = make_int3(tri.x + base, tri.y + base, tri.z + base);
     }
 
-    void compute_superellipse_angles(
-        const uint32_t num_quadrics,
-        const uint32_t resolution,
-        const float3 *__restrict__ scales,
-        const float2 *__restrict__ exponents,
-        SuperellipseFrame *__restrict__ stack_scratch,
-        double *__restrict__ out_azimuths,
-        double *__restrict__ out_polars)
+    void compute_superellipse_angles(const uint32_t num_quadrics, const uint32_t resolution,
+                                     const float3 *__restrict__ scales, const float2 *__restrict__ exponents,
+                                     SuperellipseFrame *__restrict__ stack_scratch, double *__restrict__ out_azimuths,
+                                     double *__restrict__ out_polars)
     {
         if (num_quadrics == 0)
             return;
@@ -401,27 +384,15 @@ namespace sq
         uint32_t blocks = (2u * num_quadrics + threads - 1) / threads;
 
         compute_superellipse_angles_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
-            num_quadrics,
-            resolution,
-            scales,
-            exponents,
-            stack_scratch,
-            out_azimuths,
-            out_polars);
+            num_quadrics, resolution, scales, exponents, stack_scratch, out_azimuths, out_polars);
     }
 
-    void compute_superquadric_vertices(
-        const uint32_t num_quadrics,
-        const uint32_t resolution,
-        const float3 *__restrict__ scales,
-        const float2 *__restrict__ exponents,
-        const float *__restrict__ rotations,
-        const float3 *__restrict__ translations,
-        const double *__restrict__ azimuths,
-        const double *__restrict__ polars,
-        const bool return_labels,
-        float3 *__restrict__ out_vertices,
-        int32_t *__restrict__ out_labels)
+    void compute_superquadric_vertices(const uint32_t num_quadrics, const uint32_t resolution,
+                                       const float3 *__restrict__ scales, const float2 *__restrict__ exponents,
+                                       const float *__restrict__ rotations, const float3 *__restrict__ translations,
+                                       const double *__restrict__ azimuths, const double *__restrict__ polars,
+                                       const bool return_labels, float3 *__restrict__ out_vertices,
+                                       int32_t *__restrict__ out_labels)
     {
         if (num_quadrics == 0)
             return;
@@ -431,23 +402,12 @@ namespace sq
         uint32_t blocks = (num_quadrics * per_primitive + threads - 1) / threads;
 
         compute_superquadric_vertices_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
-            num_quadrics,
-            resolution,
-            scales,
-            exponents,
-            rotations,
-            translations,
-            azimuths,
-            polars,
-            return_labels,
-            out_vertices,
-            out_labels);
+            num_quadrics, resolution, scales, exponents, rotations, translations, azimuths, polars, return_labels,
+            out_vertices, out_labels);
     }
 
-    void compute_superquadric_faces(
-        const uint32_t num_quadrics,
-        const uint32_t resolution,
-        int3 *__restrict__ out_triangles)
+    void compute_superquadric_faces(const uint32_t num_quadrics, const uint32_t resolution,
+                                    int3 *__restrict__ out_triangles)
     {
         if (num_quadrics == 0)
             return;
@@ -457,8 +417,6 @@ namespace sq
         uint32_t blocks = (num_quadrics * per_primitive + threads - 1) / threads;
 
         compute_superquadric_faces_kernel<<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(
-            num_quadrics,
-            resolution,
-            out_triangles);
+            num_quadrics, resolution, out_triangles);
     }
-}
+} // namespace sq

@@ -19,13 +19,9 @@ namespace py = pybind11;
  * free of checks and gives Python callers a clear error instead of a device fault.
  * @return The operator's results as PyTorch tensors.
  */
-torch::Tensor compute_gs_covi_wrapper(
-    const torch::Tensor &means,
-    const torch::Tensor &rotations,
-    const torch::Tensor &scales,
-    const bool rotnorm,
-    const float tol,
-    const uint32_t level)
+torch::Tensor compute_gs_covi_wrapper(const torch::Tensor &means, const torch::Tensor &rotations,
+                                      const torch::Tensor &scales, const bool rotnorm, const float tol,
+                                      const uint32_t level)
 {
     CHECK_INPUT(means);
     CHECK_INPUT(rotations);
@@ -43,15 +39,10 @@ torch::Tensor compute_gs_covi_wrapper(
     auto options = means.options();
     torch::Tensor covi = torch::empty({num_gaussians, 6}, options);
 
-    gs::compute_gs_covi(
-        num_gaussians,
-        reinterpret_cast<const float4 *>(rotations.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(scales.data_ptr<float>()),
-        rotnorm,
-        tol,
-        level,
-        reinterpret_cast<float *>(covi.data_ptr<float>()));
-    
+    gs::compute_gs_covi(num_gaussians, reinterpret_cast<const float4 *>(rotations.data_ptr<float>()),
+                        reinterpret_cast<const float3 *>(scales.data_ptr<float>()), rotnorm, tol, level,
+                        reinterpret_cast<float *>(covi.data_ptr<float>()));
+
     return covi;
 }
 
@@ -63,14 +54,10 @@ torch::Tensor compute_gs_covi_wrapper(
  * free of checks and gives Python callers a clear error instead of a device fault.
  * @return The operator's results as PyTorch tensors.
  */
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> compute_gs_aabb_wrapper(
-    const torch::Tensor &means,
-    const torch::Tensor &scales,
-    const torch::Tensor &covis,
-    const std::optional<torch::Tensor> &isos,
-    const float iso,
-    const float tol,
-    const uint32_t level)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+compute_gs_aabb_wrapper(const torch::Tensor &means, const torch::Tensor &scales, const torch::Tensor &covis,
+                        const std::optional<torch::Tensor> &isos, const float iso, const float tol,
+                        const uint32_t level)
 {
     CHECK_INPUT(means);
     CHECK_INPUT(scales);
@@ -98,19 +85,13 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> compute_gs_aabb_wrapper(
     torch::Tensor aabb_max = torch::empty({num_gaussians, 3}, options);
     torch::Tensor contact_points = torch::empty({num_gaussians, 9}, options);
 
-    gs_aabb::compute_gs_aabb(
-        num_gaussians,
-        reinterpret_cast<const float3 *>(means.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(scales.data_ptr<float>()),
-        reinterpret_cast<const float *>(covis.data_ptr<float>()),
-        isos_ptr,
-        iso,
-        tol,
-        level,
-        reinterpret_cast<float3 *>(aabb_min.data_ptr<float>()),
-        reinterpret_cast<float3 *>(aabb_max.data_ptr<float>()),
-        reinterpret_cast<float3 *>(contact_points.data_ptr<float>()));
-    
+    gs_aabb::compute_gs_aabb(num_gaussians, reinterpret_cast<const float3 *>(means.data_ptr<float>()),
+                             reinterpret_cast<const float3 *>(scales.data_ptr<float>()),
+                             reinterpret_cast<const float *>(covis.data_ptr<float>()), isos_ptr, iso, tol, level,
+                             reinterpret_cast<float3 *>(aabb_min.data_ptr<float>()),
+                             reinterpret_cast<float3 *>(aabb_max.data_ptr<float>()),
+                             reinterpret_cast<float3 *>(contact_points.data_ptr<float>()));
+
     return std::make_tuple(aabb_min, aabb_max, contact_points);
 }
 
@@ -122,10 +103,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> compute_gs_aabb_wrapper(
  * free of checks and gives Python callers a clear error instead of a device fault.
  * @return The operator's results as PyTorch tensors.
  */
-torch::Tensor solve_gs_neighbor_mahalanobis_radius_wrapper(
-    const torch::Tensor &means,
-    const torch::Tensor &covis,
-    const int k)
+torch::Tensor solve_gs_neighbor_mahalanobis_radius_wrapper(const torch::Tensor &means, const torch::Tensor &covis,
+                                                           const int k)
 {
     CHECK_INPUT(means);
     CHECK_INPUT(covis);
@@ -146,19 +125,16 @@ torch::Tensor solve_gs_neighbor_mahalanobis_radius_wrapper(
     auto options = means.options();
     torch::Tensor isos = torch::empty({num_gaussians}, options.dtype(torch::kFloat32));
 
-    gs::solve_gs_neighbor_mahalanobis_radius(
-        num_gaussians,
-        reinterpret_cast<const float3 *>(means.data_ptr<float>()),
-        reinterpret_cast<const float *>(covis.data_ptr<float>()),
-        search_k,
-        reinterpret_cast<float *>(isos.data_ptr<float>()));
+    gs::solve_gs_neighbor_mahalanobis_radius(num_gaussians, reinterpret_cast<const float3 *>(means.data_ptr<float>()),
+                                             reinterpret_cast<const float *>(covis.data_ptr<float>()), search_k,
+                                             reinterpret_cast<float *>(isos.data_ptr<float>()));
 
     return isos;
 }
 
-void bind_primitive_gs(py::module_ &m) {
-    m.def("compute_gs_covi_func", &compute_gs_covi_wrapper,
-          py::arg("means"), py::arg("rotations"), py::arg("scales"),
+void bind_primitive_gs(py::module_ &m)
+{
+    m.def("compute_gs_covi_func", &compute_gs_covi_wrapper, py::arg("means"), py::arg("rotations"), py::arg("scales"),
           py::arg("rotnorm"), py::arg("tol"), py::arg("level"),
           R"pbdoc(
           Computes upper-triangular inverse covariance matrix entries for 3D Gaussians (CUDA).
@@ -179,8 +155,8 @@ void bind_primitive_gs(py::module_ &m) {
               >>> from conquer3d._C import compute_gs_covi_func
               >>> covis = compute_gs_covi_func(means, rotations, scales, True, 1e-6, 0)
           )pbdoc");
-    m.def("solve_gs_neighbor_mahalanobis_radius_func", &solve_gs_neighbor_mahalanobis_radius_wrapper,
-          py::arg("means"), py::arg("covis"), py::arg("k"),
+    m.def("solve_gs_neighbor_mahalanobis_radius_func", &solve_gs_neighbor_mahalanobis_radius_wrapper, py::arg("means"),
+          py::arg("covis"), py::arg("k"),
           R"pbdoc(
           Computes optimal Mahalanobis isosurface radii for 3D Gaussians from k-NN neighbors (CUDA).
 
@@ -195,8 +171,7 @@ void bind_primitive_gs(py::module_ &m) {
           Example:
               >>> radii = solve_gs_neighbor_mahalanobis_radius_func(means, covis, 16)
           )pbdoc");
-    m.def("compute_gs_aabb_func", &compute_gs_aabb_wrapper,
-          py::arg("means"), py::arg("scales"), py::arg("covis"),
+    m.def("compute_gs_aabb_func", &compute_gs_aabb_wrapper, py::arg("means"), py::arg("scales"), py::arg("covis"),
           py::arg("isos"), py::arg("iso"), py::arg("tol"), py::arg("level"),
           R"pbdoc(
           Computes tight Axis-Aligned Bounding Boxes (AABBs) for 3D Gaussians (CUDA).

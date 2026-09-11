@@ -25,14 +25,9 @@
  * @param[out] distances Output device buffer of size $N$ for minimum squared Euclidean distances.
  * @param[out] indices Output device buffer of size $N$ for nearest reference point indices.
  */
-void one_sided_chamfer_distance(
-    const uint32_t num_query_points,
-    const float3* __restrict__ query_points,
-    const uint32_t num_reference_points,
-    const float3* __restrict__ reference_points,
-    float* __restrict__ distances,
-    int64_t* __restrict__ indices
-);
+void one_sided_chamfer_distance(const uint32_t num_query_points, const float3 *__restrict__ query_points,
+                                const uint32_t num_reference_points, const float3 *__restrict__ reference_points,
+                                float *__restrict__ distances, int64_t *__restrict__ indices);
 
 /**
  * @brief Computes the analytical backward gradients for one-sided Chamfer distance.
@@ -52,16 +47,11 @@ void one_sided_chamfer_distance(
  * @param[out] grad_query Output device buffer of size $N$ for query gradients (or nullptr if not requested).
  * @param[out] grad_reference Output device buffer of size $M$ for reference gradients (or nullptr if not requested).
  */
-void one_sided_chamfer_distance_backward(
-    const uint32_t num_query_points,
-    const float3* __restrict__ query_points,
-    const uint32_t num_reference_points,
-    const float3* __restrict__ reference_points,
-    const int64_t* __restrict__ indices,
-    const float* __restrict__ grad_distances,
-    const bool squared,
-    float3* __restrict__ grad_query,
-    float3* __restrict__ grad_reference
-);
+void one_sided_chamfer_distance_backward(const uint32_t num_query_points, const float3 *__restrict__ query_points,
+                                         const uint32_t num_reference_points,
+                                         const float3 *__restrict__ reference_points,
+                                         const int64_t *__restrict__ indices, const float *__restrict__ grad_distances,
+                                         const bool squared, float3 *__restrict__ grad_query,
+                                         float3 *__restrict__ grad_reference);
 
 #endif // CHAMFER_H

@@ -39,11 +39,8 @@ namespace bvh
      * @param[in] leaf_visit Action performed at an admitted leaf.
      */
     template <class NodeTest, class LeafVisit>
-    __device__ __forceinline__ void traverse(
-        const int num_objects,
-        const int2 *__restrict__ children,
-        NodeTest node_test,
-        LeafVisit leaf_visit)
+    __device__ __forceinline__ void traverse(const int num_objects, const int2 *__restrict__ children,
+                                             NodeTest node_test, LeafVisit leaf_visit)
     {
         int stack[BVH_STACK_SIZE];
         int stack_ptr = 0;
@@ -64,11 +61,13 @@ namespace bvh
             else if (stack_ptr + 2 < BVH_STACK_SIZE)
             {
                 const int2 c = children[node_idx];
-                if (c.x >= 0) stack[++stack_ptr] = c.x;
-                if (c.y >= 0) stack[++stack_ptr] = c.y;
+                if (c.x >= 0)
+                    stack[++stack_ptr] = c.x;
+                if (c.y >= 0)
+                    stack[++stack_ptr] = c.y;
             }
         }
     }
-}
+} // namespace bvh
 
 #endif // BVH_TRAVERSE_CUH

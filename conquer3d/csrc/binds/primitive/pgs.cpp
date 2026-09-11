@@ -19,12 +19,10 @@ namespace py = pybind11;
  * free of checks and gives Python callers a clear error instead of a device fault.
  * @return The operator's results as PyTorch tensors.
  */
-std::tuple<torch::Tensor, torch::Tensor> solve_pgs_cluster_tangency_radius_wrapper(
-    const torch::Tensor &means,
-    const torch::Tensor &normals,
-    const torch::Tensor &covis,
-    const uint32_t k
-)
+std::tuple<torch::Tensor, torch::Tensor> solve_pgs_cluster_tangency_radius_wrapper(const torch::Tensor &means,
+                                                                                   const torch::Tensor &normals,
+                                                                                   const torch::Tensor &covis,
+                                                                                   const uint32_t k)
 {
     CHECK_INPUT(means);
     CHECK_INPUT(normals);
@@ -49,21 +47,19 @@ std::tuple<torch::Tensor, torch::Tensor> solve_pgs_cluster_tangency_radius_wrapp
     torch::Tensor isos = torch::empty({num_gaussians}, options.dtype(torch::kFloat32));
     torch::Tensor invalid_mask = torch::empty({num_gaussians}, options.dtype(torch::kBool));
 
-    pgs::solve_pgs_cluster_tangency_radius(
-        num_gaussians,
-        reinterpret_cast<const float3 *>(means.data_ptr<float>()),
-        reinterpret_cast<const float3 *>(normals.data_ptr<float>()),
-        reinterpret_cast<const float *>(covis.data_ptr<float>()),
-        search_k,
-        reinterpret_cast<float *>(isos.data_ptr<float>()),
-        reinterpret_cast<bool *>(invalid_mask.data_ptr<bool>()));
+    pgs::solve_pgs_cluster_tangency_radius(num_gaussians, reinterpret_cast<const float3 *>(means.data_ptr<float>()),
+                                           reinterpret_cast<const float3 *>(normals.data_ptr<float>()),
+                                           reinterpret_cast<const float *>(covis.data_ptr<float>()), search_k,
+                                           reinterpret_cast<float *>(isos.data_ptr<float>()),
+                                           reinterpret_cast<bool *>(invalid_mask.data_ptr<bool>()));
 
     return std::make_tuple(isos, invalid_mask);
 }
 
-void bind_primitive_pgs(py::module_ &m) {
-    m.def("solve_pgs_cluster_tangency_radius_func", &solve_pgs_cluster_tangency_radius_wrapper,
-          py::arg("means"), py::arg("normals"), py::arg("covis"), py::arg("k") = 16,
+void bind_primitive_pgs(py::module_ &m)
+{
+    m.def("solve_pgs_cluster_tangency_radius_func", &solve_pgs_cluster_tangency_radius_wrapper, py::arg("means"),
+          py::arg("normals"), py::arg("covis"), py::arg("k") = 16,
           R"pbdoc(
           Computes pairwise tangency contact radii for Planar Gaussians from k-NN clusters (CUDA).
 

@@ -22,7 +22,9 @@ namespace triangle_creation
      *
      * @return Tuple containing (vertices [N, 3] float32, triangles [M, 3] int32).
      */
-    inline std::tuple<torch::Tensor, torch::Tensor> create_sphere(int sectors = 32, int stacks = 16, float radius = 1.0f) {
+    inline std::tuple<torch::Tensor, torch::Tensor> create_sphere(int sectors = 32, int stacks = 16,
+                                                                  float radius = 1.0f)
+    {
         std::vector<float> vertices;
         std::vector<int> triangles;
 
@@ -35,12 +37,14 @@ namespace triangle_creation
         vertices.push_back(radius);
 
         // 2. Rings (stacks-1)
-        for (int i = 1; i < stacks; ++i) {
+        for (int i = 1; i < stacks; ++i)
+        {
             float stackAngle = M_PI / 2 - i * stackStep;
             float xy = radius * cosf(stackAngle);
             float z = radius * sinf(stackAngle);
 
-            for (int j = 0; j < sectors; ++j) {
+            for (int j = 0; j < sectors; ++j)
+            {
                 float sectorAngle = j * sectorStep;
                 vertices.push_back(xy * cosf(sectorAngle));
                 vertices.push_back(xy * sinf(sectorAngle));
@@ -55,7 +59,8 @@ namespace triangle_creation
 
         // Generate Triangles
         // North pole triangles
-        for (int j = 0; j < sectors; ++j) {
+        for (int j = 0; j < sectors; ++j)
+        {
             int next_j = (j + 1) % sectors;
             triangles.push_back(0); // North pole is index 0
             triangles.push_back(1 + j);
@@ -63,13 +68,15 @@ namespace triangle_creation
         }
 
         // Middle ring triangles
-        for (int i = 0; i < stacks - 2; ++i) {
+        for (int i = 0; i < stacks - 2; ++i)
+        {
             int current_ring_start = 1 + i * sectors;
             int next_ring_start = 1 + (i + 1) * sectors;
 
-            for (int j = 0; j < sectors; ++j) {
+            for (int j = 0; j < sectors; ++j)
+            {
                 int next_j = (j + 1) % sectors;
-                
+
                 int v0 = current_ring_start + j;
                 int v1 = current_ring_start + next_j;
                 int v2 = next_ring_start + j;
@@ -88,7 +95,8 @@ namespace triangle_creation
         // South pole triangles
         int south_pole_index = 1 + (stacks - 1) * sectors;
         int last_ring_start = 1 + (stacks - 2) * sectors;
-        for (int j = 0; j < sectors; ++j) {
+        for (int j = 0; j < sectors; ++j)
+        {
             int next_j = (j + 1) % sectors;
             triangles.push_back(south_pole_index);
             triangles.push_back(last_ring_start + next_j);
@@ -111,21 +119,12 @@ namespace triangle_creation
      *
      * @return Tuple containing (vertices [4, 3] float32, triangles [4, 3] int32).
      */
-    inline std::tuple<torch::Tensor, torch::Tensor> create_tetrahedra(float radius = 1.0f) {
+    inline std::tuple<torch::Tensor, torch::Tensor> create_tetrahedra(float radius = 1.0f)
+    {
         float a = radius / std::sqrt(3.0f);
-        std::vector<float> vertices = {
-             a,  a,  a,
-            -a, -a,  a,
-            -a,  a, -a,
-             a, -a, -a
-        };
+        std::vector<float> vertices = {a, a, a, -a, -a, a, -a, a, -a, a, -a, -a};
 
-        std::vector<int> triangles = {
-            0, 2, 1,
-            0, 1, 3,
-            0, 3, 2,
-            1, 2, 3
-        };
+        std::vector<int> triangles = {0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3};
 
         auto opts_f32 = torch::TensorOptions().dtype(torch::kFloat32);
         auto opts_i32 = torch::TensorOptions().dtype(torch::kInt32);
@@ -135,6 +134,6 @@ namespace triangle_creation
 
         return {V, F};
     }
-}
+} // namespace triangle_creation
 
 #endif // TRIANGLE_CREATION_H

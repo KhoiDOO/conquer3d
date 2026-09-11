@@ -25,12 +25,10 @@
  * @note Non-finite distances are clamped to `FLT_MAX` so downstream reductions stay
  * well defined.
  */
-__global__ void one_sided_chamfer_single_point_kernel(
-    const uint32_t num_query_points,
-    const float3 *__restrict__ query_points,
-    const float3 *__restrict__ reference_points,
-    float *__restrict__ distances,
-    int64_t *__restrict__ indices)
+__global__ void one_sided_chamfer_single_point_kernel(const uint32_t num_query_points,
+                                                      const float3 *__restrict__ query_points,
+                                                      const float3 *__restrict__ reference_points,
+                                                      float *__restrict__ distances, int64_t *__restrict__ indices)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_query_points)
@@ -65,14 +63,12 @@ __global__ void one_sided_chamfer_single_point_kernel(
  * queries descend different branches; throughput therefore falls as the reference cloud
  * becomes less uniform.
  */
-__global__ void one_sided_chamfer_distance_kernel(
-    const uint32_t num_query_points,
-    const float3 *__restrict__ query_points,
-    const uint32_t num_reference_points,
-    const float3 *__restrict__ tree_points,
-    const int64_t *__restrict__ tree_inds,
-    float *__restrict__ distances,
-    int64_t *__restrict__ indices)
+__global__ void one_sided_chamfer_distance_kernel(const uint32_t num_query_points,
+                                                  const float3 *__restrict__ query_points,
+                                                  const uint32_t num_reference_points,
+                                                  const float3 *__restrict__ tree_points,
+                                                  const int64_t *__restrict__ tree_inds, float *__restrict__ distances,
+                                                  int64_t *__restrict__ indices)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_query_points)
@@ -90,26 +86,15 @@ __global__ void one_sided_chamfer_distance_kernel(
         best_inds[i] = -1;
     }
 
-    kdtree::query_kdtree_loop(
-        query_point,
-        num_reference_points,
-        tree_points,
-        tree_inds,
-        1,
-        best_dists,
-        best_inds);
-    
+    kdtree::query_kdtree_loop(query_point, num_reference_points, tree_points, tree_inds, 1, best_dists, best_inds);
+
     distances[idx] = best_dists[0];
     indices[idx] = best_inds[0];
 }
 
-void one_sided_chamfer_distance(
-    const uint32_t num_query_points,
-    const float3 *__restrict__ query_points,
-    const uint32_t num_reference_points,
-    const float3 *__restrict__ reference_points,
-    float *__restrict__ distances,
-    int64_t *__restrict__ indices)
+void one_sided_chamfer_distance(const uint32_t num_query_points, const float3 *__restrict__ query_points,
+                                const uint32_t num_reference_points, const float3 *__restrict__ reference_points,
+                                float *__restrict__ distances, int64_t *__restrict__ indices)
 {
     if (num_query_points == 0)
         return;
@@ -133,12 +118,8 @@ void one_sided_chamfer_distance(
 
     if (num_reference_points == 1)
     {
-        one_sided_chamfer_single_point_kernel<<<blocks, threads, 0, stream>>>(
-            num_query_points,
-            query_points,
-            reference_points,
-            distances,
-            indices);
+        one_sided_chamfer_single_point_kernel<<<blocks, threads, 0, stream>>>(num_query_points, query_points,
+                                                                              reference_points, distances, indices);
         return;
     }
 
@@ -147,32 +128,18 @@ void one_sided_chamfer_distance(
     auto opt_i = torch::TensorOptions().device(torch::kCUDA, ::c10::cuda::current_device()).dtype(torch::kInt64);
 
     auto cloned_ref_tensor = torch::empty({(int64_t)num_reference_points, 3}, opt_f);
-    cudaMemcpyAsync(
-        cloned_ref_tensor.data_ptr<float>(),
-        reference_points,
-        num_reference_points * sizeof(float3),
-        cudaMemcpyDeviceToDevice,
-        stream
-    );
+    cudaMemcpyAsync(cloned_ref_tensor.data_ptr<float>(), reference_points, num_reference_points * sizeof(float3),
+                    cudaMemcpyDeviceToDevice, stream);
 
     auto ref_indices_tensor = torch::arange((int64_t)num_reference_points, opt_i);
 
-    float3* p_cloned = (float3*)cloned_ref_tensor.data_ptr<float>();
-    int64_t* p_inds = ref_indices_tensor.data_ptr<int64_t>();
+    float3 *p_cloned = (float3 *)cloned_ref_tensor.data_ptr<float>();
+    int64_t *p_inds = ref_indices_tensor.data_ptr<int64_t>();
 
-    kdtree::build(
-        num_reference_points,
-        p_cloned,
-        p_inds);
+    kdtree::build(num_reference_points, p_cloned, p_inds);
 
     one_sided_chamfer_distance_kernel<<<blocks, threads, 0, stream>>>(
-        num_query_points,
-        query_points,
-        num_reference_points,
-        p_cloned,
-        p_inds,
-        distances,
-        indices);
+        num_query_points, query_points, num_reference_points, p_cloned, p_inds, distances, indices);
 }
 
 /**
@@ -193,15 +160,10 @@ void one_sided_chamfer_distance(
  * @param[out] grad_reference Device array of $M$ reference point gradients (nullptr if not needed).
  */
 __global__ void one_sided_chamfer_distance_backward_kernel(
-    const uint32_t num_query_points,
-    const float3* __restrict__ query_points,
-    const uint32_t num_reference_points,
-    const float3* __restrict__ reference_points,
-    const int64_t* __restrict__ indices,
-    const float* __restrict__ grad_distances,
-    const bool squared,
-    float3* __restrict__ grad_query,
-    float3* __restrict__ grad_reference)
+    const uint32_t num_query_points, const float3 *__restrict__ query_points, const uint32_t num_reference_points,
+    const float3 *__restrict__ reference_points, const int64_t *__restrict__ indices,
+    const float *__restrict__ grad_distances, const bool squared, float3 *__restrict__ grad_query,
+    float3 *__restrict__ grad_reference)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_query_points)
@@ -247,16 +209,12 @@ __global__ void one_sided_chamfer_distance_backward_kernel(
     }
 }
 
-void one_sided_chamfer_distance_backward(
-    const uint32_t num_query_points,
-    const float3* __restrict__ query_points,
-    const uint32_t num_reference_points,
-    const float3* __restrict__ reference_points,
-    const int64_t* __restrict__ indices,
-    const float* __restrict__ grad_distances,
-    const bool squared,
-    float3* __restrict__ grad_query,
-    float3* __restrict__ grad_reference)
+void one_sided_chamfer_distance_backward(const uint32_t num_query_points, const float3 *__restrict__ query_points,
+                                         const uint32_t num_reference_points,
+                                         const float3 *__restrict__ reference_points,
+                                         const int64_t *__restrict__ indices, const float *__restrict__ grad_distances,
+                                         const bool squared, float3 *__restrict__ grad_query,
+                                         float3 *__restrict__ grad_reference)
 {
     if (num_query_points == 0)
         return;
@@ -279,13 +237,6 @@ void one_sided_chamfer_distance_backward(
     uint32_t blocks = (num_query_points + threads - 1) / threads;
 
     one_sided_chamfer_distance_backward_kernel<<<blocks, threads, 0, stream>>>(
-        num_query_points,
-        query_points,
-        num_reference_points,
-        reference_points,
-        indices,
-        grad_distances,
-        squared,
-        grad_query,
-        grad_reference);
+        num_query_points, query_points, num_reference_points, reference_points, indices, grad_distances, squared,
+        grad_query, grad_reference);
 }

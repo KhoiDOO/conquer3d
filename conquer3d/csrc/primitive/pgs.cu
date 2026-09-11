@@ -17,7 +17,7 @@
 
 namespace pgs
 {
-/**
+    /**
  * @brief Solves the tangency radius of each periodic Gaussian against its neighbours.
  * @details One thread per Gaussian. Periodic Gaussians carry an orientation as well as a
  * covariance, so the support radius is the point at which a splat becomes tangent to its
@@ -37,19 +37,14 @@ namespace pgs
  * @warning Entries flagged in @p invalid_mask leave the matching @p isos value
  * unspecified; filter on the mask before use.
  */
-__global__ void solve_pgs_cluster_tangency_radius_kernel(
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ means,
-        const float3 *__restrict__ normals,
-        const float *__restrict__ covis,
-        const float3 *__restrict__ tree_points,
-        const int64_t *__restrict__ tree_inds,
-        const int k,
-        float *__restrict__ isos,
-        bool *__restrict__ invalid_mask)
+    __global__ void solve_pgs_cluster_tangency_radius_kernel(
+        const uint32_t num_gaussians, const float3 *__restrict__ means, const float3 *__restrict__ normals,
+        const float *__restrict__ covis, const float3 *__restrict__ tree_points, const int64_t *__restrict__ tree_inds,
+        const int k, float *__restrict__ isos, bool *__restrict__ invalid_mask)
     {
         uint32_t g_idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (g_idx >= num_gaussians) return;
+        if (g_idx >= num_gaussians)
+            return;
 
         float3 mean = means[g_idx];
         float3 normal = normals[g_idx];
@@ -58,8 +53,9 @@ __global__ void solve_pgs_cluster_tangency_radius_kernel(
         float best_dists[MAX_K];
         int64_t best_inds[MAX_K];
 
-        #pragma unroll
-        for (int i = 0; i < MAX_K; i++) {
+#pragma unroll
+        for (int i = 0; i < MAX_K; i++)
+        {
             best_dists[i] = FLT_MAX;
             best_inds[i] = -1;
         }
@@ -69,19 +65,23 @@ __global__ void solve_pgs_cluster_tangency_radius_kernel(
         float min_iso = FLT_MAX;
         bool any_success = false;
 
-        for (int i = 0; i < k; i++) {
+        for (int i = 0; i < k; i++)
+        {
             int64_t neighbor_idx = best_inds[i];
 
-            if (neighbor_idx == -1) continue;
+            if (neighbor_idx == -1)
+                continue;
 
-            if (neighbor_idx == g_idx) continue;
+            if (neighbor_idx == g_idx)
+                continue;
 
             float3 neighbor_mean = means[neighbor_idx];
             float3 neighbor_normal = normals[neighbor_idx];
 
             float iso;
             bool success = pgs::solve_pgs_pair_tangency_radius(mean, normal, covi, neighbor_mean, neighbor_normal, iso);
-            if (success) {
+            if (success)
+            {
                 min_iso = fminf(min_iso, iso);
                 any_success = true;
             }
@@ -91,38 +91,22 @@ __global__ void solve_pgs_cluster_tangency_radius_kernel(
         invalid_mask[g_idx] = !any_success;
     }
 
-    void solve_pgs_cluster_tangency_radius(
-        const uint32_t num_gaussians,
-        const float3 *__restrict__ means,
-        const float3 *__restrict__ normals,
-        const float *__restrict__ covis,
-        const int k,
-        float *__restrict__ isos,
-        bool *__restrict__ invalid_mask
-    )
+    void solve_pgs_cluster_tangency_radius(const uint32_t num_gaussians, const float3 *__restrict__ means,
+                                           const float3 *__restrict__ normals, const float *__restrict__ covis,
+                                           const int k, float *__restrict__ isos, bool *__restrict__ invalid_mask)
     {
         thrust::device_vector<float3> cloned_means(means, means + num_gaussians);
         thrust::device_vector<int64_t> oinds(num_gaussians);
         thrust::sequence(oinds.begin(), oinds.end());
 
-        kdtree::build(
-            num_gaussians,
-            thrust::raw_pointer_cast(cloned_means.data()),
-            thrust::raw_pointer_cast(oinds.data())
-        );
+        kdtree::build(num_gaussians, thrust::raw_pointer_cast(cloned_means.data()),
+                      thrust::raw_pointer_cast(oinds.data()));
 
         uint32_t threads = NTHREADS;
         uint32_t blocks = (num_gaussians + threads - 1) / threads;
 
         solve_pgs_cluster_tangency_radius_kernel<<<blocks, threads>>>(
-            num_gaussians,
-            means,
-            normals,
-            covis,
-            thrust::raw_pointer_cast(cloned_means.data()),
-            thrust::raw_pointer_cast(oinds.data()),
-            k,
-            isos,
-            invalid_mask);
+            num_gaussians, means, normals, covis, thrust::raw_pointer_cast(cloned_means.data()),
+            thrust::raw_pointer_cast(oinds.data()), k, isos, invalid_mask);
     }
-}
+} // namespace pgs

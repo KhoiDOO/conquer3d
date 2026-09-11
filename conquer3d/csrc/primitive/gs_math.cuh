@@ -25,18 +25,14 @@ namespace gs
      * @param[in] covi Upper-triangular packed inverse covariance array $\Sigma^{-1}$ of length 6.
      * @param[out] out_distance Computed squared Mahalanobis distance.
      */
-    __device__ __forceinline__ void compute_mahalanobis_distance(
-        const float3 &point,
-        const float3 &mean,
-        const float *covi,
-        float &out_distance)
+    __device__ __forceinline__ void compute_mahalanobis_distance(const float3 &point, const float3 &mean,
+                                                                 const float *covi, float &out_distance)
     {
         float3 d = point - mean;
 
-        out_distance = 
-            d.x * (d.x * covi[0] + d.y * covi[1] + d.z * covi[2]) + 
-            d.y * (d.x * covi[1] + d.y * covi[3] + d.z * covi[4]) +
-            d.z * (d.x * covi[2] + d.y * covi[4] + d.z * covi[5]);
+        out_distance = d.x * (d.x * covi[0] + d.y * covi[1] + d.z * covi[2]) +
+                       d.y * (d.x * covi[1] + d.y * covi[3] + d.z * covi[4]) +
+                       d.z * (d.x * covi[2] + d.y * covi[4] + d.z * covi[5]);
     }
 
     /**
@@ -48,12 +44,8 @@ namespace gs
      * @param[in] opacity Gaussian opacity scaling factor $\alpha$.
      * @param[out] out_density Computed scalar density clamped to zero for $d^2 > 30$.
      */
-    __device__ __forceinline__ void compute_density(
-        const float3 &point,
-        const float3 &mean,
-        const float *covi,
-        const float opacity,
-        float &out_density)
+    __device__ __forceinline__ void compute_density(const float3 &point, const float3 &mean, const float *covi,
+                                                    const float opacity, float &out_density)
     {
         float mahal_dist;
         compute_mahalanobis_distance(point, mean, covi, mahal_dist);
@@ -73,11 +65,8 @@ namespace gs
     /**
      * @brief Evaluates local-origin Gaussian density $\rho(p) = \alpha \exp(-\frac{1}{2} p^T \Sigma^{-1} p)$.
      */
-    __device__ __forceinline__ void compute_density_local(
-        const float3 &point,
-        const float *covi,
-        const float opacity,
-        float &out_density)
+    __device__ __forceinline__ void compute_density_local(const float3 &point, const float *covi, const float opacity,
+                                                          float &out_density)
     {
         float mahal_dist;
         compute_mahalanobis_distance(point, make_float3(0.0f, 0.0f, 0.0f), covi, mahal_dist);
@@ -96,14 +85,10 @@ namespace gs
     /**
      * @brief Computes diagonal inverse scale matrix $S^{-1} = \text{diag}(1/s_x, 1/s_y, 1/s_z)$.
      */
-    __device__ __forceinline__ void compute_inverse_scale(
-        const float3 &scale, 
-        float3x3 &out_inv_scale
-    ) {
-        out_inv_scale = make_float3x3(
-            1.0f / scale.x, 0.0f, 0.0f,
-            0.0f, 1.0f / scale.y, 0.0f,
-            0.0f, 0.0f, 1.0f / scale.z);
+    __device__ __forceinline__ void compute_inverse_scale(const float3 &scale, float3x3 &out_inv_scale)
+    {
+        out_inv_scale =
+            make_float3x3(1.0f / scale.x, 0.0f, 0.0f, 0.0f, 1.0f / scale.y, 0.0f, 0.0f, 0.0f, 1.0f / scale.z);
     }
 
     /**
@@ -114,12 +99,9 @@ namespace gs
      * @param[in] rotnorm Whether to normalize quaternion before conversion.
      * @param[in] transpose Whether to output transposed rotation matrix $R^T$.
      */
-    __device__ __forceinline__ void compute_rotation(
-        const float4 &rot,
-        float3x3 &out_rotation,
-        const bool rotnorm,
-        const bool transpose
-    ) {
+    __device__ __forceinline__ void compute_rotation(const float4 &rot, float3x3 &out_rotation, const bool rotnorm,
+                                                     const bool transpose)
+    {
         float4 q = rot;
         float r = q.x;
         float x = q.y;
@@ -137,25 +119,23 @@ namespace gs
 
         if (transpose)
         {
-            out_rotation = make_float3x3(
-                1.f - 2.f * (y * y + z * z), 2.f * (x * y + r * z), 2.f * (x * z - r * y),
-                2.f * (x * y - r * z), 1.f - 2.f * (x * x + z * z), 2.f * (y * z + r * x),
-                2.f * (x * z + r * y), 2.f * (y * z - r * x), 1.f - 2.f * (x * x + y * y));
-        } else {
-            out_rotation = make_float3x3(
-                1.f - 2.f * (y * y + z * z), 2.f * (x * y - r * z), 2.f * (x * z + r * y),
-                2.f * (x * y + r * z), 1.f - 2.f * (x * x + z * z), 2.f * (y * z - r * x),
-                2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f * (x * x + y * y));
+            out_rotation = make_float3x3(1.f - 2.f * (y * y + z * z), 2.f * (x * y + r * z), 2.f * (x * z - r * y),
+                                         2.f * (x * y - r * z), 1.f - 2.f * (x * x + z * z), 2.f * (y * z + r * x),
+                                         2.f * (x * z + r * y), 2.f * (y * z - r * x), 1.f - 2.f * (x * x + y * y));
+        }
+        else
+        {
+            out_rotation = make_float3x3(1.f - 2.f * (y * y + z * z), 2.f * (x * y - r * z), 2.f * (x * z + r * y),
+                                         2.f * (x * y + r * z), 1.f - 2.f * (x * x + z * z), 2.f * (y * z - r * x),
+                                         2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f * (x * x + y * y));
         }
     }
 
     /**
      * @brief Computes 3D inverse covariance matrix $\Sigma^{-1} = R S^{-2} R^T$.
      */
-    __device__ __forceinline__ void compute_cov_inverse(
-        const float3x3 &inv_scale,
-        const float3x3 &rotation_transpose,
-        float *covi)
+    __device__ __forceinline__ void compute_cov_inverse(const float3x3 &inv_scale, const float3x3 &rotation_transpose,
+                                                        float *covi)
     {
         // M = S^{-1} R^T
         float3x3 M = inv_scale * rotation_transpose;
@@ -190,27 +170,19 @@ namespace gs
      *
      * @return bool True if segment intersects the ellipsoid within $t \in [0, 1]$.
      */
-    __device__ __forceinline__ bool test_gs_segment(
-        const float c0, const float c1, const float c2,
-        const float c3, const float c4, const float c5,
-        const float iso,
-        const float3 &segment_start,
-        const float3 &segment_end,
-        const bool return_t,
-        float &t_entry, float &t_exit
-    )
+    __device__ __forceinline__ bool test_gs_segment(const float c0, const float c1, const float c2, const float c3,
+                                                    const float c4, const float c5, const float iso,
+                                                    const float3 &segment_start, const float3 &segment_end,
+                                                    const bool return_t, float &t_entry, float &t_exit)
     {
         float3 d = segment_end - segment_start;
 
-        float3 v_d = make_float3(
-            c0 * d.x + c1 * d.y + c2 * d.z,
-            c1 * d.x + c3 * d.y + c4 * d.z,
-            c2 * d.x + c4 * d.y + c5 * d.z);
+        float3 v_d =
+            make_float3(c0 * d.x + c1 * d.y + c2 * d.z, c1 * d.x + c3 * d.y + c4 * d.z, c2 * d.x + c4 * d.y + c5 * d.z);
 
-        float3 v_p0 = make_float3(
-            c0 * segment_start.x + c1 * segment_start.y + c2 * segment_start.z,
-            c1 * segment_start.x + c3 * segment_start.y + c4 * segment_start.z,
-            c2 * segment_start.x + c4 * segment_start.y + c5 * segment_start.z);
+        float3 v_p0 = make_float3(c0 * segment_start.x + c1 * segment_start.y + c2 * segment_start.z,
+                                  c1 * segment_start.x + c3 * segment_start.y + c4 * segment_start.z,
+                                  c2 * segment_start.x + c4 * segment_start.y + c5 * segment_start.z);
 
         float a = maths::dot(d, v_d);
         float b = 2.0f * maths::dot(segment_start, v_d);
@@ -234,7 +206,7 @@ namespace gs
 
             return !(1.0f <= t_entry || t_exit <= 0.0f);
         }
-        
+
         if (return_t)
         {
             t_entry = -1.0f;
@@ -243,6 +215,6 @@ namespace gs
 
         return false;
     }
-}
+} // namespace gs
 
 #endif // GS_MATH_CUH

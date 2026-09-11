@@ -36,14 +36,19 @@ typedef struct
  * @brief Constructs a matrix from its nine elements in row-major order.
  * @return The assembled matrix.
  */
-static __inline__ __host__ __device__ float3x3 make_float3x3(
-    float a00, float a01, float a02,
-    float a10, float a11, float a12,
-    float a20, float a21, float a22) {
+static __inline__ __host__ __device__ float3x3 make_float3x3(float a00, float a01, float a02, float a10, float a11,
+                                                             float a12, float a20, float a21, float a22)
+{
     float3x3 a;
-    a.m[0][0] = a00; a.m[0][1] = a01; a.m[0][2] = a02;
-    a.m[1][0] = a10; a.m[1][1] = a11; a.m[1][2] = a12;
-    a.m[2][0] = a20; a.m[2][1] = a21; a.m[2][2] = a22;
+    a.m[0][0] = a00;
+    a.m[0][1] = a01;
+    a.m[0][2] = a02;
+    a.m[1][0] = a10;
+    a.m[1][1] = a11;
+    a.m[1][2] = a12;
+    a.m[2][0] = a20;
+    a.m[2][1] = a21;
+    a.m[2][2] = a22;
     return a;
 }
 
@@ -54,7 +59,7 @@ static __inline__ __host__ __device__ float3x3 make_float3x3(
  * @param[in] b Right operand.
  * @return The product $\mathbf{a}\mathbf{b}$.
  */
-static __inline__ __host__ __device__ float3x3 operator* (const float3x3& a, const float3x3& b)
+static __inline__ __host__ __device__ float3x3 operator*(const float3x3 &a, const float3x3 &b)
 {
     float3x3 c;
 
@@ -80,12 +85,11 @@ static __inline__ __host__ __device__ float3x3 operator* (const float3x3& a, con
  * @param[in] m Matrix operand.
  * @return The vector $\mathbf{a}\mathbf{m}$.
  */
-static __inline__ __host__ __device__ float3 operator*(const float3& a, const float3x3& m) {
-    return make_float3(
-        a.x * m.m[0][0] + a.y * m.m[1][0] + a.z * m.m[2][0],
-        a.x * m.m[0][1] + a.y * m.m[1][1] + a.z * m.m[2][1],
-        a.x * m.m[0][2] + a.y * m.m[1][2] + a.z * m.m[2][2]
-    );
+static __inline__ __host__ __device__ float3 operator*(const float3 &a, const float3x3 &m)
+{
+    return make_float3(a.x * m.m[0][0] + a.y * m.m[1][0] + a.z * m.m[2][0],
+                       a.x * m.m[0][1] + a.y * m.m[1][1] + a.z * m.m[2][1],
+                       a.x * m.m[0][2] + a.y * m.m[1][2] + a.z * m.m[2][2]);
 }
 
 // [3, 3] x [3, 1] = [3, 1]
@@ -95,12 +99,11 @@ static __inline__ __host__ __device__ float3 operator*(const float3& a, const fl
  * @param[in] a Column vector.
  * @return The vector $\mathbf{m}\mathbf{a}$.
  */
-static __inline__ __host__ __device__ float3 operator*(const float3x3& m, const float3& a) {
-    return make_float3(
-        m.m[0][0] * a.x + m.m[0][1] * a.y + m.m[0][2] * a.z,
-        m.m[1][0] * a.x + m.m[1][1] * a.y + m.m[1][2] * a.z,
-        m.m[2][0] * a.x + m.m[2][1] * a.y + m.m[2][2] * a.z
-    );
+static __inline__ __host__ __device__ float3 operator*(const float3x3 &m, const float3 &a)
+{
+    return make_float3(m.m[0][0] * a.x + m.m[0][1] * a.y + m.m[0][2] * a.z,
+                       m.m[1][0] * a.x + m.m[1][1] * a.y + m.m[1][2] * a.z,
+                       m.m[2][0] * a.x + m.m[2][1] * a.y + m.m[2][2] * a.z);
 }
 
 namespace maths
@@ -112,11 +115,18 @@ namespace maths
      * @note For a rotation matrix the transpose is also the inverse, which is why
      * invert() is rarely needed on one.
      */
-    static __inline__ __host__ __device__ float3x3 transpose(const float3x3& a) {
+    static __inline__ __host__ __device__ float3x3 transpose(const float3x3 &a)
+    {
         float3x3 b;
-        b.m[0][0] = a.m[0][0]; b.m[0][1] = a.m[1][0]; b.m[0][2] = a.m[2][0];
-        b.m[1][0] = a.m[0][1]; b.m[1][1] = a.m[1][1]; b.m[1][2] = a.m[2][1];
-        b.m[2][0] = a.m[0][2]; b.m[2][1] = a.m[1][2]; b.m[2][2] = a.m[2][2];
+        b.m[0][0] = a.m[0][0];
+        b.m[0][1] = a.m[1][0];
+        b.m[0][2] = a.m[2][0];
+        b.m[1][0] = a.m[0][1];
+        b.m[1][1] = a.m[1][1];
+        b.m[1][2] = a.m[2][1];
+        b.m[2][0] = a.m[0][2];
+        b.m[2][1] = a.m[1][2];
+        b.m[2][2] = a.m[2][2];
         return b;
     }
 
@@ -127,10 +137,11 @@ namespace maths
      * @details Computed by cofactor expansion along the first row. The sign also reports
      * orientation: a negative determinant means the transform mirrors handedness.
      */
-    static __inline__ __host__ __device__ float det(const float3x3& a) {
-        return a.m[0][0] * (a.m[1][1] * a.m[2][2] - a.m[1][2] * a.m[2][1])
-            - a.m[0][1] * (a.m[1][0] * a.m[2][2] - a.m[1][2] * a.m[2][0])
-            + a.m[0][2] * (a.m[1][0] * a.m[2][1] - a.m[1][1] * a.m[2][0]);
+    static __inline__ __host__ __device__ float det(const float3x3 &a)
+    {
+        return a.m[0][0] * (a.m[1][1] * a.m[2][2] - a.m[1][2] * a.m[2][1]) -
+               a.m[0][1] * (a.m[1][0] * a.m[2][2] - a.m[1][2] * a.m[2][0]) +
+               a.m[0][2] * (a.m[1][0] * a.m[2][1] - a.m[1][1] * a.m[2][0]);
     }
 
     /**
@@ -138,10 +149,17 @@ namespace maths
      * @param[out] a Destination matrix.
      * @param[in] b Source matrix.
      */
-    static inline __host__ __device__ void copy(float3x3 &a, float3x3 b) {
-        a.m[0][0] = b.m[0][0]; a.m[0][1] = b.m[0][1]; a.m[0][2] = b.m[0][2];
-        a.m[1][0] = b.m[1][0]; a.m[1][1] = b.m[1][1]; a.m[1][2] = b.m[1][2];
-        a.m[2][0] = b.m[2][0]; a.m[2][1] = b.m[2][1]; a.m[2][2] = b.m[2][2];
+    static inline __host__ __device__ void copy(float3x3 &a, float3x3 b)
+    {
+        a.m[0][0] = b.m[0][0];
+        a.m[0][1] = b.m[0][1];
+        a.m[0][2] = b.m[0][2];
+        a.m[1][0] = b.m[1][0];
+        a.m[1][1] = b.m[1][1];
+        a.m[1][2] = b.m[1][2];
+        a.m[2][0] = b.m[2][0];
+        a.m[2][1] = b.m[2][1];
+        a.m[2][2] = b.m[2][2];
     }
 
     /**
@@ -153,7 +171,7 @@ namespace maths
      * @return True on success, false when the determinant is too close to zero.
      * @note Always check the return value before reading @p out_inv.
      */
-    static __host__ __device__ __forceinline__ bool invert(const float3x3& m, float3x3& out_inv) 
+    static __host__ __device__ __forceinline__ bool invert(const float3x3 &m, float3x3 &out_inv)
     {
         float a = m.m[0][0], b = m.m[0][1], c = m.m[0][2];
         float d = m.m[1][0], e = m.m[1][1], f = m.m[1][2];
@@ -165,7 +183,8 @@ namespace maths
 
         float det_val = a * A + b * B + c * C;
 
-        if (fabsf(det_val) < 1e-8f) return false; 
+        if (fabsf(det_val) < 1e-8f)
+            return false;
 
         float inv_det = 1.0f / det_val;
 
@@ -181,5 +200,5 @@ namespace maths
 
         return true;
     }
-}
+} // namespace maths
 #endif // F3X3_H

@@ -6,9 +6,7 @@
 
 namespace py = pybind11;
 
-torch::Tensor MeshBVH::get_self_intersection(
-    const torch::Tensor &vertices,
-    const torch::Tensor &triangles)
+torch::Tensor MeshBVH::get_self_intersection(const torch::Tensor &vertices, const torch::Tensor &triangles)
 {
     // 1. Broad-phase AABB overlap query
     auto [query_ids, object_ids] = this->query_self();
@@ -25,15 +23,10 @@ torch::Tensor MeshBVH::get_self_intersection(
     torch::Tensor out_object_ids = torch::empty({num_pairs}, options_i64);
     torch::Tensor valid_counter = torch::zeros({1}, options_i64);
 
-    mesh_bvh::filter_self_intersections(
-        num_pairs,
-        query_ids.data_ptr<int64_t>(),
-        object_ids.data_ptr<int64_t>(),
-        (const float3 *)vertices.data_ptr<float>(),
-        (const int3 *)triangles.data_ptr<int>(),
-        out_query_ids.data_ptr<int64_t>(),
-        out_object_ids.data_ptr<int64_t>(),
-        valid_counter.data_ptr<int64_t>());
+    mesh_bvh::filter_self_intersections(num_pairs, query_ids.data_ptr<int64_t>(), object_ids.data_ptr<int64_t>(),
+                                        (const float3 *)vertices.data_ptr<float>(),
+                                        (const int3 *)triangles.data_ptr<int>(), out_query_ids.data_ptr<int64_t>(),
+                                        out_object_ids.data_ptr<int64_t>(), valid_counter.data_ptr<int64_t>());
 
     int64_t h_valid_counter = valid_counter.item<int64_t>();
 
@@ -48,20 +41,15 @@ torch::Tensor MeshBVH::get_self_intersection(
     return torch::cat({out_query_ids, out_object_ids}, 1);
 }
 
-bool MeshBVH::is_self_intersection(
-    const torch::Tensor &vertices,
-    const torch::Tensor &triangles)
+bool MeshBVH::is_self_intersection(const torch::Tensor &vertices, const torch::Tensor &triangles)
 {
     torch::Tensor pairs = this->get_self_intersection(vertices, triangles);
     return pairs.size(0) > 0;
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::get_ray_intersection(
-    const torch::Tensor &ray_origins,
-    const torch::Tensor &ray_dirs,
-    const torch::Tensor &vertices,
-    const torch::Tensor &triangles,
-    bool return_distance)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+MeshBVH::get_ray_intersection(const torch::Tensor &ray_origins, const torch::Tensor &ray_dirs,
+                              const torch::Tensor &vertices, const torch::Tensor &triangles, bool return_distance)
 {
     // 1. Broad-phase BVH query
     auto [query_ids, object_ids] = this->query_ray(ray_origins, ray_dirs);
@@ -72,11 +60,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
 
     if (num_pairs == 0)
     {
-        return std::make_tuple(
-            torch::empty({0}, options_i64),
-            torch::empty({0}, options_i64),
-            torch::empty({0, 3}, options_f32),
-            torch::empty({0}, options_f32));
+        return std::make_tuple(torch::empty({0}, options_i64), torch::empty({0}, options_i64),
+                               torch::empty({0, 3}, options_f32), torch::empty({0}, options_f32));
     }
 
     // 2. Narrow-phase intersection
@@ -97,62 +82,41 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::
     torch::Tensor valid_counter = torch::zeros({1}, options_i64);
 
     mesh_bvh::filter_ray_triangle_intersections(
-        num_pairs,
-        query_ids.data_ptr<int64_t>(),
-        object_ids.data_ptr<int64_t>(),
-        (const float3 *)ray_origins.data_ptr<float>(),
-        (const float3 *)ray_dirs.data_ptr<float>(),
-        (const float3 *)vertices.data_ptr<float>(),
-        (const int3 *)triangles.data_ptr<int>(),
-        out_query_ids.data_ptr<int64_t>(),
-        out_object_ids.data_ptr<int64_t>(),
-        (float3 *)out_intersect_pts.data_ptr<float>(),
-        return_distance ? out_distances.data_ptr<float>() : nullptr,
-        return_distance,
-        valid_counter.data_ptr<int64_t>());
+        num_pairs, query_ids.data_ptr<int64_t>(), object_ids.data_ptr<int64_t>(),
+        (const float3 *)ray_origins.data_ptr<float>(), (const float3 *)ray_dirs.data_ptr<float>(),
+        (const float3 *)vertices.data_ptr<float>(), (const int3 *)triangles.data_ptr<int>(),
+        out_query_ids.data_ptr<int64_t>(), out_object_ids.data_ptr<int64_t>(),
+        (float3 *)out_intersect_pts.data_ptr<float>(), return_distance ? out_distances.data_ptr<float>() : nullptr,
+        return_distance, valid_counter.data_ptr<int64_t>());
 
     int64_t h_valid_counter = valid_counter.item<int64_t>();
 
     if (h_valid_counter == 0)
     {
-        return std::make_tuple(
-            torch::empty({0}, options_i64),
-            torch::empty({0}, options_i64),
-            torch::empty({0, 3}, options_f32),
-            torch::empty({0}, options_f32));
+        return std::make_tuple(torch::empty({0}, options_i64), torch::empty({0}, options_i64),
+                               torch::empty({0, 3}, options_f32), torch::empty({0}, options_f32));
     }
 
-    return std::make_tuple(
-        out_query_ids.slice(0, 0, h_valid_counter),
-        out_object_ids.slice(0, 0, h_valid_counter),
-        out_intersect_pts.slice(0, 0, h_valid_counter),
-        return_distance ? out_distances.slice(0, 0, h_valid_counter) : out_distances);
+    return std::make_tuple(out_query_ids.slice(0, 0, h_valid_counter), out_object_ids.slice(0, 0, h_valid_counter),
+                           out_intersect_pts.slice(0, 0, h_valid_counter),
+                           return_distance ? out_distances.slice(0, 0, h_valid_counter) : out_distances);
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> MeshBVH::query_point(
-    const torch::Tensor &query_points,
-    const torch::Tensor &vertices,
-    const torch::Tensor &triangles,
-    bool return_sdf,
-    bool return_prj_pts,
-    int sign_mode,
-    std::optional<torch::Tensor> triangle_normals,
-    std::optional<torch::Tensor> vertex_normals,
-    std::optional<torch::Tensor> edge_normals,
-    std::optional<torch::Tensor> flood_fill_mask,
-    std::optional<std::vector<float>> flood_grid_min,
-    std::optional<std::vector<float>> flood_grid_max,
-    std::optional<std::vector<int64_t>> flood_grid_res,
-    std::optional<torch::Tensor> cf_coarse_mask,
-    std::optional<torch::Tensor> cf_boundary_lookup,
-    std::optional<torch::Tensor> cf_fine_masks,
-    std::optional<std::vector<int64_t>> cf_block_size,
-    std::optional<std::vector<int64_t>> cf_coarse_res,
-    bool return_occ)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+MeshBVH::query_point(const torch::Tensor &query_points, const torch::Tensor &vertices, const torch::Tensor &triangles,
+                     bool return_sdf, bool return_prj_pts, int sign_mode, std::optional<torch::Tensor> triangle_normals,
+                     std::optional<torch::Tensor> vertex_normals, std::optional<torch::Tensor> edge_normals,
+                     std::optional<torch::Tensor> flood_fill_mask, std::optional<std::vector<float>> flood_grid_min,
+                     std::optional<std::vector<float>> flood_grid_max,
+                     std::optional<std::vector<int64_t>> flood_grid_res, std::optional<torch::Tensor> cf_coarse_mask,
+                     std::optional<torch::Tensor> cf_boundary_lookup, std::optional<torch::Tensor> cf_fine_masks,
+                     std::optional<std::vector<int64_t>> cf_block_size,
+                     std::optional<std::vector<int64_t>> cf_coarse_res, bool return_occ)
 {
     if (sign_mode != 0 && sign_mode != 1 && sign_mode != 2 && sign_mode != 3 && sign_mode != 4 && sign_mode != 5)
     {
-        throw std::runtime_error("sign_mode must be 0 (ray casting), 1 (fast winding number), 2 (pseudonormals), 3 (flood fill), 4 (hybrid WN + pseudonormal), or 5 (coarse-to-fine flood fill)");
+        throw std::runtime_error("sign_mode must be 0 (ray casting), 1 (fast winding number), 2 (pseudonormals), 3 "
+                                 "(flood fill), 4 (hybrid WN + pseudonormal), or 5 (coarse-to-fine flood fill)");
     }
 
     if ((sign_mode == 1 || sign_mode == 4) && !this->has_winding_data)
@@ -163,47 +127,46 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
     torch::Tensor use_tri_normals, use_vert_normals, use_edge_normals;
     if (sign_mode == 2 || sign_mode == 4)
     {
-        if (triangle_normals.has_value() && triangle_normals->defined()) {
+        if (triangle_normals.has_value() && triangle_normals->defined())
+        {
             use_tri_normals = *triangle_normals;
-        } else {
+        }
+        else
+        {
             int num_tri = triangles.size(0);
             auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device());
             use_tri_normals = torch::empty({num_tri, 3}, options_f32);
-            triangle_mesh::compute_triangle_normals(
-                num_tri,
-                (const float3 *)vertices.data_ptr<float>(),
-                (const int3 *)triangles.data_ptr<int>(),
-                (float3 *)use_tri_normals.data_ptr<float>());
+            triangle_mesh::compute_triangle_normals(num_tri, (const float3 *)vertices.data_ptr<float>(),
+                                                    (const int3 *)triangles.data_ptr<int>(),
+                                                    (float3 *)use_tri_normals.data_ptr<float>());
         }
 
-        if (vertex_normals.has_value() && vertex_normals->defined()) {
+        if (vertex_normals.has_value() && vertex_normals->defined())
+        {
             use_vert_normals = *vertex_normals;
-        } else {
+        }
+        else
+        {
             int num_vert = vertices.size(0);
             int num_tri = triangles.size(0);
             auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device());
             use_vert_normals = torch::zeros({num_vert, 3}, options_f32);
             triangle_mesh::compute_vertex_normals(
-                num_vert,
-                num_tri,
-                (const float3 *)vertices.data_ptr<float>(),
-                (const int3 *)triangles.data_ptr<int>(),
-                (const float3 *)use_tri_normals.data_ptr<float>(),
-                (float3 *)use_vert_normals.data_ptr<float>(),
-                1);
+                num_vert, num_tri, (const float3 *)vertices.data_ptr<float>(), (const int3 *)triangles.data_ptr<int>(),
+                (const float3 *)use_tri_normals.data_ptr<float>(), (float3 *)use_vert_normals.data_ptr<float>(), 1);
         }
 
-        if (edge_normals.has_value() && edge_normals->defined()) {
+        if (edge_normals.has_value() && edge_normals->defined())
+        {
             use_edge_normals = *edge_normals;
-        } else {
+        }
+        else
+        {
             int num_tri = triangles.size(0);
             auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(vertices.device());
             use_edge_normals = torch::empty({num_tri * 3, 3}, options_f32);
-            triangle_mesh::compute_edge_normals(
-                num_tri,
-                triangles,
-                (const float3 *)use_tri_normals.data_ptr<float>(),
-                (float3 *)use_edge_normals.data_ptr<float>());
+            triangle_mesh::compute_edge_normals(num_tri, triangles, (const float3 *)use_tri_normals.data_ptr<float>(),
+                                                (float3 *)use_edge_normals.data_ptr<float>());
         }
     }
 
@@ -235,9 +198,11 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 
     if (sign_mode == 3)
     {
-        if (!flood_fill_mask.has_value() || !flood_fill_mask->defined() || !flood_grid_min.has_value() || !flood_grid_max.has_value() || !flood_grid_res.has_value())
+        if (!flood_fill_mask.has_value() || !flood_fill_mask->defined() || !flood_grid_min.has_value() ||
+            !flood_grid_max.has_value() || !flood_grid_res.has_value())
         {
-            throw std::runtime_error("For sign_mode == 3 (flood fill), flood fill data must be provided or built beforehand.");
+            throw std::runtime_error(
+                "For sign_mode == 3 (flood fill), flood fill data must be provided or built beforehand.");
         }
         p_flood_mask = flood_fill_mask->data_ptr<int8_t>();
         f_min = make_float3(flood_grid_min->at(0), flood_grid_min->at(1), flood_grid_min->at(2));
@@ -245,72 +210,59 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
         int64_t ry = flood_grid_res->at(1);
         int64_t rz = flood_grid_res->at(2);
         f_dims = make_int3(static_cast<int>(rx), static_cast<int>(ry), static_cast<int>(rz));
-        f_spacing = make_float3(
-            (rx > 1) ? (flood_grid_max->at(0) - flood_grid_min->at(0)) / (rx - 1) : 1.0f,
-            (ry > 1) ? (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1) : 1.0f,
-            (rz > 1) ? (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1) : 1.0f
-        );
+        f_spacing = make_float3((rx > 1) ? (flood_grid_max->at(0) - flood_grid_min->at(0)) / (rx - 1) : 1.0f,
+                                (ry > 1) ? (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1) : 1.0f,
+                                (rz > 1) ? (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1) : 1.0f);
     }
     else if (sign_mode == 5)
     {
-        if (!cf_coarse_mask.has_value() || !cf_coarse_mask->defined() || !flood_grid_min.has_value() || !flood_grid_max.has_value() || !flood_grid_res.has_value())
+        if (!cf_coarse_mask.has_value() || !cf_coarse_mask->defined() || !flood_grid_min.has_value() ||
+            !flood_grid_max.has_value() || !flood_grid_res.has_value())
         {
-            throw std::runtime_error("For sign_mode == 5 (coarse-to-fine flood fill), CF flood fill data must be provided or built beforehand.");
+            throw std::runtime_error("For sign_mode == 5 (coarse-to-fine flood fill), CF flood fill data must be "
+                                     "provided or built beforehand.");
         }
         p_cf_coarse_mask = cf_coarse_mask->data_ptr<int8_t>();
-        if (cf_boundary_lookup.has_value() && cf_boundary_lookup->defined()) {
+        if (cf_boundary_lookup.has_value() && cf_boundary_lookup->defined())
+        {
             p_cf_boundary_lookup = cf_boundary_lookup->data_ptr<int32_t>();
         }
-        if (cf_fine_masks.has_value() && cf_fine_masks->defined()) {
+        if (cf_fine_masks.has_value() && cf_fine_masks->defined())
+        {
             p_cf_fine_masks = cf_fine_masks->data_ptr<int8_t>();
         }
         f_min = make_float3(flood_grid_min->at(0), flood_grid_min->at(1), flood_grid_min->at(2));
         int64_t rx = flood_grid_res->at(0);
         int64_t ry = flood_grid_res->at(1);
         int64_t rz = flood_grid_res->at(2);
-        f_spacing = make_float3(
-            (rx > 1) ? (flood_grid_max->at(0) - flood_grid_min->at(0)) / (rx - 1) : 1.0f,
-            (ry > 1) ? (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1) : 1.0f,
-            (rz > 1) ? (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1) : 1.0f
-        );
-        if (cf_block_size.has_value() && cf_block_size->size() >= 3) {
-            cf_bs = make_int3(static_cast<int>(cf_block_size->at(0)), static_cast<int>(cf_block_size->at(1)), static_cast<int>(cf_block_size->at(2)));
+        f_spacing = make_float3((rx > 1) ? (flood_grid_max->at(0) - flood_grid_min->at(0)) / (rx - 1) : 1.0f,
+                                (ry > 1) ? (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1) : 1.0f,
+                                (rz > 1) ? (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1) : 1.0f);
+        if (cf_block_size.has_value() && cf_block_size->size() >= 3)
+        {
+            cf_bs = make_int3(static_cast<int>(cf_block_size->at(0)), static_cast<int>(cf_block_size->at(1)),
+                              static_cast<int>(cf_block_size->at(2)));
         }
-        if (cf_coarse_res.has_value() && cf_coarse_res->size() >= 3) {
-            cf_cd = make_int3(static_cast<int>(cf_coarse_res->at(0)), static_cast<int>(cf_coarse_res->at(1)), static_cast<int>(cf_coarse_res->at(2)));
+        if (cf_coarse_res.has_value() && cf_coarse_res->size() >= 3)
+        {
+            cf_cd = make_int3(static_cast<int>(cf_coarse_res->at(0)), static_cast<int>(cf_coarse_res->at(1)),
+                              static_cast<int>(cf_coarse_res->at(2)));
         }
     }
 
     mesh_bvh::query_point_mesh_bvh(
-        num_queries,
-        num_objects,
-        (const float3 *)query_points.data_ptr<float>(),
-        (const float3 *)vertices.data_ptr<float>(),
-        (const int3 *)triangles.data_ptr<int>(),
-        (const float3 *)this->aabb_mins.data_ptr<float>(),
-        (const float3 *)this->aabb_maxs.data_ptr<float>(),
-        (const int2 *)this->bvh_children.data_ptr<int>(),
-        this->object_ids.data_ptr<int>(),
+        num_queries, num_objects, (const float3 *)query_points.data_ptr<float>(),
+        (const float3 *)vertices.data_ptr<float>(), (const int3 *)triangles.data_ptr<int>(),
+        (const float3 *)this->aabb_mins.data_ptr<float>(), (const float3 *)this->aabb_maxs.data_ptr<float>(),
+        (const int2 *)this->bvh_children.data_ptr<int>(), this->object_ids.data_ptr<int>(),
         this->has_winding_data ? (const WindingData *)this->winding_data.data_ptr() : nullptr,
         (sign_mode == 2 || sign_mode == 4) ? (const float3 *)use_vert_normals.data_ptr<float>() : nullptr,
         (sign_mode == 2 || sign_mode == 4) ? (const float3 *)use_edge_normals.data_ptr<float>() : nullptr,
         (sign_mode == 2 || sign_mode == 4) ? (const float3 *)use_tri_normals.data_ptr<float>() : nullptr,
-        out_query_ids.data_ptr<int64_t>(),
-        out_object_ids.data_ptr<int64_t>(),
-        return_prj_pts ? (float3 *)out_projected_pts.data_ptr<float>() : nullptr,
-        out_distances.data_ptr<float>(),
-        return_sdf,
-        return_prj_pts,
-        sign_mode,
-        p_flood_mask,
-        f_min,
-        f_spacing,
-        f_dims,
-        p_cf_coarse_mask,
-        p_cf_boundary_lookup,
-        p_cf_fine_masks,
-        cf_bs,
-        cf_cd);
+        out_query_ids.data_ptr<int64_t>(), out_object_ids.data_ptr<int64_t>(),
+        return_prj_pts ? (float3 *)out_projected_pts.data_ptr<float>() : nullptr, out_distances.data_ptr<float>(),
+        return_sdf, return_prj_pts, sign_mode, p_flood_mask, f_min, f_spacing, f_dims, p_cf_coarse_mask,
+        p_cf_boundary_lookup, p_cf_fine_masks, cf_bs, cf_cd);
 
     // Occupancy is defined once, here: a point is inside iff its signed distance is
     // negative. Points exactly on the surface yield -0.0f, which compares as outside.
@@ -324,11 +276,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
     return std::make_tuple(out_query_ids, out_object_ids, out_projected_pts, out_distances, out_occupancy);
 }
 
-torch::Tensor MeshBVH::query_voxel(
-    const torch::Tensor &query_mins,
-    const torch::Tensor &query_maxs,
-    const torch::Tensor &vertices,
-    const torch::Tensor &triangles)
+torch::Tensor MeshBVH::query_voxel(const torch::Tensor &query_mins, const torch::Tensor &query_maxs,
+                                   const torch::Tensor &vertices, const torch::Tensor &triangles)
 {
     int num_queries = query_mins.size(0);
     int num_objects = this->object_ids.size(0);
@@ -343,27 +292,18 @@ torch::Tensor MeshBVH::query_voxel(
     }
 
     mesh_bvh::query_voxel_mesh_bvh(
-        num_queries,
-        num_objects,
-        (const float3 *)query_mins.data_ptr<float>(),
-        (const float3 *)query_maxs.data_ptr<float>(),
-        (const float3 *)vertices.data_ptr<float>(),
-        (const int3 *)triangles.data_ptr<int>(),
-        (const float3 *)this->aabb_mins.data_ptr<float>(),
-        (const float3 *)this->aabb_maxs.data_ptr<float>(),
-        (const int2 *)this->bvh_children.data_ptr<int>(),
-        this->object_ids.data_ptr<int>(),
-        out_intersect.data_ptr<bool>());
+        num_queries, num_objects, (const float3 *)query_mins.data_ptr<float>(),
+        (const float3 *)query_maxs.data_ptr<float>(), (const float3 *)vertices.data_ptr<float>(),
+        (const int3 *)triangles.data_ptr<int>(), (const float3 *)this->aabb_mins.data_ptr<float>(),
+        (const float3 *)this->aabb_maxs.data_ptr<float>(), (const int2 *)this->bvh_children.data_ptr<int>(),
+        this->object_ids.data_ptr<int>(), out_intersect.data_ptr<bool>());
 
     return out_intersect;
 }
 
-torch::Tensor MeshBVH::get_active_voxel_ids_from_grid(
-    std::vector<float> grid_min,
-    std::vector<float> grid_max,
-    std::vector<int64_t> res,
-    const torch::Tensor &vertices,
-    const torch::Tensor &triangles)
+torch::Tensor MeshBVH::get_active_voxel_ids_from_grid(std::vector<float> grid_min, std::vector<float> grid_max,
+                                                      std::vector<int64_t> res, const torch::Tensor &vertices,
+                                                      const torch::Tensor &triangles)
 {
     int64_t rx = res[0] - 1;
     int64_t ry = res[1] - 1;
@@ -390,17 +330,10 @@ torch::Tensor MeshBVH::get_active_voxel_ids_from_grid(
     torch::Tensor active_counter = torch::zeros({1}, options_i64);
 
     mesh_bvh::count_active_voxels_mesh_bvh(
-        res_int,
-        g_min,
-        v_size,
-        num_objects,
-        (const float3 *)vertices.data_ptr<float>(),
-        (const int3 *)triangles.data_ptr<int>(),
-        (const float3 *)this->aabb_mins.data_ptr<float>(),
-        (const float3 *)this->aabb_maxs.data_ptr<float>(),
-        (const int2 *)this->bvh_children.data_ptr<int>(),
-        this->object_ids.data_ptr<int>(),
-        active_counter.data_ptr<int64_t>());
+        res_int, g_min, v_size, num_objects, (const float3 *)vertices.data_ptr<float>(),
+        (const int3 *)triangles.data_ptr<int>(), (const float3 *)this->aabb_mins.data_ptr<float>(),
+        (const float3 *)this->aabb_maxs.data_ptr<float>(), (const int2 *)this->bvh_children.data_ptr<int>(),
+        this->object_ids.data_ptr<int>(), active_counter.data_ptr<int64_t>());
 
     int64_t num_active = active_counter.item<int64_t>();
 
@@ -414,25 +347,15 @@ torch::Tensor MeshBVH::get_active_voxel_ids_from_grid(
     active_counter.zero_();
 
     mesh_bvh::collect_active_voxels_mesh_bvh(
-        res_int,
-        g_min,
-        v_size,
-        num_objects,
-        (const float3 *)vertices.data_ptr<float>(),
-        (const int3 *)triangles.data_ptr<int>(),
-        (const float3 *)this->aabb_mins.data_ptr<float>(),
-        (const float3 *)this->aabb_maxs.data_ptr<float>(),
-        (const int2 *)this->bvh_children.data_ptr<int>(),
-        this->object_ids.data_ptr<int>(),
-        active_counter.data_ptr<int64_t>(),
-        out_active_ids.data_ptr<int64_t>());
+        res_int, g_min, v_size, num_objects, (const float3 *)vertices.data_ptr<float>(),
+        (const int3 *)triangles.data_ptr<int>(), (const float3 *)this->aabb_mins.data_ptr<float>(),
+        (const float3 *)this->aabb_maxs.data_ptr<float>(), (const int2 *)this->bvh_children.data_ptr<int>(),
+        this->object_ids.data_ptr<int>(), active_counter.data_ptr<int64_t>(), out_active_ids.data_ptr<int64_t>());
 
     return out_active_ids;
 }
 
-void MeshBVH::build_winding_data(
-    const torch::Tensor &vertices,
-    const torch::Tensor &triangles)
+void MeshBVH::build_winding_data(const torch::Tensor &vertices, const torch::Tensor &triangles)
 {
     int num_objects = this->object_ids.size(0);
     int num_nodes = num_objects * 2 - 1;
@@ -441,19 +364,16 @@ void MeshBVH::build_winding_data(
     this->winding_data = torch::empty({num_nodes * (int64_t)sizeof(WindingData)}, options);
 
     mesh_bvh::bottom_up_winding_data(
-        num_objects,
-        this->object_ids.data_ptr<int>(),
-        (const float3 *)vertices.data_ptr<float>(),
-        (const int3 *)triangles.data_ptr<int>(),
-        this->bvh_parents.data_ptr<int>(),
-        (const int2 *)this->bvh_children.data_ptr<int>(),
-        (WindingData *)this->winding_data.data_ptr());
+        num_objects, this->object_ids.data_ptr<int>(), (const float3 *)vertices.data_ptr<float>(),
+        (const int3 *)triangles.data_ptr<int>(), this->bvh_parents.data_ptr<int>(),
+        (const int2 *)this->bvh_children.data_ptr<int>(), (WindingData *)this->winding_data.data_ptr());
 
     cudaDeviceSynchronize();
     this->has_winding_data = true;
 }
 
-void bind_ds_mesh_bvh(py::module_ &m) {
+void bind_ds_mesh_bvh(py::module_ &m)
+{
     py::class_<MeshBVH, BVH>(m, "MeshBVH", R"pbdoc(
         GPU-accelerated Bounding Volume Hierarchy specialized for Triangle Meshes.
 
@@ -463,8 +383,7 @@ void bind_ds_mesh_bvh(py::module_ &m) {
             >>> mesh_bvh = MeshBVH(triangle_aabb_mins, triangle_aabb_maxs)
             >>> is_intersect = mesh_bvh.is_self_intersection(verts, tris)
         )pbdoc")
-        .def(py::init<const torch::Tensor &, const torch::Tensor &>(),
-             py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
+        .def(py::init<const torch::Tensor &, const torch::Tensor &>(), py::arg("in_aabb_mins"), py::arg("in_aabb_maxs"),
              R"pbdoc(
              Constructs and builds MeshBVH from triangle AABBs.
 
@@ -475,8 +394,7 @@ void bind_ds_mesh_bvh(py::module_ &m) {
              Example:
                  >>> mesh_bvh = MeshBVH(aabb_mins, aabb_maxs)
              )pbdoc")
-        .def("get_self_intersection", &MeshBVH::get_self_intersection,
-             py::arg("vertices"), py::arg("triangles"),
+        .def("get_self_intersection", &MeshBVH::get_self_intersection, py::arg("vertices"), py::arg("triangles"),
              R"pbdoc(
              Finds all self-intersecting triangle index pairs in the mesh.
 
@@ -490,8 +408,7 @@ void bind_ds_mesh_bvh(py::module_ &m) {
              Example:
                  >>> pairs = mesh_bvh.get_self_intersection(vertices, triangles)
              )pbdoc")
-        .def("is_self_intersection", &MeshBVH::is_self_intersection,
-             py::arg("vertices"), py::arg("triangles"),
+        .def("is_self_intersection", &MeshBVH::is_self_intersection, py::arg("vertices"), py::arg("triangles"),
              R"pbdoc(
              Checks whether the mesh has any self-intersecting triangle pairs.
 
@@ -505,19 +422,24 @@ void bind_ds_mesh_bvh(py::module_ &m) {
              Example:
                  >>> has_self_int = mesh_bvh.is_self_intersection(vertices, triangles)
              )pbdoc")
-        .def("get_ray_intersection", [](MeshBVH &self, const torch::Tensor &ray_origins, const torch::Tensor &ray_dirs,
-                                         const torch::Tensor &vertices, const torch::Tensor &triangles,
-                                         bool return_distance) -> py::object {
-                 auto result = self.get_ray_intersection(ray_origins, ray_dirs, vertices, triangles, return_distance);
-                 if (return_distance) {
-                     return py::cast(result);
-                 } else {
-                     return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result), std::get<2>(result)));
-                 }
-             },
-             py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("vertices"), py::arg("triangles"),
-             py::arg("return_distance") = false,
-             R"pbdoc(
+        .def(
+            "get_ray_intersection",
+            [](MeshBVH &self, const torch::Tensor &ray_origins, const torch::Tensor &ray_dirs,
+               const torch::Tensor &vertices, const torch::Tensor &triangles, bool return_distance) -> py::object
+            {
+                auto result = self.get_ray_intersection(ray_origins, ray_dirs, vertices, triangles, return_distance);
+                if (return_distance)
+                {
+                    return py::cast(result);
+                }
+                else
+                {
+                    return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result), std::get<2>(result)));
+                }
+            },
+            py::arg("ray_origins"), py::arg("ray_dirs"), py::arg("vertices"), py::arg("triangles"),
+            py::arg("return_distance") = false,
+            R"pbdoc(
              Computes ray-triangle surface intersections using Möller-Trumbore algorithm.
 
              Args:
@@ -537,49 +459,41 @@ void bind_ds_mesh_bvh(py::module_ &m) {
              Example:
                  >>> ray_ids, tri_ids, pts = mesh_bvh.get_ray_intersection(origins, dirs, verts, tris)
              )pbdoc")
-        .def("query_point", [](MeshBVH &self,
-                               const torch::Tensor &query_points,
-                               const torch::Tensor &vertices,
-                               const torch::Tensor &triangles,
-                               bool return_sdf,
-                               bool return_prj_pts,
-                               int sign_mode,
-                               std::optional<torch::Tensor> triangle_normals,
-                               std::optional<torch::Tensor> vertex_normals,
-                               std::optional<torch::Tensor> edge_normals,
-                               std::optional<torch::Tensor> flood_fill_mask,
-                               std::optional<std::vector<float>> flood_grid_min,
-                               std::optional<std::vector<float>> flood_grid_max,
-                               std::optional<std::vector<int64_t>> flood_grid_res,
-                               std::optional<torch::Tensor> cf_coarse_mask,
-                               std::optional<torch::Tensor> cf_boundary_lookup,
-                               std::optional<torch::Tensor> cf_fine_masks,
-                               std::optional<std::vector<int64_t>> cf_block_size,
-                               std::optional<std::vector<int64_t>> cf_coarse_res,
-                               bool return_occ) -> py::object {
-                 auto result = self.query_point(
-                     query_points, vertices, triangles, return_sdf, return_prj_pts, sign_mode,
-                     triangle_normals, vertex_normals, edge_normals, flood_fill_mask,
-                     flood_grid_min, flood_grid_max, flood_grid_res,
-                     cf_coarse_mask, cf_boundary_lookup, cf_fine_masks,
-                     cf_block_size, cf_coarse_res, return_occ);
-                 if (return_occ) {
-                     return py::cast(result);
-                 } else {
-                     return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result),
-                                                     std::get<2>(result), std::get<3>(result)));
-                 }
-             },
-             py::arg("query_points"), py::arg("vertices"), py::arg("triangles"),
-             py::arg("return_sdf") = false, py::arg("return_prj_pts") = true, py::arg("sign_mode") = 0,
-             py::arg("triangle_normals") = py::none(), py::arg("vertex_normals") = py::none(),
-             py::arg("edge_normals") = py::none(), py::arg("flood_fill_mask") = py::none(),
-             py::arg("flood_grid_min") = py::none(), py::arg("flood_grid_max") = py::none(),
-             py::arg("flood_grid_res") = py::none(),
-             py::arg("cf_coarse_mask") = py::none(), py::arg("cf_boundary_lookup") = py::none(),
-             py::arg("cf_fine_masks") = py::none(), py::arg("cf_block_size") = py::none(),
-             py::arg("cf_coarse_res") = py::none(), py::arg("return_occ") = false,
-             R"pbdoc(
+        .def(
+            "query_point",
+            [](MeshBVH &self, const torch::Tensor &query_points, const torch::Tensor &vertices,
+               const torch::Tensor &triangles, bool return_sdf, bool return_prj_pts, int sign_mode,
+               std::optional<torch::Tensor> triangle_normals, std::optional<torch::Tensor> vertex_normals,
+               std::optional<torch::Tensor> edge_normals, std::optional<torch::Tensor> flood_fill_mask,
+               std::optional<std::vector<float>> flood_grid_min, std::optional<std::vector<float>> flood_grid_max,
+               std::optional<std::vector<int64_t>> flood_grid_res, std::optional<torch::Tensor> cf_coarse_mask,
+               std::optional<torch::Tensor> cf_boundary_lookup, std::optional<torch::Tensor> cf_fine_masks,
+               std::optional<std::vector<int64_t>> cf_block_size, std::optional<std::vector<int64_t>> cf_coarse_res,
+               bool return_occ) -> py::object
+            {
+                auto result = self.query_point(
+                    query_points, vertices, triangles, return_sdf, return_prj_pts, sign_mode, triangle_normals,
+                    vertex_normals, edge_normals, flood_fill_mask, flood_grid_min, flood_grid_max, flood_grid_res,
+                    cf_coarse_mask, cf_boundary_lookup, cf_fine_masks, cf_block_size, cf_coarse_res, return_occ);
+                if (return_occ)
+                {
+                    return py::cast(result);
+                }
+                else
+                {
+                    return py::cast(std::make_tuple(std::get<0>(result), std::get<1>(result), std::get<2>(result),
+                                                    std::get<3>(result)));
+                }
+            },
+            py::arg("query_points"), py::arg("vertices"), py::arg("triangles"), py::arg("return_sdf") = false,
+            py::arg("return_prj_pts") = true, py::arg("sign_mode") = 0, py::arg("triangle_normals") = py::none(),
+            py::arg("vertex_normals") = py::none(), py::arg("edge_normals") = py::none(),
+            py::arg("flood_fill_mask") = py::none(), py::arg("flood_grid_min") = py::none(),
+            py::arg("flood_grid_max") = py::none(), py::arg("flood_grid_res") = py::none(),
+            py::arg("cf_coarse_mask") = py::none(), py::arg("cf_boundary_lookup") = py::none(),
+            py::arg("cf_fine_masks") = py::none(), py::arg("cf_block_size") = py::none(),
+            py::arg("cf_coarse_res") = py::none(), py::arg("return_occ") = false,
+            R"pbdoc(
              Finds closest triangles, projected surface points, and Signed Distance Fields (SDF).
 
              Args:
@@ -608,8 +522,7 @@ void bind_ds_mesh_bvh(py::module_ &m) {
                  >>> q_ids, tri_ids, prj_pts, dists = mesh_bvh.query_point(query_pts, verts, tris, return_sdf=True, sign_mode=5)
                  >>> q_ids, tri_ids, prj_pts, dists, occ = mesh_bvh.query_point(query_pts, verts, tris, return_sdf=True, return_occ=True)
              )pbdoc")
-        .def("build_winding_data", &MeshBVH::build_winding_data,
-             py::arg("vertices"), py::arg("triangles"),
+        .def("build_winding_data", &MeshBVH::build_winding_data, py::arg("vertices"), py::arg("triangles"),
              R"pbdoc(
              Computes hierarchical dipole moment constants for Barnes-Hut Fast Winding Number queries.
 
@@ -620,8 +533,8 @@ void bind_ds_mesh_bvh(py::module_ &m) {
              Example:
                  >>> mesh_bvh.build_winding_data(vertices, triangles)
              )pbdoc")
-        .def("query_voxel", &MeshBVH::query_voxel,
-             py::arg("query_mins"), py::arg("query_maxs"), py::arg("vertices"), py::arg("triangles"),
+        .def("query_voxel", &MeshBVH::query_voxel, py::arg("query_mins"), py::arg("query_maxs"), py::arg("vertices"),
+             py::arg("triangles"),
              R"pbdoc(
              Tests SAT overlap between 3D voxel boxes and mesh triangles.
 

@@ -37,10 +37,7 @@ namespace mc
          * @param[in] code The voxel's corner sign code.
          * @return 1 when the surface crosses it, 0 otherwise.
          */
-        __host__ __device__ int operator()(const uint8_t code) const
-        {
-            return (code > 0 && code < 255) ? 1 : 0;
-        }
+        __host__ __device__ int operator()(const uint8_t code) const { return (code > 0 && code < 255) ? 1 : 0; }
     };
 
     /**
@@ -55,34 +52,30 @@ namespace mc
          * @param[in] code The voxel's corner sign code.
          * @return Number of triangles the voxel emits.
          */
-        __device__ uint32_t operator()(const uint8_t code) const {
+        __device__ uint32_t operator()(const uint8_t code) const
+        {
             return (trinumTable[code + 1] - trinumTable[code]) / 3;
         }
     };
 
-    
-
-/**
- * @brief Emits the bipolar edge keys of every active voxel.
- * @details Stage 2. One thread per active voxel, writing an ::Edge key -- the sorted pair
- * of grid vertex indices -- for each edge the surface crosses. Keys are deliberately
- * emitted with duplicates: an edge shared by several voxels produces one key per voxel,
- * and the host then sorts and uniques them. Deduplicating this way welds the mesh, so a
- * vertex on a shared edge exists exactly once and the result is watertight rather than a
- * soup of unconnected voxel patches.
- * @param[in] num_active_voxels Number of active voxels after compaction.
- * @param[in] voxels Device array of corner indices, eight per voxel.
- * @param[in] used_voxel_index Device array mapping compacted index to original voxel index.
- * @param[in] used_voxel_codes Device array of sign codes for the active voxels.
- * @param[out] active_edges Device array receiving the emitted edge keys, with duplicates.
- * @note Uses the ::edgeTable / ::triTable table to look up which edges a case activates.
- */
-__global__ void compute_active_edges_kernel(
-        const uint32_t num_active_voxels,
-        const uint32_t *voxels,
-        const uint32_t *used_voxel_index,
-        const uint8_t *used_voxel_codes,
-        Edge *active_edges)
+    /**
+     * @brief Emits the bipolar edge keys of every active voxel.
+     * @details Stage 2. One thread per active voxel, writing an ::Edge key -- the sorted pair
+     * of grid vertex indices -- for each edge the surface crosses. Keys are deliberately
+     * emitted with duplicates: an edge shared by several voxels produces one key per voxel,
+     * and the host then sorts and uniques them. Deduplicating this way welds the mesh, so a
+     * vertex on a shared edge exists exactly once and the result is watertight rather than a
+     * soup of unconnected voxel patches.
+     * @param[in] num_active_voxels Number of active voxels after compaction.
+     * @param[in] voxels Device array of corner indices, eight per voxel.
+     * @param[in] used_voxel_index Device array mapping compacted index to original voxel index.
+     * @param[in] used_voxel_codes Device array of sign codes for the active voxels.
+     * @param[out] active_edges Device array receiving the emitted edge keys, with duplicates.
+     * @note Uses the ::edgeTable / ::triTable table to look up which edges a case activates.
+     */
+    __global__ void compute_active_edges_kernel(const uint32_t num_active_voxels, const uint32_t *voxels,
+                                                const uint32_t *used_voxel_index, const uint8_t *used_voxel_codes,
+                                                Edge *active_edges)
     {
         uint32_t active_voxel_idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (active_voxel_idx >= num_active_voxels)
@@ -110,30 +103,26 @@ __global__ void compute_active_edges_kernel(
         }
     }
 
-/**
- * @brief Maps each active voxel's local edges onto global output vertex indices.
- * @details Stage 3. After the host has sorted and uniqued the edge keys, this kernel binds
- * voxel-local edge slots to positions in the deduplicated vertex array. One thread per
- * active voxel, binary-searching the unique key array for each of its bipolar edges. The
- * resulting map is what lets stage 5 emit triangle indices without any further searching.
- * @param[in] num_active_voxels Number of active voxels.
- * @param[in] num_unique_edges Number of deduplicated edge keys.
- * @param[in] voxels Device array of corner indices, eight per voxel.
- * @param[in] used_voxel_index Device array mapping compacted index to original voxel index.
- * @param[in] used_voxel_codes Device array of sign codes for the active voxels.
- * @param[in] unique_edges Device array of sorted, deduplicated edge keys.
- * @param[out] voxel_edge_to_vert_idx Device array mapping each voxel-local edge slot to a
- *     global vertex index.
- * @warning Requires @p unique_edges to be sorted; the lookup is a binary search.
- */
-__global__ void build_edge_map_kernel(
-        const uint32_t num_active_voxels,
-        const uint32_t num_unique_edges,
-        const uint32_t *voxels,
-        const uint32_t *used_voxel_index,
-        const uint8_t *used_voxel_codes,
-        const Edge *unique_edges,
-        uint32_t *voxel_edge_to_vert_idx)
+    /**
+     * @brief Maps each active voxel's local edges onto global output vertex indices.
+     * @details Stage 3. After the host has sorted and uniqued the edge keys, this kernel binds
+     * voxel-local edge slots to positions in the deduplicated vertex array. One thread per
+     * active voxel, binary-searching the unique key array for each of its bipolar edges. The
+     * resulting map is what lets stage 5 emit triangle indices without any further searching.
+     * @param[in] num_active_voxels Number of active voxels.
+     * @param[in] num_unique_edges Number of deduplicated edge keys.
+     * @param[in] voxels Device array of corner indices, eight per voxel.
+     * @param[in] used_voxel_index Device array mapping compacted index to original voxel index.
+     * @param[in] used_voxel_codes Device array of sign codes for the active voxels.
+     * @param[in] unique_edges Device array of sorted, deduplicated edge keys.
+     * @param[out] voxel_edge_to_vert_idx Device array mapping each voxel-local edge slot to a
+     *     global vertex index.
+     * @warning Requires @p unique_edges to be sorted; the lookup is a binary search.
+     */
+    __global__ void build_edge_map_kernel(const uint32_t num_active_voxels, const uint32_t num_unique_edges,
+                                          const uint32_t *voxels, const uint32_t *used_voxel_index,
+                                          const uint8_t *used_voxel_codes, const Edge *unique_edges,
+                                          uint32_t *voxel_edge_to_vert_idx)
     {
         uint32_t active_voxel_idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (active_voxel_idx >= num_active_voxels)
@@ -145,10 +134,11 @@ __global__ void build_edge_map_kernel(
 
         int edgeFlags = edgeTable[voxel_code];
 
-        #pragma unroll
+#pragma unroll
         for (int i = 0; i < 12; i++)
         {
-            if (edgeFlags & (1 << i)) {
+            if (edgeFlags & (1 << i))
+            {
                 uint32_t v0 = vertices_indices[edgeConnection[i][0]];
                 uint32_t v1 = vertices_indices[edgeConnection[i][1]];
                 Edge edge(v0, v1);
@@ -175,46 +165,40 @@ __global__ void build_edge_map_kernel(
                     }
                 }
                 voxel_edge_to_vert_idx[active_voxel_idx * 12 + i] = unique_id;
-            } else {
+            }
+            else
+            {
                 voxel_edge_to_vert_idx[active_voxel_idx * 12 + i] = 0xFFFFFFFF;
             }
         }
     }
 
-/**
- * @brief Places one output vertex on each unique bipolar edge.
- * @details Stage 4. One thread per unique edge, linearly interpolating the crossing point
- * $\mathbf{p} = \mathbf{p}_0 + t(\mathbf{p}_1 - \mathbf{p}_0)$ with
- * $t = (\text{iso} - f_0) / (f_1 - f_0)$. Normals and colours defined on the grid are
- * interpolated with the same $t$, so all attributes stay consistent with the geometry.
- * Because each edge is visited once, every vertex is written exactly once and no atomics
- * are needed.
- * @param[in] num_out_vertices Number of unique edges, one output vertex each.
- * @param[in] unique_edges Device array of deduplicated edge keys.
- * @param[in] grid_vertices Device array of grid vertex coordinates.
- * @param[in] values Device array of scalar field values at grid vertices.
- * @param[in] grid_normals Device array of per-vertex normals, or `nullptr`.
- * @param[in] grid_colors Device array of per-vertex colours, or `nullptr`.
- * @param[in] iso Isolevel being extracted.
- * @param[out] out_verts Device array of interpolated surface vertices.
- * @param[out] out_normals Device array of interpolated normals, when requested.
- * @param[out] out_colors Device array of interpolated colours, when requested.
- * @warning The interpolation denominator $f_1 - f_0$ is non-zero for any genuinely bipolar
- * edge, but a field with exactly equal corner values either side of the isolevel would
- * divide by zero. Such edges are excluded upstream by the sign test.
- */
-__global__ void interpolate_vertices_kernel(
-        const uint32_t num_out_vertices,
-        const Edge* unique_edges,
-        const float3* grid_vertices,
-        const float* values,
-        const float3* grid_normals,
-        const float3* grid_colors,
-        const float iso,
-        float3* out_verts,
-        float3* out_normals,
-        float3* out_colors
-    )
+    /**
+     * @brief Places one output vertex on each unique bipolar edge.
+     * @details Stage 4. One thread per unique edge, linearly interpolating the crossing point
+     * $\mathbf{p} = \mathbf{p}_0 + t(\mathbf{p}_1 - \mathbf{p}_0)$ with
+     * $t = (\text{iso} - f_0) / (f_1 - f_0)$. Normals and colours defined on the grid are
+     * interpolated with the same $t$, so all attributes stay consistent with the geometry.
+     * Because each edge is visited once, every vertex is written exactly once and no atomics
+     * are needed.
+     * @param[in] num_out_vertices Number of unique edges, one output vertex each.
+     * @param[in] unique_edges Device array of deduplicated edge keys.
+     * @param[in] grid_vertices Device array of grid vertex coordinates.
+     * @param[in] values Device array of scalar field values at grid vertices.
+     * @param[in] grid_normals Device array of per-vertex normals, or `nullptr`.
+     * @param[in] grid_colors Device array of per-vertex colours, or `nullptr`.
+     * @param[in] iso Isolevel being extracted.
+     * @param[out] out_verts Device array of interpolated surface vertices.
+     * @param[out] out_normals Device array of interpolated normals, when requested.
+     * @param[out] out_colors Device array of interpolated colours, when requested.
+     * @warning The interpolation denominator $f_1 - f_0$ is non-zero for any genuinely bipolar
+     * edge, but a field with exactly equal corner values either side of the isolevel would
+     * divide by zero. Such edges are excluded upstream by the sign test.
+     */
+    __global__ void interpolate_vertices_kernel(const uint32_t num_out_vertices, const Edge *unique_edges,
+                                                const float3 *grid_vertices, const float *values,
+                                                const float3 *grid_normals, const float3 *grid_colors, const float iso,
+                                                float3 *out_verts, float3 *out_normals, float3 *out_colors)
     {
         uint32_t v_idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (v_idx >= num_out_vertices)
@@ -245,46 +229,55 @@ __global__ void interpolate_vertices_kernel(
         if (fabsf(iso - val0) < EPS)
         {
             p = p0;
-            if (has_normals) n = n0;
-            if (has_colors) c = c0;
+            if (has_normals)
+                n = n0;
+            if (has_colors)
+                c = c0;
         }
         else if (fabsf(iso - val1) < EPS)
         {
             p = p1;
-            if (has_normals) n = n1;
-            if (has_colors) c = c1;
+            if (has_normals)
+                n = n1;
+            if (has_colors)
+                c = c1;
         }
         else if (fabsf(val0 - val1) < EPS)
         {
             p = p0;
-            if (has_normals) n = n0;
-            if (has_colors) c = c0;
+            if (has_normals)
+                n = n0;
+            if (has_colors)
+                c = c0;
         }
         else
         {
             float t = (val1 != val0) ? maths::saturate((iso - val0) / (val1 - val0)) : 0.5f;
 
             p = maths::lerp(p0, p1, t);
-            
-            if (has_normals) {
+
+            if (has_normals)
+            {
                 n = maths::lerp(n0, n1, t);
                 n = maths::normalize(n);
             }
-            if (has_colors) {
+            if (has_colors)
+            {
                 c = maths::lerp(c0, c1, t);
             }
         }
 
         out_verts[v_idx] = p;
-        if (has_normals) {
+        if (has_normals)
+        {
             out_normals[v_idx] = n;
         }
-        if (has_colors) {
+        if (has_colors)
+        {
             out_colors[v_idx] = c;
         }
     }
 
-    
     /**
      * @brief Launches stage 2: emit bipolar edge keys for the active voxels.
      * @details Host wrapper over the edge emission kernel. Keys are emitted with duplicates;
@@ -295,17 +288,13 @@ __global__ void interpolate_vertices_kernel(
      * @param[in] used_voxel_codes Device array of active sign codes.
      * @param[out] active_edges Device array of emitted edge keys.
      */
-    void compute_active_edges(
-        const uint32_t num_active_voxels,
-        const uint32_t *voxels,
-        const uint32_t *used_voxel_index,
-        const uint8_t *used_voxel_codes,
-        Edge *active_edges)
+    void compute_active_edges(const uint32_t num_active_voxels, const uint32_t *voxels,
+                              const uint32_t *used_voxel_index, const uint8_t *used_voxel_codes, Edge *active_edges)
     {
         int block_size = NTHREADS;
         int grid_size = (num_active_voxels + block_size - 1) / block_size;
-        compute_active_edges_kernel<<<grid_size, block_size>>>(
-            num_active_voxels, voxels, used_voxel_index, used_voxel_codes, active_edges);
+        compute_active_edges_kernel<<<grid_size, block_size>>>(num_active_voxels, voxels, used_voxel_index,
+                                                               used_voxel_codes, active_edges);
     }
 
     /**
@@ -317,10 +306,7 @@ __global__ void interpolate_vertices_kernel(
      * @param[out] num_active_voxels Receives the active count.
      * @note Synchronises to bring the count back to the host.
      */
-    void compute_number_active_voxels(
-        const uint32_t num_voxels,
-        uint8_t *voxel_codes,
-        uint32_t &num_active_voxels)
+    void compute_number_active_voxels(const uint32_t num_voxels, uint8_t *voxel_codes, uint32_t &num_active_voxels)
     {
         at::cuda::ThrustAllocator allocator;
         auto policy = thrust::cuda::par(allocator);
@@ -328,19 +314,23 @@ __global__ void interpolate_vertices_kernel(
         thrust::device_ptr<uint8_t> d_codes(voxel_codes);
         auto active_flag_iter = thrust::make_transform_iterator(d_codes, is_active_voxel());
 
-        auto temp_buffer_t = torch::empty({(int64_t)num_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
-        uint32_t *__restrict__ temp_buffer = (uint32_t*)temp_buffer_t.data_ptr<int32_t>();
+        auto temp_buffer_t =
+            torch::empty({(int64_t)num_voxels},
+                         torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
+        uint32_t *__restrict__ temp_buffer = (uint32_t *)temp_buffer_t.data_ptr<int32_t>();
         thrust::device_ptr<uint32_t> d_prefix_sum(temp_buffer);
 
         thrust::exclusive_scan(policy, active_flag_iter, active_flag_iter + num_voxels, d_prefix_sum);
 
         uint8_t last_flag;
         uint32_t last_prefix_sum;
-        CHECK_CUDA_INTERNAL(cudaMemcpy(&last_flag, voxel_codes + num_voxels - 1, sizeof(uint8_t), cudaMemcpyDeviceToHost));
-        CHECK_CUDA_INTERNAL(cudaMemcpy(&last_prefix_sum, temp_buffer + num_voxels - 1, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+        CHECK_CUDA_INTERNAL(
+            cudaMemcpy(&last_flag, voxel_codes + num_voxels - 1, sizeof(uint8_t), cudaMemcpyDeviceToHost));
+        CHECK_CUDA_INTERNAL(
+            cudaMemcpy(&last_prefix_sum, temp_buffer + num_voxels - 1, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
         num_active_voxels = last_prefix_sum + ((last_flag > 0 && last_flag < 255) ? 1 : 0);
-            }
+    }
 
     /**
      * @brief Compacts active voxels into dense arrays.
@@ -351,11 +341,8 @@ __global__ void interpolate_vertices_kernel(
      * @param[out] used_voxel_index Device array mapping compacted index to original index.
      * @param[out] used_voxel_code Device array of the active voxels' sign codes.
      */
-    void compact_active_voxels(
-        const uint32_t num_voxels,
-        const uint8_t *voxel_codes,
-        uint32_t *used_voxel_index,
-        uint8_t *used_voxel_code)
+    void compact_active_voxels(const uint32_t num_voxels, const uint8_t *voxel_codes, uint32_t *used_voxel_index,
+                               uint8_t *used_voxel_code)
     {
         at::cuda::ThrustAllocator allocator;
         auto policy = thrust::cuda::par(allocator);
@@ -369,13 +356,9 @@ __global__ void interpolate_vertices_kernel(
         thrust::device_ptr<uint8_t> d_out_code(used_voxel_code);
         auto zip_out = thrust::make_zip_iterator(thrust::make_tuple(d_out_idx, d_out_code));
 
-        thrust::copy_if(
-            policy,
-            zip_in,
-            zip_in + num_voxels,
-            d_codes, // stencil
-            zip_out,
-            is_active_voxel());
+        thrust::copy_if(policy, zip_in, zip_in + num_voxels,
+                        d_codes, // stencil
+                        zip_out, is_active_voxel());
     }
 
     /**
@@ -386,10 +369,8 @@ __global__ void interpolate_vertices_kernel(
      * @return The unique edge keys as a PyTorch tensor.
      * @note Synchronises to bring the unique count back to the host.
      */
-    torch::Tensor compute_unique_active_edges(
-        const uint32_t num_active_voxels,
-        Edge *active_edges,
-        uint32_t &num_unique_edges)
+    torch::Tensor compute_unique_active_edges(const uint32_t num_active_voxels, Edge *active_edges,
+                                              uint32_t &num_unique_edges)
     {
         at::cuda::ThrustAllocator allocator;
         auto policy = thrust::cuda::par(allocator);
@@ -401,15 +382,18 @@ __global__ void interpolate_vertices_kernel(
         Edge empty_edge = Edge(0xFFFFFFFF, 0xFFFFFFFF);
 
         // Find the first dummy edge. Everything before this is valid!
-        auto valid_end = thrust::lower_bound(policy, d_active_edges, d_active_edges + (num_active_voxels * 12), empty_edge);
+        auto valid_end =
+            thrust::lower_bound(policy, d_active_edges, d_active_edges + (num_active_voxels * 12), empty_edge);
 
         // Deduplicate the valid edges in place
         auto unique_end = thrust::unique(policy, d_active_edges, valid_end);
 
         num_unique_edges = thrust::distance(d_active_edges, unique_end);
 
-        auto unique_edges_t = torch::empty({(int64_t)(num_unique_edges * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
-        Edge *__restrict__ unique_edges = (Edge*)unique_edges_t.data_ptr<uint8_t>();
+        auto unique_edges_t =
+            torch::empty({(int64_t)(num_unique_edges * sizeof(Edge))},
+                         torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
+        Edge *__restrict__ unique_edges = (Edge *)unique_edges_t.data_ptr<uint8_t>();
 
         thrust::device_ptr<Edge> d_unique_edges(unique_edges);
         thrust::copy(policy, d_active_edges, unique_end, d_unique_edges);
@@ -424,20 +408,16 @@ __global__ void interpolate_vertices_kernel(
      * @param[in] num_unique_edges Number of deduplicated edges.
      * @param[out] voxel_edge_to_vert_idx Device array mapping local edge slots to vertices.
      */
-    void build_edge_map(
-        const uint32_t num_active_voxels,
-        const uint32_t num_unique_edges,
-        const uint32_t *voxels,
-        const uint32_t *used_voxel_index,
-        const uint8_t *used_voxel_codes,
-        const Edge *unique_edges,
-        uint32_t *voxel_edge_to_vert_idx)
+    void build_edge_map(const uint32_t num_active_voxels, const uint32_t num_unique_edges, const uint32_t *voxels,
+                        const uint32_t *used_voxel_index, const uint8_t *used_voxel_codes, const Edge *unique_edges,
+                        uint32_t *voxel_edge_to_vert_idx)
     {
-        if (num_active_voxels == 0 || num_unique_edges == 0) return;
+        if (num_active_voxels == 0 || num_unique_edges == 0)
+            return;
         int block_size = NTHREADS;
         int grid_size = (num_active_voxels + block_size - 1) / block_size;
-        build_edge_map_kernel<<<grid_size, block_size>>>(
-            num_active_voxels, num_unique_edges, voxels, used_voxel_index, used_voxel_codes, unique_edges, voxel_edge_to_vert_idx);
+        build_edge_map_kernel<<<grid_size, block_size>>>(num_active_voxels, num_unique_edges, voxels, used_voxel_index,
+                                                         used_voxel_codes, unique_edges, voxel_edge_to_vert_idx);
     }
 
     /**
@@ -447,24 +427,17 @@ __global__ void interpolate_vertices_kernel(
      * @param[in] iso Isolevel being extracted.
      * @param[out] out_verts Device array of interpolated surface vertices.
      */
-    void interpolate_vertices(
-        const uint32_t num_unique_edges,
-        const Edge* unique_edges,
-        const float3* grid_vertices,
-        const float* values,
-        const float3* grid_normals,
-        const float3* grid_colors,
-        const float iso,
-        float3* out_verts,
-        float3* out_normals,
-        float3* out_colors
-    )
+    void interpolate_vertices(const uint32_t num_unique_edges, const Edge *unique_edges, const float3 *grid_vertices,
+                              const float *values, const float3 *grid_normals, const float3 *grid_colors,
+                              const float iso, float3 *out_verts, float3 *out_normals, float3 *out_colors)
     {
-        if (num_unique_edges == 0) return;
+        if (num_unique_edges == 0)
+            return;
         int block_size = NTHREADS;
         int grid_size = (num_unique_edges + block_size - 1) / block_size;
-        interpolate_vertices_kernel<<<grid_size, block_size>>>(
-            num_unique_edges, unique_edges, grid_vertices, values, grid_normals, grid_colors, iso, out_verts, out_normals, out_colors);
+        interpolate_vertices_kernel<<<grid_size, block_size>>>(num_unique_edges, unique_edges, grid_vertices, values,
+                                                               grid_normals, grid_colors, iso, out_verts, out_normals,
+                                                               out_colors);
     }
 
     /**
@@ -478,11 +451,8 @@ __global__ void interpolate_vertices_kernel(
      * @param[out] voxel_triangle_prefix_sums Device array of per-voxel output offsets.
      * @note Synchronises to bring the total back to the host.
      */
-    void compute_number_triangles(
-        const uint32_t num_active_voxels,
-        const uint8_t *used_voxel_codes,
-        uint32_t &num_triangles,
-        uint32_t *voxel_triangle_prefix_sums)
+    void compute_number_triangles(const uint32_t num_active_voxels, const uint8_t *used_voxel_codes,
+                                  uint32_t &num_triangles, uint32_t *voxel_triangle_prefix_sums)
     {
         at::cuda::ThrustAllocator allocator;
         auto policy = thrust::cuda::par(allocator);
@@ -491,35 +461,32 @@ __global__ void interpolate_vertices_kernel(
         auto num_tris_iter = thrust::make_transform_iterator(d_codes, num_triangles_functor());
 
         thrust::device_ptr<uint32_t> d_prefix_sum(voxel_triangle_prefix_sums);
-        
+
         num_triangles = thrust::reduce(policy, num_tris_iter, num_tris_iter + num_active_voxels);
         thrust::exclusive_scan(policy, num_tris_iter, num_tris_iter + num_active_voxels, d_prefix_sum);
     }
 
-/**
- * @brief Writes the triangle index triples for every active voxel.
- * @details Stage 5. One thread per active voxel. The sign code selects a row of the
- * ::edgeTable / ::triTable triangle table, whose voxel-local edge slots are translated into global vertex
- * indices through the stage 3 map. Each voxel's output begins at a precomputed prefix-sum
- * offset, so threads write to disjoint ranges without atomics or contention.
- * @param[in] num_active_voxels Number of active voxels.
- * @param[in] used_voxel_codes Device array of sign codes for the active voxels.
- * @param[in] voxel_edge_to_vert_idx Device array mapping voxel-local edge slots to global
- *     vertex indices.
- * @param[in] voxel_triangle_prefix_sums Device array of per-voxel output offsets.
- * @param[out] out_triangles Device array receiving triangle vertex index triples.
- * @note The canonical Lorensen-Cline / Bourke ::triTable (http://paulbourke.net/geometry/polygonise/)
- * winds each triangle so the right-hand normal points towards the below-isolevel region.
- * For a signed distance field that region is the *interior*, so emitting a table row
- * verbatim yields inward-facing normals. The last two indices are therefore swapped on
- * write, matching Dual Contouring and the rest of the library.
- */
-__global__ void assemble_triangles_kernel(
-        const uint32_t num_active_voxels,
-        const uint8_t *used_voxel_codes,
-        const uint32_t *voxel_edge_to_vert_idx,
-        const uint32_t *voxel_triangle_prefix_sums,
-        uint32_t *out_triangles)
+    /**
+     * @brief Writes the triangle index triples for every active voxel.
+     * @details Stage 5. One thread per active voxel. The sign code selects a row of the
+     * ::edgeTable / ::triTable triangle table, whose voxel-local edge slots are translated into global vertex
+     * indices through the stage 3 map. Each voxel's output begins at a precomputed prefix-sum
+     * offset, so threads write to disjoint ranges without atomics or contention.
+     * @param[in] num_active_voxels Number of active voxels.
+     * @param[in] used_voxel_codes Device array of sign codes for the active voxels.
+     * @param[in] voxel_edge_to_vert_idx Device array mapping voxel-local edge slots to global
+     *     vertex indices.
+     * @param[in] voxel_triangle_prefix_sums Device array of per-voxel output offsets.
+     * @param[out] out_triangles Device array receiving triangle vertex index triples.
+     * @note The canonical Lorensen-Cline / Bourke ::triTable (http://paulbourke.net/geometry/polygonise/)
+     * winds each triangle so the right-hand normal points towards the below-isolevel region.
+     * For a signed distance field that region is the *interior*, so emitting a table row
+     * verbatim yields inward-facing normals. The last two indices are therefore swapped on
+     * write, matching Dual Contouring and the rest of the library.
+     */
+    __global__ void assemble_triangles_kernel(const uint32_t num_active_voxels, const uint8_t *used_voxel_codes,
+                                              const uint32_t *voxel_edge_to_vert_idx,
+                                              const uint32_t *voxel_triangle_prefix_sums, uint32_t *out_triangles)
     {
         uint32_t active_voxel_idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (active_voxel_idx >= num_active_voxels)
@@ -529,7 +496,7 @@ __global__ void assemble_triangles_kernel(
         uint32_t start_tri_idx = voxel_triangle_prefix_sums[active_voxel_idx];
 
         int tri_count = 0;
-        #pragma unroll
+#pragma unroll
         for (int i = 0; i < 16; i += 3)
         {
             int edge0 = triTable[voxel_code][i];
@@ -548,7 +515,7 @@ __global__ void assemble_triangles_kernel(
             out_triangles[(start_tri_idx + tri_count) * 3 + 0] = v0;
             out_triangles[(start_tri_idx + tri_count) * 3 + 1] = v2;
             out_triangles[(start_tri_idx + tri_count) * 3 + 2] = v1;
-            
+
             tri_count++;
         }
     }
@@ -560,14 +527,12 @@ __global__ void assemble_triangles_kernel(
      * @param[in] num_active_voxels Number of active voxels.
      * @param[out] out_triangles Device array of triangle vertex index triples.
      */
-    void assemble_triangles(
-        const uint32_t num_active_voxels,
-        const uint8_t *used_voxel_codes,
-        const uint32_t *voxel_edge_to_vert_idx,
-        const uint32_t *voxel_triangle_prefix_sums,
-        uint32_t *out_triangles)
+    void assemble_triangles(const uint32_t num_active_voxels, const uint8_t *used_voxel_codes,
+                            const uint32_t *voxel_edge_to_vert_idx, const uint32_t *voxel_triangle_prefix_sums,
+                            uint32_t *out_triangles)
     {
-        if (num_active_voxels == 0) return;
+        if (num_active_voxels == 0)
+            return;
         int block_size = NTHREADS;
         int grid_size = (num_active_voxels + block_size - 1) / block_size;
         assemble_triangles_kernel<<<grid_size, block_size>>>(
@@ -583,136 +548,141 @@ __global__ void assemble_triangles_kernel(
      * @note Three device synchronisations are unavoidable -- after the active count, the unique
      * edge count, and the triangle count -- because each sizes the next allocation.
      */
-    std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>, std::optional<torch::Tensor>> marching_cubes(
-        const uint32_t num_voxels,
-        const float3* __restrict__ grid_vertices,
-        const uint32_t* __restrict__ voxels,
-        const float* __restrict__ voxel_values,
-        const float3* __restrict__ grid_normals,
-        const float3* __restrict__ grid_colors,
-        const float iso,
-        torch::TensorOptions vert_options,
-        torch::TensorOptions tri_options,
-        bool return_unique_edges
-    )
+    std::tuple<torch::Tensor, torch::Tensor, std::optional<torch::Tensor>, std::optional<torch::Tensor>,
+               std::optional<torch::Tensor>>
+    marching_cubes(const uint32_t num_voxels, const float3 *__restrict__ grid_vertices,
+                   const uint32_t *__restrict__ voxels, const float *__restrict__ voxel_values,
+                   const float3 *__restrict__ grid_normals, const float3 *__restrict__ grid_colors, const float iso,
+                   torch::TensorOptions vert_options, torch::TensorOptions tri_options, bool return_unique_edges)
     {
-        auto voxel_codes_t = torch::empty({(int64_t)num_voxels}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
+        auto voxel_codes_t =
+            torch::empty({(int64_t)num_voxels},
+                         torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         uint8_t *__restrict__ voxel_codes = voxel_codes_t.data_ptr<uint8_t>();
-        
+
         voxel_classify::compute_active_voxels(num_voxels, voxels, voxel_values, iso, voxel_codes);
 
         uint32_t num_active_voxels;
         compute_number_active_voxels(num_voxels, voxel_codes, num_active_voxels);
 
-        if (num_active_voxels == 0) {
+        if (num_active_voxels == 0)
+        {
             std::optional<torch::Tensor> out_n = std::nullopt;
             std::optional<torch::Tensor> out_c = std::nullopt;
-            if (grid_normals != nullptr) out_n = torch::empty({0, 3}, vert_options);
-            if (grid_colors != nullptr) out_c = torch::empty({0, 3}, vert_options);
-            return std::make_tuple(
-                torch::empty({0, 3}, vert_options),
-                torch::empty({0, 3}, tri_options),
-                out_n,
-                out_c,
-                std::optional<torch::Tensor>(std::nullopt)
-            );
+            if (grid_normals != nullptr)
+                out_n = torch::empty({0, 3}, vert_options);
+            if (grid_colors != nullptr)
+                out_c = torch::empty({0, 3}, vert_options);
+            return std::make_tuple(torch::empty({0, 3}, vert_options), torch::empty({0, 3}, tri_options), out_n, out_c,
+                                   std::optional<torch::Tensor>(std::nullopt));
         }
 
-        auto used_voxel_index_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
-        uint32_t *__restrict__ used_voxel_index = (uint32_t*)used_voxel_index_t.data_ptr<int32_t>();
-        
-        auto used_voxel_codes_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
+        auto used_voxel_index_t =
+            torch::empty({(int64_t)num_active_voxels},
+                         torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
+        uint32_t *__restrict__ used_voxel_index = (uint32_t *)used_voxel_index_t.data_ptr<int32_t>();
+
+        auto used_voxel_codes_t =
+            torch::empty({(int64_t)num_active_voxels},
+                         torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
         uint8_t *__restrict__ used_voxel_codes = used_voxel_codes_t.data_ptr<uint8_t>();
         compact_active_voxels(num_voxels, voxel_codes, used_voxel_index, used_voxel_codes);
 
-        auto active_edges_t = torch::empty({(int64_t)(num_active_voxels * 12 * sizeof(Edge))}, torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
-        Edge *__restrict__ active_edges = (Edge*)active_edges_t.data_ptr<uint8_t>();
+        auto active_edges_t =
+            torch::empty({(int64_t)(num_active_voxels * 12 * sizeof(Edge))},
+                         torch::TensorOptions().dtype(torch::kUInt8).device(torch::kCUDA, c10::cuda::current_device()));
+        Edge *__restrict__ active_edges = (Edge *)active_edges_t.data_ptr<uint8_t>();
         compute_active_edges(num_active_voxels, voxels, used_voxel_index, used_voxel_codes, active_edges);
 
         uint32_t out_num_vertices;
         auto unique_edges_t = compute_unique_active_edges(num_active_voxels, active_edges, out_num_vertices);
-        Edge *__restrict__ unique_edges = (Edge*)unique_edges_t.data_ptr<uint8_t>();
+        Edge *__restrict__ unique_edges = (Edge *)unique_edges_t.data_ptr<uint8_t>();
 
-        auto voxel_edge_to_vert_idx_t = torch::empty({(int64_t)(num_active_voxels * 12)}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
-        uint32_t *__restrict__ voxel_edge_to_vert_idx = (uint32_t*)voxel_edge_to_vert_idx_t.data_ptr<int32_t>();
-        build_edge_map(num_active_voxels, out_num_vertices, voxels, used_voxel_index, used_voxel_codes, unique_edges, voxel_edge_to_vert_idx);
+        auto voxel_edge_to_vert_idx_t =
+            torch::empty({(int64_t)(num_active_voxels * 12)},
+                         torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
+        uint32_t *__restrict__ voxel_edge_to_vert_idx = (uint32_t *)voxel_edge_to_vert_idx_t.data_ptr<int32_t>();
+        build_edge_map(num_active_voxels, out_num_vertices, voxels, used_voxel_index, used_voxel_codes, unique_edges,
+                       voxel_edge_to_vert_idx);
 
         torch::Tensor out_vertices = torch::empty({(int64_t)out_num_vertices, 3}, vert_options);
-        float3* __restrict__ p_out_vertices = (float3*)out_vertices.data_ptr<float>();
+        float3 *__restrict__ p_out_vertices = (float3 *)out_vertices.data_ptr<float>();
 
         std::optional<torch::Tensor> out_normals_opt = std::nullopt;
-        float3* __restrict__ p_out_normals = nullptr;
-        if (grid_normals != nullptr) {
+        float3 *__restrict__ p_out_normals = nullptr;
+        if (grid_normals != nullptr)
+        {
             torch::Tensor out_normals = torch::empty({(int64_t)out_num_vertices, 3}, vert_options);
-            p_out_normals = (float3*)out_normals.data_ptr<float>();
+            p_out_normals = (float3 *)out_normals.data_ptr<float>();
             out_normals_opt = out_normals;
         }
 
         std::optional<torch::Tensor> out_colors_opt = std::nullopt;
-        float3* __restrict__ p_out_colors = nullptr;
-        if (grid_colors != nullptr) {
+        float3 *__restrict__ p_out_colors = nullptr;
+        if (grid_colors != nullptr)
+        {
             torch::Tensor out_colors = torch::empty({(int64_t)out_num_vertices, 3}, vert_options);
-            p_out_colors = (float3*)out_colors.data_ptr<float>();
+            p_out_colors = (float3 *)out_colors.data_ptr<float>();
             out_colors_opt = out_colors;
         }
 
-        interpolate_vertices(out_num_vertices, unique_edges, grid_vertices, voxel_values, grid_normals, grid_colors, iso, p_out_vertices, p_out_normals, p_out_colors);
+        interpolate_vertices(out_num_vertices, unique_edges, grid_vertices, voxel_values, grid_normals, grid_colors,
+                             iso, p_out_vertices, p_out_normals, p_out_colors);
 
         uint32_t out_num_triangles;
-        auto voxel_triangle_prefix_sums_t = torch::empty({(int64_t)num_active_voxels}, torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
-        uint32_t *__restrict__ voxel_triangle_prefix_sums = (uint32_t*)voxel_triangle_prefix_sums_t.data_ptr<int32_t>();
+        auto voxel_triangle_prefix_sums_t =
+            torch::empty({(int64_t)num_active_voxels},
+                         torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA, c10::cuda::current_device()));
+        uint32_t *__restrict__ voxel_triangle_prefix_sums =
+            (uint32_t *)voxel_triangle_prefix_sums_t.data_ptr<int32_t>();
         compute_number_triangles(num_active_voxels, used_voxel_codes, out_num_triangles, voxel_triangle_prefix_sums);
 
         torch::Tensor out_triangles = torch::empty({(int64_t)out_num_triangles, 3}, tri_options);
-        uint32_t* __restrict__ p_out_triangles = (uint32_t*)out_triangles.data_ptr<int32_t>();
+        uint32_t *__restrict__ p_out_triangles = (uint32_t *)out_triangles.data_ptr<int32_t>();
 
-        assemble_triangles(num_active_voxels, used_voxel_codes, voxel_edge_to_vert_idx, voxel_triangle_prefix_sums, p_out_triangles);
+        assemble_triangles(num_active_voxels, used_voxel_codes, voxel_edge_to_vert_idx, voxel_triangle_prefix_sums,
+                           p_out_triangles);
 
         std::optional<torch::Tensor> out_unique_edges_opt = std::nullopt;
-        if (return_unique_edges) {
-            torch::Tensor out_unique_edges = torch::empty({(int64_t)out_num_vertices, 2}, torch::dtype(torch::kInt32).device(vert_options.device()));
-            CHECK_CUDA_INTERNAL(cudaMemcpy(out_unique_edges.data_ptr(), unique_edges, out_num_vertices * sizeof(Edge), cudaMemcpyDeviceToDevice));
+        if (return_unique_edges)
+        {
+            torch::Tensor out_unique_edges =
+                torch::empty({(int64_t)out_num_vertices, 2}, torch::dtype(torch::kInt32).device(vert_options.device()));
+            CHECK_CUDA_INTERNAL(cudaMemcpy(out_unique_edges.data_ptr(), unique_edges, out_num_vertices * sizeof(Edge),
+                                           cudaMemcpyDeviceToDevice));
             out_unique_edges_opt = out_unique_edges;
         }
 
         return std::make_tuple(out_vertices, out_triangles, out_normals_opt, out_colors_opt, out_unique_edges_opt);
     }
 
-/**
- * @brief Backpropagates vertex gradients into the scalar field and colours.
- * @details The analytical adjoint of stage 4. A vertex sits at
- * $\mathbf{p} = \mathbf{p}_0 + t(\mathbf{p}_1 - \mathbf{p}_0)$ with
- * $t = (\text{iso} - f_0) / (f_1 - f_0)$, so $\partial t / \partial f_0$ and
- * $\partial t / \partial f_1$ are available in closed form and the chain rule gives the
- * field gradient directly -- no finite differences, no autograd graph over the extraction
- * itself. One thread per output vertex.
- * @param[in] n_verts Number of output vertices.
- * @param[in] unique_edges Device array of the edge keys that produced them.
- * @param[in] grid_values Device array of scalar field values at grid vertices.
- * @param[in] grid_coords Device array of grid vertex coordinates.
- * @param[in] grid_colors Device array of per-vertex colours, or `nullptr`.
- * @param[in] adj_verts Device array of incoming vertex position gradients.
- * @param[in] adj_colors Device array of incoming colour gradients, or `nullptr`.
- * @param[in] iso Isolevel used in the forward pass.
- * @param[out] adj_values Device array accumulating scalar field gradients.
- * @param[out] adj_grid_colors Device array accumulating colour gradients.
- * @param[in] with_colors Whether colour gradients are propagated.
- * @warning Grid vertices are shared between edges, so several threads accumulate into the
- * same slot. Writes go through `atomicAdd`, which makes the reduction order
- * nondeterministic and the result bitwise non-reproducible between runs.
- */
-__global__ void backward_dmc_kernel(
-        const uint32_t n_verts,
-        const Edge *unique_edges,
-        const float *grid_values,
-        const float3 *grid_coords,
-        const float3 *grid_colors,
-        const float3 *adj_verts,
-        const float3 *adj_colors,
-        const float iso,
-        float *adj_values,
-        float3 *adj_grid_colors,
-        bool with_colors)
+    /**
+     * @brief Backpropagates vertex gradients into the scalar field and colours.
+     * @details The analytical adjoint of stage 4. A vertex sits at
+     * $\mathbf{p} = \mathbf{p}_0 + t(\mathbf{p}_1 - \mathbf{p}_0)$ with
+     * $t = (\text{iso} - f_0) / (f_1 - f_0)$, so $\partial t / \partial f_0$ and
+     * $\partial t / \partial f_1$ are available in closed form and the chain rule gives the
+     * field gradient directly -- no finite differences, no autograd graph over the extraction
+     * itself. One thread per output vertex.
+     * @param[in] n_verts Number of output vertices.
+     * @param[in] unique_edges Device array of the edge keys that produced them.
+     * @param[in] grid_values Device array of scalar field values at grid vertices.
+     * @param[in] grid_coords Device array of grid vertex coordinates.
+     * @param[in] grid_colors Device array of per-vertex colours, or `nullptr`.
+     * @param[in] adj_verts Device array of incoming vertex position gradients.
+     * @param[in] adj_colors Device array of incoming colour gradients, or `nullptr`.
+     * @param[in] iso Isolevel used in the forward pass.
+     * @param[out] adj_values Device array accumulating scalar field gradients.
+     * @param[out] adj_grid_colors Device array accumulating colour gradients.
+     * @param[in] with_colors Whether colour gradients are propagated.
+     * @warning Grid vertices are shared between edges, so several threads accumulate into the
+     * same slot. Writes go through `atomicAdd`, which makes the reduction order
+     * nondeterministic and the result bitwise non-reproducible between runs.
+     */
+    __global__ void backward_dmc_kernel(const uint32_t n_verts, const Edge *unique_edges, const float *grid_values,
+                                        const float3 *grid_coords, const float3 *grid_colors, const float3 *adj_verts,
+                                        const float3 *adj_colors, const float iso, float *adj_values,
+                                        float3 *adj_grid_colors, bool with_colors)
     {
         uint32_t v_idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (v_idx >= n_verts)
@@ -751,14 +721,14 @@ __global__ void backward_dmc_kernel(
 
             float t0 = 1.0f - t;
             float t1 = t;
-            
+
             atomicAdd(&(adj_grid_colors[v0_idx]), grad_c_out * t0);
             atomicAdd(&(adj_grid_colors[v1_idx]), grad_c_out * t1);
         }
 
         if (diff * diff < 1e-14f)
             return;
-            
+
         float dot_prod = maths::dot(p1 - p0, grad_p_out);
         float common = dot_prod / (diff * diff);
         float grad_v0 = common * (iso - v1_val);
@@ -778,35 +748,19 @@ __global__ void backward_dmc_kernel(
      * @warning Accumulation into shared grid vertices is atomic, so results are not bitwise
      * reproducible between runs.
      */
-    void backward(
-        const uint32_t n_verts,
-        const Edge *unique_edges,
-        const float3 *grid_vertices,
-        const float3 *grid_colors,
-        const float *values,
-        const float3 *adj_verts,
-        const float3 *adj_colors,
-        float *adj_values,
-        float3 *adj_grid_colors,
-        const float iso)
+    void backward(const uint32_t n_verts, const Edge *unique_edges, const float3 *grid_vertices,
+                  const float3 *grid_colors, const float *values, const float3 *adj_verts, const float3 *adj_colors,
+                  float *adj_values, float3 *adj_grid_colors, const float iso)
     {
-        if (n_verts == 0) return;
+        if (n_verts == 0)
+            return;
 
         bool with_colors = (grid_colors != nullptr && adj_colors != nullptr && adj_grid_colors != nullptr);
         int block_size = NTHREADS;
         int grid_size = (n_verts + block_size - 1) / block_size;
-        
-        backward_dmc_kernel<<<grid_size, block_size>>>(
-            n_verts,
-            unique_edges,
-            values,
-            grid_vertices,
-            grid_colors,
-            adj_verts,
-            adj_colors,
-            iso,
-            adj_values,
-            adj_grid_colors,
-            with_colors);
+
+        backward_dmc_kernel<<<grid_size, block_size>>>(n_verts, unique_edges, values, grid_vertices, grid_colors,
+                                                       adj_verts, adj_colors, iso, adj_values, adj_grid_colors,
+                                                       with_colors);
     }
-}
+} // namespace mc

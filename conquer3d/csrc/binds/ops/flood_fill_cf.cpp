@@ -14,19 +14,12 @@ namespace py = pybind11;
  * free of checks and gives Python callers a clear error instead of a device fault.
  * @return The operator's results as PyTorch tensors.
  */
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<int64_t>, std::vector<int64_t>> compute_flood_fill_cf_wrapper(
-    torch::Tensor vertices,
-    torch::Tensor triangles,
-    torch::Tensor aabb_mins,
-    torch::Tensor aabb_maxs,
-    torch::Tensor bvh_children,
-    torch::Tensor object_ids,
-    std::vector<float> grid_min,
-    std::vector<float> grid_max,
-    std::vector<int64_t> grid_res,
-    std::vector<int64_t> block_size,
-    int connectivity
-) {
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<int64_t>, std::vector<int64_t>>
+compute_flood_fill_cf_wrapper(torch::Tensor vertices, torch::Tensor triangles, torch::Tensor aabb_mins,
+                              torch::Tensor aabb_maxs, torch::Tensor bvh_children, torch::Tensor object_ids,
+                              std::vector<float> grid_min, std::vector<float> grid_max, std::vector<int64_t> grid_res,
+                              std::vector<int64_t> block_size, int connectivity)
+{
     CHECK_INPUT(vertices);
     CHECK_INPUT(triangles);
     CHECK_INPUT(aabb_mins);
@@ -36,20 +29,12 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vect
     TORCH_CHECK(grid_min.size() == 3, "grid_min must have 3 elements.");
     TORCH_CHECK(grid_max.size() == 3, "grid_max must have 3 elements.");
     TORCH_CHECK(grid_res.size() == 3, "grid_res must have 3 elements.");
-    
-    auto res = ops::compute_flood_fill_cf(
-        vertices, triangles, aabb_mins, aabb_maxs, bvh_children, object_ids,
-        grid_min, grid_max, grid_res, block_size, connectivity
-    );
 
-    return std::make_tuple(
-        res.coarse_mask,
-        res.boundary_block_coords,
-        res.boundary_block_lookup,
-        res.fine_boundary_masks,
-        res.block_size,
-        res.coarse_res
-    );
+    auto res = ops::compute_flood_fill_cf(vertices, triangles, aabb_mins, aabb_maxs, bvh_children, object_ids, grid_min,
+                                          grid_max, grid_res, block_size, connectivity);
+
+    return std::make_tuple(res.coarse_mask, res.boundary_block_coords, res.boundary_block_lookup,
+                           res.fine_boundary_masks, res.block_size, res.coarse_res);
 }
 
 /**
@@ -58,11 +43,12 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vect
  * defined here lands directly on `conquer3d._C`.
  * @param[in,out] m The `conquer3d._C` module object.
  */
-void bind_ops_flood_fill_cf(py::module_& m) {
-    m.def("compute_flood_fill_cf", &compute_flood_fill_cf_wrapper,
-          py::arg("vertices"), py::arg("triangles"), py::arg("aabb_mins"), py::arg("aabb_maxs"),
-          py::arg("bvh_children"), py::arg("object_ids"), py::arg("grid_min"), py::arg("grid_max"),
-          py::arg("grid_res"), py::arg("block_size") = std::vector<int64_t>{}, py::arg("connectivity") = 6,
+void bind_ops_flood_fill_cf(py::module_ &m)
+{
+    m.def("compute_flood_fill_cf", &compute_flood_fill_cf_wrapper, py::arg("vertices"), py::arg("triangles"),
+          py::arg("aabb_mins"), py::arg("aabb_maxs"), py::arg("bvh_children"), py::arg("object_ids"),
+          py::arg("grid_min"), py::arg("grid_max"), py::arg("grid_res"), py::arg("block_size") = std::vector<int64_t>{},
+          py::arg("connectivity") = 6,
           R"pbdoc(
           Computes a 2-level Coarse-to-Fine (CF) Volumetric Flood Fill on GPU (< 10 MB VRAM at 1024^3).
 

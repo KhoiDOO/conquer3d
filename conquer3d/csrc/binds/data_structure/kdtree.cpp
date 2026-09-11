@@ -8,8 +8,7 @@
 
 namespace py = pybind11;
 
-KDTree::KDTree(
-    const torch::Tensor &points)
+KDTree::KDTree(const torch::Tensor &points)
 {
     CHECK_INPUT(points);
     TORCH_CHECK(points.scalar_type() == torch::kFloat32, "points must be float32");
@@ -26,13 +25,12 @@ KDTree::KDTree(
     this->points = points.clone().contiguous();
     this->oinds = torch::arange(this->num_points, options.dtype(torch::kInt64));
 
-    kdtree::build(
-        this->num_points,
-        reinterpret_cast<float3 *>(this->points.data_ptr<float>()),
-        this->oinds.data_ptr<int64_t>());
+    kdtree::build(this->num_points, reinterpret_cast<float3 *>(this->points.data_ptr<float>()),
+                  this->oinds.data_ptr<int64_t>());
 }
 
-std::tuple<torch::Tensor, torch::Tensor> KDTree::query(const torch::Tensor &query_points, const int k, bool exclude_self)
+std::tuple<torch::Tensor, torch::Tensor> KDTree::query(const torch::Tensor &query_points, const int k,
+                                                       bool exclude_self)
 {
     CHECK_INPUT(query_points);
     TORCH_CHECK(query_points.scalar_type() == torch::kFloat32, "query_points must be float32");
@@ -53,15 +51,10 @@ std::tuple<torch::Tensor, torch::Tensor> KDTree::query(const torch::Tensor &quer
     if (num_queries > 0 && this->num_points > 0)
     {
         // Launch the CUDA Query
-        kdtree::query(
-            num_queries,
-            this->num_points,
-            search_k,
-            reinterpret_cast<const float3 *>(query_points.data_ptr<float>()),
-            reinterpret_cast<const float3 *>(this->points.data_ptr<float>()),
-            this->oinds.data_ptr<int64_t>(),
-            out_dists.data_ptr<float>(),
-            out_inds.data_ptr<int64_t>());
+        kdtree::query(num_queries, this->num_points, search_k,
+                      reinterpret_cast<const float3 *>(query_points.data_ptr<float>()),
+                      reinterpret_cast<const float3 *>(this->points.data_ptr<float>()), this->oinds.data_ptr<int64_t>(),
+                      out_dists.data_ptr<float>(), out_inds.data_ptr<int64_t>());
     }
 
     if (exclude_self)
@@ -73,7 +66,8 @@ std::tuple<torch::Tensor, torch::Tensor> KDTree::query(const torch::Tensor &quer
     return std::make_tuple(out_dists, out_inds);
 }
 
-void bind_ds_kdtree(py::module_ &m) {
+void bind_ds_kdtree(py::module_ &m)
+{
     py::class_<KDTree>(m, "KDTree", R"pbdoc(
         GPU-accelerated complete balanced KD-Tree with non-recursive stack-based k-NN search.
 
@@ -83,8 +77,7 @@ void bind_ds_kdtree(py::module_ &m) {
             >>> tree = KDTree(points)
             >>> dists, inds = tree.query(query_pts, k=3)
         )pbdoc")
-        .def(py::init<const torch::Tensor &>(),
-             py::arg("points"),
+        .def(py::init<const torch::Tensor &>(), py::arg("points"),
              R"pbdoc(
              Builds a balanced KDTree on the GPU from 3D reference points.
 
@@ -94,10 +87,7 @@ void bind_ds_kdtree(py::module_ &m) {
              Example:
                  >>> tree = KDTree(points)
              )pbdoc")
-        .def("query", &KDTree::query,
-             py::arg("query_points"),
-             py::arg("k") = 1,
-             py::arg("exclude_self") = false,
+        .def("query", &KDTree::query, py::arg("query_points"), py::arg("k") = 1, py::arg("exclude_self") = false,
              R"pbdoc(
              Queries the KDTree for the K nearest neighbors.
 

@@ -26,7 +26,8 @@
  * @param[in] b Second operand.
  * @return The vector $\mathbf{a} + \mathbf{b}$.
  */
-static inline __host__ __device__ float3 operator+(float3 a, float3 b) {
+static inline __host__ __device__ float3 operator+(float3 a, float3 b)
+{
     return make_float3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
 
@@ -35,8 +36,11 @@ static inline __host__ __device__ float3 operator+(float3 a, float3 b) {
  * @param[in,out] a Vector accumulated into.
  * @param[in] b Vector added to @p a.
  */
-static inline __host__ __device__ void operator+=(float3 &a, float3 b) {
-    a.x += b.x; a.y += b.y; a.z += b.z;
+static inline __host__ __device__ void operator+=(float3 &a, float3 b)
+{
+    a.x += b.x;
+    a.y += b.y;
+    a.z += b.z;
 }
 
 /**
@@ -45,7 +49,8 @@ static inline __host__ __device__ void operator+=(float3 &a, float3 b) {
  * @param[in] b Subtrahend.
  * @return The vector $\mathbf{a} - \mathbf{b}$.
  */
-static inline __host__ __device__ float3 operator-(float3 a, float3 b) {
+static inline __host__ __device__ float3 operator-(float3 a, float3 b)
+{
     return make_float3(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
@@ -54,8 +59,11 @@ static inline __host__ __device__ float3 operator-(float3 a, float3 b) {
  * @param[in,out] a Vector decremented.
  * @param[in] b Vector subtracted from @p a.
  */
-static inline __host__ __device__ void operator-=(float3 &a, float3 b) {
-    a.x -= b.x; a.y -= b.y; a.z -= b.z;
+static inline __host__ __device__ void operator-=(float3 &a, float3 b)
+{
+    a.x -= b.x;
+    a.y -= b.y;
+    a.z -= b.z;
 }
 
 /**
@@ -63,7 +71,8 @@ static inline __host__ __device__ void operator-=(float3 &a, float3 b) {
  * @param[in] a Vector to negate.
  * @return The vector $-\mathbf{a}$.
  */
-static inline __host__ __device__ float3 operator-(float3 a) {
+static inline __host__ __device__ float3 operator-(float3 a)
+{
     return make_float3(-a.x, -a.y, -a.z);
 }
 
@@ -73,7 +82,8 @@ static inline __host__ __device__ float3 operator-(float3 a) {
  * @param[in] b Scalar multiplier.
  * @return The vector $b\,\mathbf{a}$.
  */
-static inline __host__ __device__ float3 operator*(float3 a, float b) {
+static inline __host__ __device__ float3 operator*(float3 a, float b)
+{
     return make_float3(a.x * b, a.y * b, a.z * b);
 }
 
@@ -83,7 +93,8 @@ static inline __host__ __device__ float3 operator*(float3 a, float b) {
  * @param[in] a Vector operand.
  * @return The vector $b\,\mathbf{a}$.
  */
-static inline __host__ __device__ float3 operator*(float b, float3 a) {
+static inline __host__ __device__ float3 operator*(float b, float3 a)
+{
     return make_float3(b * a.x, b * a.y, b * a.z);
 }
 
@@ -92,8 +103,11 @@ static inline __host__ __device__ float3 operator*(float b, float3 a) {
  * @param[in,out] a Vector scaled.
  * @param[in] b Scalar multiplier.
  */
-static inline __host__ __device__ void operator*=(float3 &a, float b) {
-    a.x *= b; a.y *= b; a.z *= b;
+static inline __host__ __device__ void operator*=(float3 &a, float b)
+{
+    a.x *= b;
+    a.y *= b;
+    a.z *= b;
 }
 
 /**
@@ -105,7 +119,8 @@ static inline __host__ __device__ void operator*=(float3 &a, float b) {
  * @return The vector $\mathbf{a} / b$.
  * @warning No zero check; a zero divisor yields infinities or NaNs.
  */
-static inline __host__ __device__ float3 operator/(float3 a, const float b) {
+static inline __host__ __device__ float3 operator/(float3 a, const float b)
+{
     float inv = 1.0f / b;
     return make_float3(a.x * inv, a.y * inv, a.z * inv);
 }
@@ -116,9 +131,12 @@ static inline __host__ __device__ float3 operator/(float3 a, const float b) {
  * @param[in] b Scalar divisor.
  * @warning No zero check; see operator/(float3, const float).
  */
-static inline __host__ __device__ void operator/=(float3 &a, float b) {
+static inline __host__ __device__ void operator/=(float3 &a, float b)
+{
     float inv = 1.0f / b;
-    a.x *= inv; a.y *= inv; a.z *= inv;
+    a.x *= inv;
+    a.y *= inv;
+    a.z *= inv;
 }
 
 #ifdef __CUDACC__
@@ -132,7 +150,8 @@ static inline __host__ __device__ void operator/=(float3 &a, float b) {
  * @return The component-wise values held before the update.
  * @note Device-only; requires `__CUDACC__`.
  */
-static inline __device__ float3 atomicAdd(float3* address, float3 val) {
+static inline __device__ float3 atomicAdd(float3 *address, float3 val)
+{
     float3 old;
     old.x = ::atomicAdd(&address->x, val.x);
     old.y = ::atomicAdd(&address->y, val.y);
@@ -149,7 +168,8 @@ namespace maths
      * @param[in] b Second operand.
      * @return The scalar $\mathbf{a} \cdot \mathbf{b}$.
      */
-    static inline __host__ __device__ float dot(float3 a, float3 b) {
+    static inline __host__ __device__ float dot(float3 a, float3 b)
+    {
         return a.x * b.x + a.y * b.y + a.z * b.z;
     }
 
@@ -160,7 +180,8 @@ namespace maths
      * @param[in] a Vector operand.
      * @return The scalar $\|\mathbf{a}\|^2$.
      */
-    static inline __host__ __device__ float dot2(float3 a) {
+    static inline __host__ __device__ float dot2(float3 a)
+    {
         return dot(a, a);
     }
 
@@ -169,7 +190,8 @@ namespace maths
      * @param[in] a Vector operand.
      * @return The scalar $\|\mathbf{a}\|$.
      */
-    static inline __host__ __device__ float norm(float3 a) {
+    static inline __host__ __device__ float norm(float3 a)
+    {
         return sqrtf(dot2(a));
     }
 
@@ -181,12 +203,9 @@ namespace maths
      * @param[in] b Second operand.
      * @return The vector $\mathbf{a} \times \mathbf{b}$.
      */
-    static inline __host__ __device__ float3 cross(float3 a, float3 b) {
-        return make_float3(
-            a.y * b.z - a.z * b.y,
-            a.z * b.x - a.x * b.z,
-            a.x * b.y - a.y * b.x
-        );
+    static inline __host__ __device__ float3 cross(float3 a, float3 b)
+    {
+        return make_float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
     }
 
     /**
@@ -198,7 +217,8 @@ namespace maths
      * @warning Undefined for the zero vector, which yields NaNs. Guard degenerate inputs
      * with dot2() before calling.
      */
-    static inline __host__ __device__ float3 normalize(float3 v) {
+    static inline __host__ __device__ float3 normalize(float3 v)
+    {
         float invLen = rsqrtf(dot2(v));
         return v * invLen;
     }
@@ -210,7 +230,8 @@ namespace maths
      * @return True when all three components match bit-for-bit.
      * @warning Exact floating-point comparison; use a tolerance for computed values.
      */
-    static inline __host__ __device__ bool equals(float3 a, float3 b) {
+    static inline __host__ __device__ bool equals(float3 a, float3 b)
+    {
         return a.x == b.x && a.y == b.y && a.z == b.z;
     }
 
@@ -219,7 +240,8 @@ namespace maths
      * @param[in] a Vector operand.
      * @return A vector holding $|a_x|, |a_y|, |a_z|$.
      */
-    static inline __host__ __device__ float3 abs(float3 a) {
+    static inline __host__ __device__ float3 abs(float3 a)
+    {
         return make_float3(fabsf(a.x), fabsf(a.y), fabsf(a.z));
     }
 
@@ -229,7 +251,8 @@ namespace maths
      * @param[in] b Second operand.
      * @return A vector of per-component minima, as used to grow AABBs.
      */
-    static inline __host__ __device__ float3 min(float3 a, float3 b) {
+    static inline __host__ __device__ float3 min(float3 a, float3 b)
+    {
         return make_float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z));
     }
 
@@ -239,7 +262,8 @@ namespace maths
      * @param[in] b Second operand.
      * @return A vector of per-component maxima, as used to grow AABBs.
      */
-    static inline __host__ __device__ float3 max(float3 a, float3 b) {
+    static inline __host__ __device__ float3 max(float3 a, float3 b)
+    {
         return make_float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z));
     }
 
@@ -250,12 +274,10 @@ namespace maths
      * @param[in] max_val Per-component upper bounds.
      * @return @p v with every component confined to its range.
      */
-    static inline __host__ __device__ float3 clamp(float3 v, float3 min_val, float3 max_val) {
-        return make_float3(
-            fminf(fmaxf(v.x, min_val.x), max_val.x),
-            fminf(fmaxf(v.y, min_val.y), max_val.y),
-            fminf(fmaxf(v.z, min_val.z), max_val.z)
-        );
+    static inline __host__ __device__ float3 clamp(float3 v, float3 min_val, float3 max_val)
+    {
+        return make_float3(fminf(fmaxf(v.x, min_val.x), max_val.x), fminf(fmaxf(v.y, min_val.y), max_val.y),
+                           fminf(fmaxf(v.z, min_val.z), max_val.z));
     }
 
     /**
@@ -266,7 +288,8 @@ namespace maths
      * @param[in] t Interpolation parameter; not clamped.
      * @return $\mathbf{a} + t\,(\mathbf{b} - \mathbf{a})$.
      */
-    static inline __host__ __device__ float3 lerp(float3 a, float3 b, float t) {
+    static inline __host__ __device__ float3 lerp(float3 a, float3 b, float t)
+    {
         return a + (b - a) * t;
     }
 
@@ -280,15 +303,13 @@ namespace maths
      * @param[in] eps Length below which @p v is treated as degenerate.
      * @return The unit vector along @p v, or @p fallback.
      */
-    static inline __host__ __device__ float3 normalize_safe(
-        float3 v,
-        float3 fallback = make_float3(0.0f, 0.0f, 1.0f),
-        float eps = 1e-8f)
+    static inline __host__ __device__ float3 normalize_safe(float3 v, float3 fallback = make_float3(0.0f, 0.0f, 1.0f),
+                                                            float eps = 1e-8f)
     {
         float len = norm(v);
         return (len > eps) ? (v * (1.0f / len)) : fallback;
     }
-}
+} // namespace maths
 
 /**
  * @brief Component-wise (Hadamard) product of two vectors.
@@ -298,7 +319,8 @@ namespace maths
  * @param[in] b Second operand.
  * @return A vector holding $a_x b_x, a_y b_y, a_z b_z$.
  */
-static inline __host__ __device__ float3 operator*(float3 a, float3 b) {
+static inline __host__ __device__ float3 operator*(float3 a, float3 b)
+{
     return make_float3(a.x * b.x, a.y * b.y, a.z * b.z);
 }
 
