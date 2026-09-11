@@ -1447,6 +1447,240 @@ def fig_diffrender(rnd):
     )
 
 
+AZ_SQ = 32
+
+#: The shape exponents are swept across the range SuperQuadrics admits,
+#: MIN_EXPONENT to MAX_EXPONENT, on an 8 x 8 lattice.
+SQ_STEPS = 8
+SQ_MESH_RES = 64
+
+
+def fig_superquadrics(rnd):
+    """The superquadric shape family, swept over both exponents."""
+    from conquer3d.primitive import SuperQuadrics
+    from conquer3d.primitive.sq import MAX_EXPONENT, MIN_EXPONENT
+
+    # Both exponents span the admissible range. e -> 0 is a box, e = 1 an
+    # ellipsoid, e -> 2 a pinched star, so this lattice is the whole family.
+    axis = torch.linspace(MIN_EXPONENT, MAX_EXPONENT, SQ_STEPS, device=DEV)
+    e1 = axis.repeat_interleave(SQ_STEPS)          # varies down the rows
+    e2 = axis.repeat(SQ_STEPS)                     # varies across the columns
+    count = SQ_STEPS * SQ_STEPS
+
+    quats = torch.zeros(count, 4, device=DEV)
+    quats[:, 0] = 1.0
+    sq = SuperQuadrics.from_values(
+        scales=torch.ones(count, 3, device=DEV),
+        exponents=torch.stack([e1, e2], dim=-1),
+        quaternions=quats,
+        translations=torch.zeros(count, 3, device=DEV),
+        learnable=False,
+    )
+
+    verts, faces = sq.get_mesh(resolution=SQ_MESH_RES)
+    # get_mesh concatenates the primitives in order and each contributes a fixed
+    # count, so a primitive's own mesh is a slice rather than a label lookup.
+    n = SQ_MESH_RES
+    v_per, f_per = n * (n - 2) + 2, 2 * n * (n - 2)
+
+    # One frame for every cell, sized to the cube corner the box case reaches,
+    # so the panels show the shapes changing rather than the camera adapting.
+    shot = dict(flat=False, azimuth=AZ_SQ, elevation=18, fit_radius=1.78,
+                rim_strength=0.30)
+    panels = []
+    for i in range(count):
+        v = verts[i * v_per:(i + 1) * v_per].contiguous()
+        f = (faces[i * f_per:(i + 1) * f_per] - i * v_per).contiguous()
+        panels.append(rnd.render(v, f, **shot))
+
+    labels = [f"{float(v):.2f}" for v in axis]
+    print(f"    {count} primitives, exponents {float(axis[0]):.2f} to "
+          f"{float(axis[-1]):.2f}, {v_per:,} vertices and {f_per:,} faces each")
+
+    compose.save(
+        compose.matrix(panels, labels, labels,
+                       row_title="\u03b5\u2081", col_title="\u03b5\u2082"),
+        OUT / "fig-superquadrics.png",
+    )
+
+
+AZ_SQFIT = 215
+
+#: K x M is what bounds this fit: compute_sq_sdf materialises the whole (K, M)
+#: field and keeps it for autograd, measured at ~230 bytes per element, so a
+#: 24 GB card tops out near 1e8. Primitive count is bought with supervision
+#: points, and this is the chosen point on that budget.
+#: Measured on the K x M budget: supervision density buys far more accuracy than
+#: primitive count. K = 10,000 with M = 7,000 reaches union Chamfer 0.034, while
+#: K = 2,000 with M = 35,000 -- the same budget -- reaches 0.0082.
+SQFIT_K = 2000
+SQFIT_IOU_POINTS = 30000
+SQFIT_SURF_POINTS = 5000
+SQFIT_STEPS = 800
+SQFIT_UNION_RES = 160
+#: The softmin union is biased low by tau*log(K) (see compute_sq_union). The
+#: default 0.01 costs 0.076 at this K, a seventh of the object's half-extent,
+#: which inflates the union until the fit scatters trying to compensate.
+SQFIT_TAU = 1e-3
+
+
+def _kmeans(points, k, iters=25):
+    """Lloyd's algorithm, vectorised over centres.
+
+    The example loops over centres, which is fine for its default of 24 and
+    hopeless at thousands: this scatters every point to its centre in one pass
+    instead.
+    """
+    centres = points[torch.randperm(points.shape[0], device=points.device)[:k]].clone()
+    for _ in range(iters):
+        assign = torch.cdist(points, centres).argmin(dim=1)
+        total = torch.zeros_like(centres).index_add_(0, assign, points)
+        count = torch.zeros(k, device=points.device).index_add_(
+            0, assign, torch.ones_like(assign, dtype=torch.float32))
+        alive = count > 0
+        centres[alive] = total[alive] / count[alive].unsqueeze(-1)
+    return centres
+
+
+@torch.no_grad()
+def _union_surface(sq, res=SQFIT_UNION_RES, chunk=8192):
+    """The boundary of the union solid, as a mesh.
+
+    get_mesh() concatenates one closed surface per primitive, so where
+    primitives overlap it keeps surface buried inside its neighbours -- sampling
+    it measures that interior rather than the shape. The union's own boundary is
+    the honest surface, and the way to get it is the one sq.py prescribes:
+    evaluate compute_sq_union on a grid and run an extractor over it.
+
+    The field is evaluated in chunks because it is (K, M) wide; inference needs
+    no autograd, so only the chunk has to be resident.
+    """
+    from conquer3d.data_structure import create_voxel_grid
+    from conquer3d.ops import marching_cubes
+    from conquer3d.primitive import compute_sq_union
+
+    grid_vertices, voxels, _ = create_voxel_grid(
+        grid_min=[-0.62] * 3, grid_max=[0.62] * 3, res=[res] * 3, device=DEV)
+    field = torch.empty(grid_vertices.shape[0], device=DEV)
+    present = sq.mask
+    for i in range(0, grid_vertices.shape[0], chunk):
+        block = grid_vertices[i:i + chunk].contiguous()
+        field[i:i + chunk] = compute_sq_union(sq(block), tau=sq.union_tau, mask=present)
+    return first_two(marching_cubes(grid_vertices, voxels, field, iso=0.0))
+
+
+def fig_sqfit(rnd):
+    """A superquadric set fitted to a mesh by the SuperFlex objective."""
+    import torch.nn.functional as F
+    from conquer3d.data_structure import TriangleMesh
+    from conquer3d.primitive import SuperQuadrics
+
+    torch.manual_seed(0)
+    verts, faces, _ = _asset("Horse")().get()
+    verts, faces = verts.to(DEV).float(), faces.to(DEV).int()
+    # The asset's long axis is Y and its height is Z; the renderer is Y-up, so
+    # untouched the horse stands on its nose. (x, y, z) -> (x, z, -y) is a
+    # proper rotation, not a reflection, so the horse is not mirrored.
+    verts = torch.stack([verts[:, 0], verts[:, 2], -verts[:, 1]], dim=-1)
+
+    # Normalised the way the example does, so the fit and the target overlay.
+    probe = TriangleMesh(verts.contiguous(), faces).sample_points(SQFIT_SURF_POINTS)[0]
+    centre = probe.mean(dim=0)
+    scale = 2.0 * (probe - centre).abs().max()
+    verts = ((verts - centre) / scale).contiguous()
+    mesh = TriangleMesh(verts, faces)
+
+    surface = mesh.sample_points(SQFIT_SURF_POINTS)[0].contiguous()
+    lo, hi = verts.min(dim=0).values, verts.max(dim=0).values
+    pad = 0.05 * (hi - lo)
+    lo, hi = lo - pad, hi + pad
+    points_iou = lo + (hi - lo) * torch.rand(SQFIT_IOU_POINTS, 3, device=DEV)
+    # sign_mode 1 is the Fast Winding Number, robust to the scan's small defects.
+    *_, gt_occ = mesh.query_points(points_iou.contiguous(), return_sdf=True,
+                                   return_prj_pts=False, sign_mode=1, return_occ=True)
+
+    # k-means wants more points than centres to mean anything at this K.
+    init_cloud = mesh.sample_points(max(4 * SQFIT_K, 40_000))[0].contiguous()
+    centres = _kmeans(init_cloud, SQFIT_K)
+    spread = float(torch.cdist(centres[:2048], centres[:2048]).max()) / (
+        2.0 * SQFIT_K ** (1 / 3))
+
+    sq = SuperQuadrics(num_quadrics=SQFIT_K, device=DEV,
+                       init_scale=max(spread, 0.005), init_exponent=1.0,
+                       union_tau=SQFIT_TAU)
+    with torch.no_grad():
+        sq.raw_translations.copy_(centres)
+
+    ref = mesh.sample_points(SURFACE_SAMPLES)[0].contiguous()
+    init_v, init_f = _union_surface(sq)
+    cd0, _ = surface_metrics(init_v, init_f, ref)
+    torch.cuda.empty_cache()
+
+    # The example's per-parameter rates; raw_existences takes no gradient.
+    lrs = {"raw_scales": 2e-2, "raw_exponents": 1e-2}
+    optimizer = torch.optim.Adam(
+        [{"params": [p], "lr": lrs.get(n, 2e-3)}
+         for n, p in sq.named_parameters() if n != "raw_existences"])
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=SQFIT_STEPS)
+
+    points = torch.cat([points_iou, surface], dim=0).contiguous()
+    target = gt_occ.float()
+    t0, iou = time.time(), 0.0
+    for _ in range(SQFIT_STEPS):
+        optimizer.zero_grad(set_to_none=True)
+        fields, union = sq(points, return_union=True)
+
+        pred = torch.sigmoid(-union[:SQFIT_IOU_POINTS] / 1e-3)
+        inter = (pred * target).sum()
+        iou_t = (inter + 1e-6) / ((pred + target - pred * target).sum().clamp(min=1.0) + 1e-6)
+
+        trunc = 0.05 * torch.tanh(union[SQFIT_IOU_POINTS:] / 0.05)
+        loss_sdf = 16.0 * F.leaky_relu(trunc).abs().mean()
+
+        present = sq.mask.unsqueeze(-1)
+        indicator = torch.sigmoid(-(fields.masked_fill(~present, float("inf")) + 0.05) / 1e-3)
+        loss_ov = 1e-1 * torch.relu(indicator.sum(dim=0) - 1.0).mean()
+
+        (-torch.log(iou_t) + loss_sdf + loss_ov).backward()
+        optimizer.step()
+        scheduler.step()
+        iou = float(iou_t.detach())
+
+    elapsed = time.time() - t0
+    del fields, union, indicator, pred, trunc
+    torch.cuda.empty_cache()
+
+    fit_v, fit_f = _union_surface(sq)
+    cd, _ = surface_metrics(fit_v, fit_f, ref)
+    torch.cuda.empty_cache()
+
+    res = 12 if SQFIT_K > 2000 else 40
+    prim_v, prim_f, prim_lab = sq.get_mesh(resolution=res, return_labels=True)
+    print(f"    {SQFIT_K:,} superquadrics, {SQFIT_STEPS} steps in {elapsed:.0f}s; "
+          f"soft IoU {iou:.4f}; union Chamfer {cd0:.4f} -> {cd:.4f}; "
+          f"union surface {fit_f.shape[0]:,} faces")
+
+    palette = torch.rand(SQFIT_K, 3, device=DEV) * 0.55 + 0.35
+    shot = dict(flat=False, azimuth=AZ_SQFIT, elevation=12, fit_radius=0.60,
+                rim_strength=0.16)
+    panels = [
+        rnd.render(verts, faces, base=GT_TINT, **shot),
+        rnd.render(prim_v.contiguous(), prim_f.contiguous(),
+                   colors=palette[prim_lab.long()], **shot),
+        rnd.render(fit_v.contiguous(), fit_f.contiguous(), **shot),
+    ]
+    labels = ["Target", "Primitives", "Union surface"]
+    subs = [f"{faces.shape[0]:,} faces",
+            f"{SQFIT_K:,} superquadrics\n{SQFIT_STEPS} steps · IoU {iou:.3f}",
+            f"{fit_f.shape[0]:,} faces\nCD {cd0:.3f} -> {cd:.3f}"]
+    accents = [(150, 158, 176), (167, 139, 250), (118, 185, 0)]
+
+    compose.save(
+        compose.grid(compose.trim(panels), labels, sublabels=subs, accents=accents),
+        OUT / "fig-sqfit.png",
+    )
+
+
 def _asset(name):
     import conquer3d.data.assets as assets
 
@@ -1470,6 +1704,8 @@ FIGURES = [
     ("kdtree", fig_kdtree, True),
     ("fix normals", fig_fix_normals, True),
     ("diffrender", fig_diffrender, True),
+    ("superquadrics", fig_superquadrics, True),
+    ("sqfit", fig_sqfit, True),
 ]
 
 

@@ -190,6 +190,80 @@ def grid(
     return canvas
 
 
+def matrix(
+    panels: Sequence[np.ndarray],
+    row_values: Sequence[str],
+    col_values: Sequence[str],
+    *,
+    row_title: str = "",
+    col_title: str = "",
+    pad: int = 6,
+) -> Image.Image:
+    """Arrange panels as a labelled matrix, captioned on the axes only.
+
+    ``grid`` captions every cell, which is right when each panel is a separate
+    result. A parameter sweep is the other case: the cells differ only in two
+    numbers, so the labels belong on the axes and repeating them 64 times would
+    bury the shapes they describe.
+
+    Panels are laid out row-major, so ``panels[r * len(col_values) + c]`` is the
+    cell at ``row_values[r]`` and ``col_values[c]``.
+    """
+    rows, cols = len(row_values), len(col_values)
+    ph, pw = panels[0].shape[0], panels[0].shape[1]
+
+    # Sized from the panel, not in absolute pixels: a sweep composes to several
+    # thousand pixels and is then downscaled by save(), so a fixed 30px label
+    # arrives at the reader under 10px.
+    f_val = _font(max(24, pw // 11))
+    f_title = _font(max(28, pw // 9), bold=True)
+
+    probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    gut_w = max(_text_width(probe, v, f_val) for v in row_values) + 26
+    head_h = f_val.getbbox("Ag")[3] + 20
+    title_h = f_title.getbbox("Ag")[3] + 18
+
+    left = gut_w + title_h
+    top = head_h + title_h
+
+    W = left + cols * (pw + pad) + pad
+    H = top + rows * (ph + pad) + pad
+    canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+
+    for i, panel in enumerate(panels):
+        r, c = divmod(i, cols)
+        canvas.alpha_composite(
+            Image.fromarray(panel, "RGBA"),
+            (left + c * (pw + pad), top + r * (ph + pad)),
+        )
+
+    for c, value in enumerate(col_values):
+        x = left + c * (pw + pad) + (pw - _text_width(draw, value, f_val)) // 2
+        draw.text((x, title_h + 6), value, font=f_val, fill=INK)
+    for r, value in enumerate(row_values):
+        w = _text_width(draw, value, f_val)
+        y = top + r * (ph + pad) + (ph - f_val.getbbox("Ag")[3]) // 2
+        draw.text((left - 20 - w, y), value, font=f_val, fill=INK)
+
+    if col_title:
+        x = left + (cols * (pw + pad) - _text_width(draw, col_title, f_title)) // 2
+        draw.text((x, 0), col_title, font=f_title, fill=INK_STRONG)
+    if row_title:
+        # The row axis reads bottom-to-top, as an axis label should, which needs
+        # its own canvas because PIL cannot draw rotated text in place.
+        tw = _text_width(draw, row_title, f_title)
+        th = f_title.getbbox("Ag")[3] + 6
+        strip = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+        ImageDraw.Draw(strip).text((0, 0), row_title, font=f_title, fill=INK_STRONG)
+        strip = strip.rotate(90, expand=True)
+        canvas.alpha_composite(
+            strip, (0, top + (rows * (ph + pad) - strip.height) // 2)
+        )
+
+    return canvas
+
+
 def stack(images: Sequence[Image.Image], pad: int = 10) -> Image.Image:
     """Stack composed rows vertically, centred."""
     W = max(im.width for im in images)

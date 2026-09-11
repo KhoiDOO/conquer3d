@@ -255,6 +255,18 @@ FIGURES = [
         False,
     ),
     (
+        "fig-superquadrics", "Superquadric shape family", "Primitives",
+        "Both shape exponents swept across their range, from box through "
+        "ellipsoid to pinched star.",
+        False,
+    ),
+    (
+        "fig-sqfit", "Superquadric fitting", "Abstraction",
+        "Two thousand superquadrics fitted to a horse by gradient descent, and "
+        "the union of their fields extracted as one watertight surface.",
+        False,
+    ),
+    (
         "fig-diffrender", "Differentiable rendering", "Gradients",
         "A field of noise optimised into the Happy Buddha by multi-view mask "
         "and depth loss alone, with `diff_marching_cubes` carrying the gradient.",
