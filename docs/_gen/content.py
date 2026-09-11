@@ -140,33 +140,6 @@ verts.sum().backward()          # gradients flow into the field
 _SNIPPET_1 = "docker pull kohido/conquer3d:latest\\ndocker run --rm --gpus all -it kohido/conquer3d:latest bash"
 _SNIPPET_2 = "git clone https://github.com/KhoiDOO/conquer3d.git\\ncd conquer3d\\npip install -e . --no-build-isolation"
 
-FEATURES = [
-    (
-        "01",
-        "Surfaces from fields",
-        "Turn any scalar field into a watertight, 2-manifold surface, with sharp creases "
-        "preserved where you want them.",
-    ),
-    (
-        "02",
-        "Gradients that flow through",
-        "Extraction happens inside the training step, so gradients propagate from the mesh "
-        "back into the field.",
-    ),
-    (
-        "03",
-        "Built for the memory you have",
-        "Narrow-band voxelisation never allocates the dense volume, so a $1024^3$ extraction "
-        "fits on a single consumer GPU.",
-    ),
-    (
-        "04",
-        "Everything stays on device",
-        "Every operator consumes and produces PyTorch tensors in place, with no host "
-        "round-trip and no format conversion.",
-    ),
-]
-
 BENCHMARKS = [
     ("Dual Marching Cubes", "Triangles", "1,716,386", "3,432,768", "3.44", "~1.0B faces/s", True),
     ("Dual Marching Cubes", "Pure Quads", "1,716,386", "1,716,384", "3.22", "533M quads/s", True),
@@ -310,29 +283,12 @@ def gallery() -> str:
 
 
 def showcase(version: str, stats: Dict[str, int]) -> str:
-    """The landing page: what the library is for, and how to start.
+    """The landing page: the figure gallery, then how to start.
 
     Deliberately light on internals -- throughput tables and the tier breakdown
-    live on the Benchmarks page. This is the slot qualitative results and
-    rendered examples will occupy.
+    live on the Benchmarks page.
     """
-    cards = "".join(
-        f'<div class="card"><span class="idx">{idx}</span><h3>{esc(title)}</h3>'
-        f"<p>{md_inline(body)}</p></div>"
-        for idx, title, body in FEATURES
-    )
-
     return f"""
-<section class="section wrap">
-  <div class="section-head">
-    <span class="kicker">What it is</span>
-    <h2>A GPU-native geometry toolbox, built for gradients</h2>
-    <p>Conquer3D implements computational geometry directly in CUDA and exposes it through
-    PyTorch tensors, so meshing, querying and voxelising happen where your data already lives.</p>
-  </div>
-  <div class="grid grid-2">{cards}</div>
-</section>
-
 {gallery()}
 
 <section class="section wrap" style="border-bottom:none">

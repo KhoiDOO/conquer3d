@@ -79,16 +79,6 @@ verts.<span class="tok-fn">sum</span>().<span class="tok-fn">backward</span>()  
 </section>
 
 <main>
-<section class="section wrap">
-  <div class="section-head">
-    <span class="kicker">What it is</span>
-    <h2>A GPU-native geometry toolbox, built for gradients</h2>
-    <p>Conquer3D implements computational geometry directly in CUDA and exposes it through
-    PyTorch tensors, so meshing, querying and voxelising happen where your data already lives.</p>
-  </div>
-  <div class="grid grid-2"><div class="card"><span class="idx">01</span><h3>Surfaces from fields</h3><p>Turn any scalar field into a watertight, 2-manifold surface, with sharp creases preserved where you want them.</p></div><div class="card"><span class="idx">02</span><h3>Gradients that flow through</h3><p>Extraction happens inside the training step, so gradients propagate from the mesh back into the field.</p></div><div class="card"><span class="idx">03</span><h3>Built for the memory you have</h3><p>Narrow-band voxelisation never allocates the dense volume, so a $1024^3$ extraction fits on a single consumer GPU.</p></div><div class="card"><span class="idx">04</span><h3>Everything stays on device</h3><p>Every operator consumes and produces PyTorch tensors in place, with no host round-trip and no format conversion.</p></div></div>
-</section>
-
 
 <section class="section wrap">
   <div class="section-head">
