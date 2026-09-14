@@ -134,6 +134,56 @@ namespace ops
         return hit;
     }
 
+    /**
+     * @brief Tests whether an axis-aligned box overlaps any mesh triangle.
+     * @details Traverses the BVH and applies the Akenine-Moller separating-axis test to
+     * surviving leaves, stopping at the first hit. Classifies a whole coarse block in one test,
+     * so empty regions can be resolved without descending to fine voxels. Shared by the
+     * coarse-fine and band fills, which must classify blocks the same way.
+     * @param[in] box_min Box lower bound.
+     * @param[in] box_max Box upper bound.
+     * @param[in] bvh_aabb_mins Device array of BVH node lower bounds.
+     * @param[in] bvh_aabb_maxs Device array of BVH node upper bounds.
+     * @param[in] bvh_children Device array of BVH child index pairs.
+     * @param[in] object_ids Device array mapping leaves to triangle indices.
+     * @param[in] vertices Device array of mesh vertex coordinates.
+     * @param[in] triangles Device array of triangle vertex indices.
+     * @param[in] num_objects Number of triangles.
+     * @param[out] overflowed Optional flag set if the traversal stack overflowed, in which case a
+     *     miss is unreliable; nullptr skips the report.
+     * @return True if the box meets any triangle.
+     */
+    __device__ __forceinline__ bool
+    test_box_overlap_bvh_cf(const float3 &box_min, const float3 &box_max, const float3 *__restrict__ bvh_aabb_mins,
+                            const float3 *__restrict__ bvh_aabb_maxs, const int2 *__restrict__ bvh_children,
+                            const int *__restrict__ object_ids, const float3 *__restrict__ vertices,
+                            const int3 *__restrict__ triangles, int num_objects, bool *overflowed = nullptr)
+    {
+        bool hit = false;
+        bvh::traverse(
+            num_objects, bvh_children,
+            [&](int node_idx)
+            {
+                float3 node_min = bvh_aabb_mins[node_idx];
+                float3 node_max = bvh_aabb_maxs[node_idx];
+                return !(box_max.x < node_min.x || box_min.x > node_max.x || box_max.y < node_min.y ||
+                         box_min.y > node_max.y || box_max.z < node_min.z || box_min.z > node_max.z);
+            },
+            [&](int leaf_idx)
+            {
+                int3 tri = triangles[object_ids[leaf_idx]];
+                Triangle T(vertices[tri.x], vertices[tri.y], vertices[tri.z]);
+                if (T.is_voxel_intersect(box_min, box_max))
+                {
+                    hit = true;
+                    return false;
+                }
+                return true;
+            },
+            overflowed);
+        return hit;
+    }
+
 } // namespace ops
 
 #endif // FLOOD_FILL_COMMON_CUH
