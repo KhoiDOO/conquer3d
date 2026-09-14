@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-base="" data-search="search-index.json">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Isosurface · Showcase · Conquer3D</title>
+<meta name="description" content="From a signed distance field to a surface: extraction, sharp features, resolution, normals and differentiable rendering.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2376b900'/></svg>">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="assets/css/site.css?v=a1782cc3fa">
+<script>
+  // Applied before first paint so the theme never flashes.
+  (function(){
+    try {
+      var s = localStorage.getItem('c3d-theme');
+      if (!s) s = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', s);
+    } catch(e) { document.documentElement.setAttribute('data-theme','dark'); }
+  })();
+</script>
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="index.html">
+    <span class="mark"></span> Conquer3D <span class="ver">v0.8.4</span>
+  </a>
+  <nav class="nav-tabs"><div class="nav-dd"><a href="index.html" class="active">Showcase<svg class="nav-dd-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a><div class="nav-dd-menu"><div class="nav-dd-panel"><a href="showcase-mesh.html">Mesh</a><a href="showcase-isosurface.html" class="current" aria-current="page">Isosurface</a><a href="showcase-others.html">Others</a></div></div></div><a href="documentation.html">Documentation</a><a href="api/index.html">API Reference</a><a href="benchmarks.html">Benchmarks</a><a href="about.html">About</a></nav>
+  <div class="nav-right">
+    <button class="search-trigger" id="search-trigger" aria-label="Search documentation">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <span>Search</span><kbd>⌘K</kbd>
+    </button>
+    <button class="icon-btn" id="theme-toggle" aria-label="Toggle colour theme">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+    <a class="icon-btn" href="https://github.com/KhoiDOO/conquer3d" aria-label="GitHub repository">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0C17.6 4.7 18.6 5 18.6 5c.6 1.6.2 2.8.1 3.1.8.9 1.2 1.9 1.2 3.2 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .4.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+    </a>
+  </div>
+</header>
+
+<main>
+<div class="wrap" style="padding-top:52px">
+<div class="page-head">
+  <div class="crumbs"><a href="index.html">Home</a> › <a href="index.html#showcase">Showcase</a> › Isosurface</div>
+  <h1 style="font-family:var(--sans)">Isosurface</h1>
+  <p class="sub">From a signed distance field to a surface: extraction, sharp features, resolution, normals and differentiable rendering. 9 figures.</p>
+  <div class="btn-row" style="margin-top:18px"><a class="btn" href="showcase-mesh.html">Mesh →</a><a class="btn" href="showcase-others.html">Others →</a></div>
+</div>
+</div>
+<section class="section wrap" style="padding-top:8px;border-bottom:none">
+  <div class="fig-gallery"><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-pipeline.webp?v=578c53aa73" alt="Extraction pipeline" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Pipeline</span><h3>Extraction pipeline</h3><p>Every stage of one extraction, from input mesh to extracted surface.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-algorithms.webp?v=aa8a6199dc" alt="Isosurface extraction" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Comparison</span><h3>Isosurface extraction</h3><p>One signed distance field meshed by four different extractors.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-hermite.webp?v=e53e14b4f2" alt="Sharp features" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Sharpness</span><h3>Sharp features</h3><p>Exact Hermite data lets the dual methods reconstruct a crease instead of rounding it.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-resolution.webp?v=08edc92823" alt="Grid resolution" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Scaling</span><h3>Grid resolution</h3><p>The same model extracted from 64³ up to 2048³, with the error measured at each step.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-sign-modes.webp?v=65d12ec119" alt="Sign modes" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Robustness</span><h3>Sign modes</h3><p>One slice through each of two meshes, signed by all seven ways of deciding inside.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-normals.webp?v=e1814289ea" alt="Surface normals" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Orientation</span><h3>Surface normals</h3><p>Normals from five extractors, coloured by direction and compared to the source.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-normal-modes.webp?v=96c6ec2607" alt="Normal modes" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Normals</span><h3>Normal modes</h3><p>The three ways of supplying normals to Dual Contouring, and what each one produces.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-sdf-slices.webp?v=456a81707f" alt="Signed distance field" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Fields</span><h3>Signed distance field</h3><p>Slices through the field a mesh generates, with the zero level set drawn on top.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-diffrender.webp?v=7fbb32546c" alt="Differentiable rendering" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Gradients</span><h3>Differentiable rendering</h3><p>A field of noise optimised into the Happy Buddha by multi-view mask and depth loss alone, with <code>diff_marching_cubes</code> carrying the gradient.</p></figcaption></figure></div>
+</section>
+</main>
+<footer class="footer"><div class="footer-inner">
+  <span>Conquer3D v0.8.4 — MIT licensed</span>
+  <span class="spacer"></span>
+  <a href="https://github.com/KhoiDOO/conquer3d">GitHub</a>
+  <a href="https://pypi.org/project/conquer3d/">PyPI</a>
+  <a href="https://hub.docker.com/r/kohido/conquer3d">Docker</a>
+  <a href="about.html">References</a>
+</div></footer>
+
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" aria-label="Close">✕</button>
+  <img src="" alt="">
+  <div class="lightbox-cap"></div>
+</div>
+
+<div class="search-modal" id="search-modal">
+  <div class="search-box">
+    <input id="search-input" type="text" placeholder="Search the API — functions, kernels, classes…" autocomplete="off" spellcheck="false">
+    <div class="search-results" id="search-results"></div>
+  </div>
+</div>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],ignoredTags:['script','noscript','style','textarea','pre','code'],throwOnError:false});"></script>
+<script src="assets/js/site.js?v=b4ab244bd2"></script>
+</body>
+</html>

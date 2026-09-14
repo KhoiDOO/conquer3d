@@ -131,15 +131,58 @@ code, pre, .mono { font-family: var(--mono); font-variant-ligatures: none; }
 .brand .ver { font: 500 10.5px/1 var(--mono); color: var(--fg-dim); border: 1px solid var(--line); padding: 3px 5px; border-radius: 4px; }
 
 .nav-tabs { display: flex; gap: 3px; margin-left: 6px; }
-.nav-tabs a {
+/* A tab is a direct link or a dropdown's trigger. Scoped with ">" so links inside
+   a dropdown panel take none of this, while the frozen API archives, whose nav is
+   still a flat row of links, keep matching .nav-tabs > a. */
+.nav-tabs > a, .nav-dd > a {
   padding: 7px 13px; border-radius: 7px; font-size: .875rem; font-weight: 500;
   color: var(--fg-mid); transition: background .15s, color .15s;
 }
-.nav-tabs a:hover { background: var(--surface-2); color: var(--fg); }
-.nav-tabs a.active { color: var(--fg); background: var(--surface-2); }
-.nav-tabs a.active::after {
+.nav-tabs > a:hover, .nav-dd > a:hover { background: var(--surface-2); color: var(--fg); }
+.nav-tabs > a.active, .nav-dd > a.active { color: var(--fg); background: var(--surface-2); }
+.nav-tabs > a.active::after, .nav-dd > a.active::after {
   content: ""; display: block; height: 2px; margin-top: 5px; border-radius: 2px; background: var(--grad);
 }
+
+/* The Showcase tab opens its galleries on hover or keyboard focus. The menu hides
+   with opacity and pointer-events rather than visibility, so its links stay in the
+   tab order and the accessibility tree, and focusing one opens it. Hover is gated
+   on (hover: hover): on a touch screen a tap on the tab goes straight to the
+   landing page instead of being taken as a hover. */
+.nav-dd { position: relative; }
+/* Inside the wrapper the trigger is no longer a flex item; block keeps the active
+   underline on its own line under the label. */
+.nav-dd > a { display: block; }
+.nav-dd-chevron {
+  width: 10px; height: 10px; margin-left: 5px; vertical-align: 1px;
+  opacity: .7; transition: transform .15s;
+}
+.nav-dd-menu {
+  position: absolute; top: 100%; left: -6px; z-index: 5; min-width: 190px;
+  padding-top: 8px;  /* transparent bridge, so the pointer can travel from tab to panel */
+  opacity: 0; transform: translateY(-4px); pointer-events: none;
+  transition: opacity .15s, transform .15s;
+}
+@media (hover: hover) {
+  .nav-dd:hover .nav-dd-menu { opacity: 1; transform: none; pointer-events: auto; }
+  .nav-dd:hover .nav-dd-chevron { transform: rotate(180deg); }
+}
+.nav-dd:focus-within .nav-dd-menu { opacity: 1; transform: none; pointer-events: auto; }
+.nav-dd:focus-within .nav-dd-chevron { transform: rotate(180deg); }
+/* Escape closes the menu even while the pointer or focus is still inside; declared
+   after the open rules so it wins at equal specificity. */
+.nav-dd.dismissed .nav-dd-menu { opacity: 0; transform: translateY(-4px); pointer-events: none; }
+.nav-dd.dismissed .nav-dd-chevron { transform: none; }
+.nav-dd-panel {
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 10px; box-shadow: var(--shadow); padding: 5px;
+}
+.nav-dd-panel a {
+  display: block; padding: 8px 12px; border-radius: 6px; white-space: nowrap;
+  font-size: .875rem; font-weight: 500; color: var(--fg-mid);
+}
+.nav-dd-panel a:hover { background: var(--surface-2); color: var(--fg); }
+.nav-dd-panel a.current { color: var(--fg); background: var(--surface-2); box-shadow: inset 2px 0 var(--accent); }
 
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
@@ -552,7 +595,7 @@ html[data-theme="light"] .tok-fn { color: #0e7490; }
   :root { --sidebar-w: 232px; }
   .layout { gap: 26px; }
   .nav { gap: 14px; padding: 0 16px; }
-  .nav-tabs a { padding: 7px 9px; font-size: .84rem; }
+  .nav-tabs > a, .nav-dd > a { padding: 7px 9px; font-size: .84rem; }
   .search-trigger { min-width: 0; }
   .search-trigger span, .search-trigger kbd { display: none; }
 }
@@ -676,6 +719,30 @@ html[data-theme="light"] .tok-fn { color: #0e7490; }
   -webkit-column-break-inside: avoid;
   margin: 0 0 18px;
 }
+
+/* ---------------------------------------------------- showcase cards */
+
+/* The landing page's way into each gallery: a link styled as a .card, never a
+   .fig -- site.js zooms any .fig-media on click. */
+.section-card { padding: 0; display: flex; flex-direction: column; color: inherit; }
+.section-card:hover { color: inherit; }
+/* A fixed 16:10 well whatever the cover's shape. min-height: 0 matters: the well
+   is a flex item, and without it a near-square cover's intrinsic height would
+   stretch the well and misalign the three cards. */
+.section-card-media {
+  aspect-ratio: 16 / 10; min-height: 0; overflow: hidden; padding: 16px 18px;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--a-cyan) 6%, transparent), transparent 70%),
+    var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+}
+.section-card-media img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+.section-card-body { padding: 18px 22px 22px; display: flex; flex-direction: column; flex: 1; }
+.section-card-body h3 { font-size: 1.15rem; margin-bottom: 8px; }
+.section-card-body p { margin: 0 0 16px; color: var(--fg-mid); font-size: .935rem; }
+.section-card-go { margin-top: auto; font-size: .875rem; font-weight: 600; color: var(--fg-mid); transition: color .15s; }
+.section-card:hover .section-card-go { color: var(--accent); }
 
 /* ------------------------------------------------------------- lightbox */
 

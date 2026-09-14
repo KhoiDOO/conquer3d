@@ -177,6 +177,27 @@
     });
   }
 
+  /* ---------------------------------------------------- nav dropdown --- */
+  // CSS opens the Showcase menu on hover and keyboard focus. This only lets Escape
+  // close it while the pointer or focus is still inside, which CSS cannot do.
+  // Pages without the markup, such as the frozen API archives, find no .nav-dd.
+  document.querySelectorAll(".nav-dd").forEach(function (dd) {
+    var head = dd.querySelector("a");
+    dd.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      dd.classList.add("dismissed");
+      if (head && dd.contains(document.activeElement)) head.focus();
+    });
+    // Tabbing on into the menu, leaving it, or moving the pointer away re-arms it.
+    dd.addEventListener("focusin", function (e) {
+      if (e.target !== head) dd.classList.remove("dismissed");
+    });
+    dd.addEventListener("focusout", function (e) {
+      if (!dd.contains(e.relatedTarget)) dd.classList.remove("dismissed");
+    });
+    dd.addEventListener("mouseleave", function () { dd.classList.remove("dismissed"); });
+  });
+
   /* ------------------------------------------------------------ lightbox */
   // Figures carry fine detail (crease crops, curvature speckle) that only reads
   // at full size, so every figure is click-to-zoom.
