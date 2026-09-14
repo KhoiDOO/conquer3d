@@ -550,6 +550,24 @@ def main() -> int:
         encoding="utf-8",
     )
 
+    # One page per Showcase gallery, written before relink_assets and check_links
+    # so the nav links every page now carries resolve. Top-level pages are never
+    # cleaned up, so renaming a slug in render.SHOWCASE_SECTIONS leaves the old
+    # page behind until it is deleted by hand.
+    for slug, label in render.SHOWCASE_SECTIONS:
+        (DOCS / f"showcase-{slug}.html").write_text(
+            render.shell(
+                title=f"{label} · Showcase · Conquer3D",
+                description=content.SECTION_META[slug][0],
+                base="",
+                active=f"showcase-{slug}.html",
+                version=version,
+                body=content.showcase_section(slug),
+                wide=True,
+            ),
+            encoding="utf-8",
+        )
+
     (DOCS / "documentation.html").write_text(
         render.shell(
             title="Documentation · Conquer3D",

@@ -45,13 +45,48 @@ FONTS = (
 )
 REPO = "https://github.com/KhoiDOO/conquer3d"
 
+#: The Showcase galleries in menu order, as (slug, label). The nav owns their
+#: order and labels; content.py assigns figures to them and checks it covers all.
+SHOWCASE_SECTIONS = [("mesh", "Mesh"), ("isosurface", "Isosurface"), ("others", "Others")]
+
+#: (href, label, children). A tab with children opens them as a dropdown.
 TABS = [
-    ("index.html", "Showcase"),
-    ("documentation.html", "Documentation"),
-    ("api/index.html", "API Reference"),
-    ("benchmarks.html", "Benchmarks"),
-    ("about.html", "About"),
+    ("index.html", "Showcase",
+     [(f"showcase-{slug}.html", label) for slug, label in SHOWCASE_SECTIONS]),
+    ("documentation.html", "Documentation", []),
+    ("api/index.html", "API Reference", []),
+    ("benchmarks.html", "Benchmarks", []),
+    ("about.html", "About", []),
 ]
+
+_CHEVRON = (
+    '<svg class="nav-dd-chevron" viewBox="0 0 12 12" aria-hidden="true">'
+    '<path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" '
+    'stroke-linecap="round" stroke-linejoin="round"/></svg>'
+)
+
+
+def _tab(base: str, href: str, label: str, children: list, active: str) -> str:
+    """One nav tab; a tab with children renders as a hover and focus dropdown.
+
+    The tab stays highlighted on any child's page, so Showcase remains lit on its
+    galleries, while aria-current marks only the page the reader is actually on.
+    """
+    lit = active == href or any(active == child for child, _ in children)
+    cls = ' class="active"' if lit else ""
+    current = ' aria-current="page"' if active == href else ""
+    if not children:
+        return f'<a href="{base}{href}"{cls}{current}>{esc(label)}</a>'
+    items = "".join(
+        f'<a href="{base}{child}"'
+        + (' class="current" aria-current="page"' if active == child else "")
+        + f">{esc(child_label)}</a>"
+        for child, child_label in children
+    )
+    return (
+        f'<div class="nav-dd"><a href="{base}{href}"{cls}{current}>{esc(label)}{_CHEVRON}</a>'
+        f'<div class="nav-dd-menu"><div class="nav-dd-panel">{items}</div></div></div>'
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -262,10 +297,7 @@ def shell(
         search: Page-relative URL of the search index this page should query.
             A versioned API page searches its own version, not the newest.
     """
-    tabs = "".join(
-        f'<a href="{base}{href}" class="{"active" if href == active else ""}">{esc(label)}</a>'
-        for href, label in TABS
-    )
+    tabs = "".join(_tab(base, href, label, children, active) for href, label, children in TABS)
     search = search if search is not None else f"{base}search-index.json"
 
     if sidebar or toc:
