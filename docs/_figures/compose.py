@@ -227,9 +227,13 @@ def matrix(
 
     # Sized from the panel, not in absolute pixels: a sweep composes to several
     # thousand pixels and is then downscaled by save(), so a fixed 30px label
-    # arrives at the reader under 10px.
-    f_val = _font(max(24, pw // 11))
-    f_title = _font(max(28, pw // 9), bold=True)
+    # arrives at the reader under 10px. With 760px panels in an 8x8 sweep the
+    # values publish at about 38px, above the ~31px captions of other figures.
+    # Titles are sized by glyph height, not font size: an axis named by a Greek
+    # letter has lowercase height, so at a merely larger font it still reads
+    # smaller than its own digits. pw / 3.8 draws it at 1.2x their ink height.
+    f_val = _font(max(24, pw // 6))
+    f_title = _font(max(28, round(pw / 3.8)), bold=True)
 
     probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     gut_w = max(_text_width(probe, v, f_val) for v in row_values) + 26
