@@ -45,6 +45,8 @@ def tmesh2voxel(
             - 3: Volumetric 3D flood fill mask (dense).
             - 4: Hybrid WN + pseudonormals.
             - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
+            - 6: Band flood fill that seals holes narrower than the dilation (memory like 5).
+              The mesh must lie at least 4 grid spacings inside `grid_min`/`grid_max`.
         return_occ (bool, optional): If True, additionally returns binary occupancy defined as
             `sdfs < 0`. Points exactly on the surface classify as outside, and occupancy is exactly
             as reliable as the sign produced by `sign_mode`. Defaults to False.
@@ -76,6 +78,8 @@ def tmesh2voxel(
         tm.build_flood_fill_data(grid_min, grid_max, res_list)
     elif sign_mode == 5:
         tm.build_flood_fill_cf_data(grid_min, grid_max, res_list)
+    elif sign_mode == 6:
+        tm.build_flood_fill_band_data(grid_min, grid_max, res_list)
     if sign_mode in [2, 4]:
         tm.compute_triangle_normals()
         tm.compute_vertex_normals(1)
@@ -143,6 +147,8 @@ def tmesh2sparse(
             - 3: Volumetric flood fill (dense).
             - 4: Hybrid WN + pseudonormals.
             - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
+            - 6: Band flood fill that seals holes narrower than the dilation (memory like 5).
+              The mesh must lie at least 4 grid spacings inside `grid_min`/`grid_max`.
         pad (int, optional): Voxel layer dilation radius. Defaults to 0 (set `pad=1` for DMC / DC).
         return_normals (bool, optional): If True, returns surface normal vectors. Defaults to False.
         normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector).
@@ -211,6 +217,8 @@ def tmesh2sparse(
         tm.build_flood_fill_data(grid_min, grid_max, res_list)
     elif sign_mode == 5:
         tm.build_flood_fill_cf_data(grid_min, grid_max, res_list)
+    elif sign_mode == 6:
+        tm.build_flood_fill_band_data(grid_min, grid_max, res_list)
     if sign_mode in [2, 4]:
         tm.compute_triangle_normals()
         tm.compute_vertex_normals(1)
@@ -269,7 +277,8 @@ def tmesh2voxelcloud(
         chunk_size (int, optional): Chunk size for batch SDF querying. Defaults to 5,000,000.
         device (str, optional): Computation device. Defaults to `'cuda'`.
         show_progress (bool, optional): Whether to display a progress bar. Defaults to True.
-        sign_mode (int, optional): Sign evaluation mode (0: Ray casting, 1: FWN, 2: Pseudonormals, 5: CF Flood Fill).
+        sign_mode (int, optional): Sign evaluation mode (0: Ray casting, 1: FWN, 2: Pseudonormals, 5: CF Flood Fill,
+            6: Band Flood Fill).
         return_normals (bool, optional): If True, returns surface normal vectors. Defaults to False.
         normal_mode (int, optional): Normal mode (0: face normals, 1: vertex normals, 2: displacement vector).
         return_occ (bool, optional): If True, additionally returns binary occupancy defined as

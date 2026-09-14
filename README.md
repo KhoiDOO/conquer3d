@@ -91,7 +91,7 @@ Every stage of one extraction, from input mesh to extracted surface.
 
 <img src="docs/assets/img/fig-sign-modes.webp" alt="Sign modes" width="100%">
 
-One slice through a mesh, signed by each of the six ways of deciding inside.
+One slice through each of two meshes, signed by all seven ways of deciding inside.
 
 ### Ray queries
 
