@@ -226,7 +226,11 @@ def fig_algorithms(rnd):
                                wireframe=0.004))
     wide = compose.trim(wide)
     close = compose.trim(close)
-    top = compose.grid(wide, labels, sublabels=subs, accents=accents)
+    # "Dual Marching Cubes" is wider than a panel. It is the last column, so it
+    # runs into the right margin at full size rather than shrinking below the
+    # other extractor names; the close-up row beneath is wider, so the figure
+    # keeps its width and nothing else is scaled down.
+    top = compose.grid(wide, labels, sublabels=subs, accents=accents, label_overflow=True)
     bot = compose.grid(close, ["Crease detail"] * len(close),
                        sublabels=["reference edge"] + [f"{RES_ALGO}³ grid"] * (len(close) - 1),
                        accents=accents)
@@ -271,62 +275,126 @@ def fig_normal_modes(rnd):
 # --------------------------------------------------------------------------- #
 
 
+#: Every sign_mode the dispatcher in mesh_bvh.cu implements. Mode 1 calls the
+#: fast winding number and mode 2 the angle-weighted pseudonormal.
+SIGN_MODE_NAMES = {0: "Ray parity", 1: "Winding number", 2: "Pseudonormal",
+                   3: "Flood fill", 4: "Hybrid consensus", 5: "Coarse-fine fill",
+                   6: "Band fill"}
+#: The three volumetric modes are built on one lattice, so they are compared at
+#: the same resolution rather than at whatever each builder defaults to. 512^3,
+#: not 128^3: the Buddha scan has one hole about 0.014 across, and a flood fill
+#: only leaks when a lattice step fits through it. At 128^3 a step is 0.0157, so
+#: the leak -- the failure sign_mode=6 exists to prevent -- stays hidden.
+SIGN_FLOOD_RES = [512] * 3
+#: A lattice mode whose slice holds less than this fraction of the winding
+#: number's interior has leaked, and its panel says so.
+SIGN_LEAK_RATIO = 0.5
+#: sign_mode=6 band fill parameters, set explicitly. The radius seals holes up to
+#: about 2 * radius + 3 lattice spacings; a sealed pocket holding at most
+#: SIGN_BAND_CAVITY free vertices is released. 125 is (2 * radius + 1)^3, which is
+#: also what cavity_max_voxels=-1 selects at radius 2, so it pins the default.
+SIGN_BAND_DILATION = 2
+SIGN_BAND_CAVITY = 125
+SIGN_SLICE_RES = 400
+SIGN_SLICE_HALF = 0.9
+#: (asset, display name, subtitle, render azimuth, slice z). The slice is the
+#: plane z = slice_z, viewed from +Z. The Buddha's raised hands and the ring they
+#: hold sit behind his centre (vertex median z = -0.09 above the shoulders), so
+#: z = 0 cuts in front of them and misses his legs; a sweep over depth put both
+#: hands, the ring and both legs in the plane at z = -0.08.
+SIGN_ROWS = (("Bimba", "Bimba", "sliced at z = 0", 90, 0.0),
+             ("HappyBuddha", "Happy Buddha", "sliced at z = \u22120.08", 0, -0.08))
+
+
 def fig_sign_modes(rnd):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    tmesh = load_mesh(_asset("Bimba"))
-    res = 320
-    tmesh.build_flood_fill_data(BOUNDS_MIN, BOUNDS_MAX, [128] * 3)
-
-    # A single axial slice through the model, queried under each sign mode.
-    lin = torch.linspace(-1.0, 1.0, res, device=DEV)
+    # One axial slice through each model, queried under every sign mode.
+    lin = torch.linspace(-SIGN_SLICE_HALF, SIGN_SLICE_HALF, SIGN_SLICE_RES, device=DEV)
     yy, xx = torch.meshgrid(lin, lin, indexing="ij")
-    pts = torch.stack([xx.reshape(-1), yy.reshape(-1),
-                       torch.zeros(res * res, device=DEV)], dim=-1).contiguous()
+    extent = [-SIGN_SLICE_HALF, SIGN_SLICE_HALF, -SIGN_SLICE_HALF, SIGN_SLICE_HALF]
+    modes = sorted(SIGN_MODE_NAMES)
 
-    names = {0: "Ray parity", 1: "Pseudonormal", 2: "Winding number",
-             3: "Flood fill", 4: "Hybrid consensus", 5: "Coarse-fine fill"}
-    fields = {}
-    for mode, name in names.items():
-        try:
-            sdf = tmesh.query_points(pts, return_sdf=True, sign_mode=mode)[-1]
-            fields[mode] = sdf.reshape(res, res).detach().cpu().numpy()
-        except Exception as exc:
-            print(f"    sign_mode={mode} unavailable: {str(exc)[:70]}")
+    rows = []
+    for asset, display, subtitle, azimuth, slice_z in SIGN_ROWS:
+        tmesh = load_mesh(_asset(asset))
+        tmesh.build_flood_fill_data(BOUNDS_MIN, BOUNDS_MAX, SIGN_FLOOD_RES)
+        tmesh.build_flood_fill_cf_data(BOUNDS_MIN, BOUNDS_MAX, SIGN_FLOOD_RES)
+        tmesh.build_flood_fill_band_data(BOUNDS_MIN, BOUNDS_MAX, SIGN_FLOOD_RES,
+                                         dilation_radius=SIGN_BAND_DILATION,
+                                         cavity_max_voxels=SIGN_BAND_CAVITY)
+        print(f"    {display}: band fill stats {dict(tmesh.band_stats)}")
+        pts = torch.stack([xx.reshape(-1), yy.reshape(-1),
+                           torch.full((SIGN_SLICE_RES ** 2,), slice_z, device=DEV)],
+                          dim=-1).contiguous()
 
-    # Lead with the mesh being sliced, so the contours have a referent.
-    gv_gt, gf_gt = gt_mesh(tmesh)
-    shot = compose.trim([rnd.render(gv_gt, gf_gt, base=GT_TINT, flat=False,
-                                    azimuth=90, elevation=6, rim_strength=0.18)])[0]
+        fields, inside = {}, {}
+        for mode in modes:
+            try:
+                sdf = tmesh.query_points(pts, return_sdf=True, sign_mode=mode)[-1]
+            except Exception as exc:
+                print(f"    {display} sign_mode={mode} unavailable: {str(exc)[:70]}")
+                continue
+            fields[mode] = sdf.reshape(SIGN_SLICE_RES, SIGN_SLICE_RES).detach().cpu().numpy()
+            inside[mode] = 100 * float((sdf < 0).float().mean())
+        print(f"    {display}: inside fraction of slice by mode  "
+              + "  ".join(f"{m}:{f:.2f}%" for m, f in inside.items()))
 
-    n = len(fields) + 1
-    fig, axes = plt.subplots(1, n, figsize=(3.1 * n, 3.5), dpi=170)
-    axes = np.atleast_1d(axes)
+        # Lead each row with the mesh being sliced, so the contours have a referent.
+        gv, gf = gt_mesh(tmesh)
+        shot = compose.trim([rnd.render(gv, gf, base=GT_TINT, flat=False,
+                                        azimuth=azimuth, elevation=6, rim_strength=0.18)])[0]
+        rows.append((display, subtitle, shot, fields, inside))
 
-    axes[0].imshow(shot, origin="upper")
-    axes[0].set_title("Ground truth\nsliced at z = 0", fontsize=12, pad=9)
-    axes[0].set_xticks([]); axes[0].set_yticks([])
-    for spine in axes[0].spines.values():
-        spine.set_visible(False)
-    style_axes(axes[0], fig)
+    ncol = len(modes) + 1
+    fig, axes = plt.subplots(len(rows), ncol, figsize=(3.1 * ncol, 3.5 * len(rows)),
+                             dpi=170, squeeze=False)
 
-    for ax, (mode, field) in zip(axes[1:], sorted(fields.items())):
-        lim = float(np.percentile(np.abs(field), 97)) or 1.0
-        ax.imshow(field, cmap="RdBu_r", vmin=-lim, vmax=lim, origin="lower",
-                  extent=[-1, 1, -1, 1])
-        ax.contour(field, levels=[0.0], colors=["#76b900"], linewidths=1.6,
-                   extent=[-1, 1, -1, 1], origin="lower")
-        ax.set_title(f"{names[mode]}\nsign_mode={mode}", fontsize=12, pad=9)
+    for r, (display, subtitle, shot, fields, inside) in enumerate(rows):
+        ax = axes[r, 0]
+        ax.imshow(shot, origin="upper")
+        ax.set_title(f"{display}\n{subtitle}", fontsize=12, pad=9)
         ax.set_xticks([]); ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
         style_axes(ax, fig)
+
+        reference = inside.get(1)
+        for c, mode in enumerate(modes, start=1):
+            ax = axes[r, c]
+            ax.set_xticks([]); ax.set_yticks([])
+            style_axes(ax, fig)
+            if mode not in fields:
+                ax.set_visible(False)
+                continue
+            field = fields[mode]
+            lim = float(np.percentile(np.abs(field), 97)) or 1.0
+            ax.imshow(field, cmap="RdBu_r", vmin=-lim, vmax=lim, origin="lower", extent=extent)
+            ax.contour(field, levels=[0.0], colors=["#76b900"], linewidths=1.3,
+                       extent=extent, origin="lower")
+            # A leaked flood marks the whole interior exterior: the panel turns solid
+            # red with no zero crossing, which reads as a rendering fault unless said.
+            if (mode in (3, 5, 6) and reference
+                    and inside[mode] < SIGN_LEAK_RATIO * reference):
+                ax.text(0.5, 0.5, f"leaked\n{inside[mode]:.2f}% inside",
+                        transform=ax.transAxes, ha="center", va="center",
+                        fontsize=13, fontweight="bold", color="#0f172a",
+                        bbox=dict(boxstyle="round,pad=0.45", fc="white", ec="#76b900",
+                                  lw=1.2, alpha=0.92))
+                print(f"    {display} sign_mode={mode}: leaked ({inside[mode]:.2f}% inside "
+                      f"vs {reference:.2f}% for the winding number)")
+            # Mode names head the columns once; the second row reads against them.
+            if r == 0:
+                ax.set_title(f"{SIGN_MODE_NAMES[mode]}\nsign_mode={mode}", fontsize=12, pad=9)
+
     fig.tight_layout()
     fig.savefig(OUT / "fig-sign-modes.png", transparent=True,
                 bbox_inches="tight", pad_inches=0.15)
     plt.close(fig)
     to_webp(OUT / "fig-sign-modes.png")
-    print(f"    wrote fig-sign-modes  ({n} modes)")
+    print(f"    wrote fig-sign-modes  ({len(rows)} meshes x {len(modes)} modes)")
 
 
 # --------------------------------------------------------------------------- #

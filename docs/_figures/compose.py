@@ -119,8 +119,16 @@ def grid(
     pad: int = 18,
     label_h: int = 104,
     accents: Optional[Sequence[Tuple[int, int, int]]] = None,
+    label_overflow: bool = False,
 ) -> Image.Image:
-    """Arrange rendered panels into a labelled grid."""
+    """Arrange rendered panels into a labelled grid.
+
+    A label wider than its panel shrinks until it fits. With ``label_overflow``,
+    a label in the last column is kept at full size on one line instead and runs
+    into the right margin, which no other caption occupies; the canvas widens to
+    hold it. Other columns still shrink, since an overrun there would write over
+    the neighbouring caption.
+    """
     n = len(panels)
     cols = cols or n
     rows = (n + cols - 1) // cols
@@ -133,6 +141,10 @@ def grid(
     label_h = max(label_h, _caption_height(probe, labels, sublabels, pw, f_label, f_sub))
 
     W = cols * pw + (cols + 1) * pad
+    if label_overflow:
+        spill = max((_text_width(probe, labels[i], f_label) - pw
+                     for i in range(n) if i % cols == cols - 1), default=0)
+        W += max(0, spill)
     H = rows * (ph + label_h) + (rows + 1) * pad
 
     canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -154,7 +166,8 @@ def grid(
         # neighbour's caption.
         f_lab = f_label
         size = 42
-        while size > 22 and _text_width(draw, labels[i], f_lab) > pw:
+        spills = label_overflow and c == cols - 1
+        while not spills and size > 22 and _text_width(draw, labels[i], f_lab) > pw:
             size -= 2
             f_lab = _font(size, bold=True)
         label_w = _text_width(draw, labels[i], f_lab)
@@ -214,9 +227,13 @@ def matrix(
 
     # Sized from the panel, not in absolute pixels: a sweep composes to several
     # thousand pixels and is then downscaled by save(), so a fixed 30px label
-    # arrives at the reader under 10px.
-    f_val = _font(max(24, pw // 11))
-    f_title = _font(max(28, pw // 9), bold=True)
+    # arrives at the reader under 10px. With 760px panels in an 8x8 sweep the
+    # values publish at about 38px, above the ~31px captions of other figures.
+    # Titles are sized by glyph height, not font size: an axis named by a Greek
+    # letter has lowercase height, so at a merely larger font it still reads
+    # smaller than its own digits. pw / 3.8 draws it at 1.2x their ink height.
+    f_val = _font(max(24, pw // 6))
+    f_title = _font(max(28, round(pw / 3.8)), bold=True)
 
     probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     gut_w = max(_text_width(probe, v, f_val) for v in row_values) + 26
