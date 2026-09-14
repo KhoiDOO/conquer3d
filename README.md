@@ -28,8 +28,8 @@
 ---
 
 > [!NOTE]
-> The API documentation and the [documentation website](https://khoidoo.github.io/conquer3d/)
-> were written with [Claude](https://claude.ai/code). The library itself — every CUDA kernel,
+> The API documentation, the [documentation website](https://khoidoo.github.io/conquer3d/), and version control tasks
+> were written and automated with [Claude](https://claude.ai/code). The library itself — every CUDA kernel,
 > data structure and operator — is the author's own work.
 
 ---
