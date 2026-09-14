@@ -119,8 +119,16 @@ def grid(
     pad: int = 18,
     label_h: int = 104,
     accents: Optional[Sequence[Tuple[int, int, int]]] = None,
+    label_overflow: bool = False,
 ) -> Image.Image:
-    """Arrange rendered panels into a labelled grid."""
+    """Arrange rendered panels into a labelled grid.
+
+    A label wider than its panel shrinks until it fits. With ``label_overflow``,
+    a label in the last column is kept at full size on one line instead and runs
+    into the right margin, which no other caption occupies; the canvas widens to
+    hold it. Other columns still shrink, since an overrun there would write over
+    the neighbouring caption.
+    """
     n = len(panels)
     cols = cols or n
     rows = (n + cols - 1) // cols
@@ -133,6 +141,10 @@ def grid(
     label_h = max(label_h, _caption_height(probe, labels, sublabels, pw, f_label, f_sub))
 
     W = cols * pw + (cols + 1) * pad
+    if label_overflow:
+        spill = max((_text_width(probe, labels[i], f_label) - pw
+                     for i in range(n) if i % cols == cols - 1), default=0)
+        W += max(0, spill)
     H = rows * (ph + label_h) + (rows + 1) * pad
 
     canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -154,7 +166,8 @@ def grid(
         # neighbour's caption.
         f_lab = f_label
         size = 42
-        while size > 22 and _text_width(draw, labels[i], f_lab) > pw:
+        spills = label_overflow and c == cols - 1
+        while not spills and size > 22 and _text_width(draw, labels[i], f_lab) > pw:
             size -= 2
             f_lab = _font(size, bold=True)
         label_w = _text_width(draw, labels[i], f_lab)

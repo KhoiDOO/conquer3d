@@ -226,7 +226,11 @@ def fig_algorithms(rnd):
                                wireframe=0.004))
     wide = compose.trim(wide)
     close = compose.trim(close)
-    top = compose.grid(wide, labels, sublabels=subs, accents=accents)
+    # "Dual Marching Cubes" is wider than a panel. It is the last column, so it
+    # runs into the right margin at full size rather than shrinking below the
+    # other extractor names; the close-up row beneath is wider, so the figure
+    # keeps its width and nothing else is scaled down.
+    top = compose.grid(wide, labels, sublabels=subs, accents=accents, label_overflow=True)
     bot = compose.grid(close, ["Crease detail"] * len(close),
                        sublabels=["reference edge"] + [f"{RES_ALGO}³ grid"] * (len(close) - 1),
                        accents=accents)
