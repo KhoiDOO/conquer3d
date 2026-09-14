@@ -1,11 +1,11 @@
 [
  {
-  "version": "0.8.3",
+  "version": "0.8.4",
   "tag": "",
   "path": "api",
   "current": true,
-  "documented": 1078,
-  "total": 1078,
+  "documented": 1151,
+  "total": 1151,
   "page": {
    "bindings-bvh.html": "api/bindings-bvh.html",
    "bindings-creation.html": "api/bindings-creation.html",
@@ -24,7 +24,7 @@
    "device-bvh_traverse.html": "api/device-bvh_traverse.html",
    "device-dc.html": "api/device-dc.html",
    "device-dmc.html": "api/device-dmc.html",
-   "device-flood_fill_cf.html": "api/device-flood_fill_cf.html",
+   "device-flood_fill_band.html": "api/device-flood_fill_band.html",
    "device-flood_fill_common.html": "api/device-flood_fill_common.html",
    "device-gs_aabb.html": "api/device-gs_aabb.html",
    "device-gs_math.html": "api/device-gs_math.html",
@@ -49,6 +49,7 @@
    "kernels-dc.html": "api/kernels-dc.html",
    "kernels-dmc.html": "api/kernels-dmc.html",
    "kernels-flood_fill.html": "api/kernels-flood_fill.html",
+   "kernels-flood_fill_band.html": "api/kernels-flood_fill_band.html",
    "kernels-flood_fill_cf.html": "api/kernels-flood_fill_cf.html",
    "kernels-grid.html": "api/kernels-grid.html",
    "kernels-gs.html": "api/kernels-gs.html",
