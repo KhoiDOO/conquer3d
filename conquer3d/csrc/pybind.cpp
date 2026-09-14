@@ -122,6 +122,11 @@ void bind_ops_flood_fill(py::module_ &m);
  */
 void bind_ops_flood_fill_cf(py::module_ &m);
 /**
+ * @brief Registers the leak-resistant band flood fill operator on the extension module.
+ * @param[in,out] m The `conquer3d._C` module object.
+ */
+void bind_ops_flood_fill_band(py::module_ &m);
+/**
  * @brief Registers the single-view volume integration operator on the extension module.
  * @param[in,out] m The `conquer3d._C` module object.
  */
@@ -164,5 +169,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     bind_ops_chamfer(m);
     bind_ops_flood_fill(m);
     bind_ops_flood_fill_cf(m);
+    bind_ops_flood_fill_band(m);
     bind_ops_volint(m);
 }

@@ -15,6 +15,8 @@
 #include <cuda_runtime.h>
 #include <cstdint>
 #include <optional>
+#include <map>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -55,6 +57,30 @@ protected:
     std::optional<torch::Tensor> cf_fine_masks = std::nullopt;        ///< Per-boundary-block fine voxel labels.
     std::optional<std::vector<int64_t>> cf_block_size = std::nullopt; ///< Fine voxels per coarse block.
     std::optional<std::vector<int64_t>> cf_coarse_res = std::nullopt; ///< Coarse grid resolution.
+
+    std::optional<torch::Tensor> band_coarse_mask =
+        std::nullopt; ///< Coarse-level labels from the band flood fill (sign_mode 6).
+    std::optional<torch::Tensor> band_block_lookup =
+        std::nullopt; ///< Dense coarse-index to band-slot lookup, -1 outside the band.
+    std::optional<torch::Tensor> band_fine_masks = std::nullopt;        ///< Per-band-block fine vertex labels.
+    std::optional<std::vector<int64_t>> band_block_size = std::nullopt; ///< Fine vertices per band coarse block.
+    std::optional<std::vector<int64_t>> band_coarse_res = std::nullopt; ///< Band coarse grid resolution.
+    // Kept apart from flood_grid_*: modes 3 and 5 overwrite each other's grid, and mode 6 must not.
+    std::optional<std::vector<float>> band_grid_min =
+        std::nullopt; ///< Lower corner of the grid the band flood fill was computed on.
+    std::optional<std::vector<float>> band_grid_max =
+        std::nullopt; ///< Upper corner of the grid the band flood fill was computed on.
+    std::optional<std::vector<int64_t>> band_grid_res =
+        std::nullopt; ///< Resolution of the grid the band flood fill was computed on.
+    std::optional<std::map<std::string, int64_t>> band_stats =
+        std::nullopt; ///< Diagnostics reported by the last band flood fill build.
+
+    /**
+     * @brief Drops every cached flood fill so the next sign query rebuilds it for the current mesh.
+     * @details Called by the mutators that change geometry or connectivity; without it the labels of
+     * modes 3, 5 and 6 would describe the mesh as it was before the edit.
+     */
+    void invalidate_flood_fill_caches();
 
     std::optional<bool> opt_edge_manifold;            ///< Cached edge-manifoldness result, ignoring boundaries.
     std::optional<bool> opt_edge_manifold_w_boundary; ///< Cached edge-manifoldness result, allowing boundaries.
@@ -236,6 +262,75 @@ public:
      * @return `[Cx, Cy, Cz]`.
      */
     std::vector<int64_t> get_cf_coarse_res();
+
+    /**
+     * @brief Builds the leak-resistant band flood fill used by sign_mode 6.
+     * @details Water stops at the dilated surface band instead of at segment-triangle crossings, so
+     * holes up to about `2 * dilation_radius + 3` spacings across are sealed. When either bound is
+     * omitted, both default to the vertex bounding box padded by
+     * `(r + 3) * E / (res - 1 - 2 * (r + 3))`, with `E` the largest extent, which keeps the band
+     * clear of the grid boundary by construction.
+     * @param[in] grid_min Lower grid corner; defaults as above.
+     * @param[in] grid_max Upper grid corner; defaults as above.
+     * @param[in] res Vertices per axis; defaults to 128.
+     * @param[in] dilation_radius Chebyshev dilation radius in spacings.
+     * @param[in] cavity_max_voxels Largest interior component released for resolution; -1 selects
+     *     `(2r + 1)^3`, 0 disables the release.
+     * @warning Solid parts thinner than about `2 * dilation_radius + 3` spacings vanish and slots
+     *     narrower than 3 spacings fill in.
+     * @throws std::runtime_error If explicit bounds leave less than `dilation_radius + 2` spacings
+     *     between the mesh and the grid boundary.
+     */
+    void build_flood_fill_band_data(std::optional<std::vector<float>> grid_min = std::nullopt,
+                                    std::optional<std::vector<float>> grid_max = std::nullopt,
+                                    std::optional<std::vector<int64_t>> res = std::nullopt, int dilation_radius = 2,
+                                    int64_t cavity_max_voxels = -1);
+    /**
+     * @brief Coarse-level labels from the cached band flood fill.
+     * @return `(Cx, Cy, Cz)` int8 labels: 2 exterior, -1 interior, 1 band block.
+     */
+    torch::Tensor get_band_coarse_mask();
+    /**
+     * @brief Dense lookup from coarse index to band-block slot.
+     * @return `(Cx, Cy, Cz)` int32 indices, -1 where the block is not in the band.
+     */
+    torch::Tensor get_band_block_lookup();
+    /**
+     * @brief Per-band-block fine vertex labels.
+     * @return `(N, 8, 8, 8)` int8 labels: 2 exterior, -1 interior.
+     */
+    torch::Tensor get_band_fine_masks();
+    /**
+     * @brief Fine vertices per band coarse block.
+     * @return `[8, 8, 8]`.
+     */
+    std::vector<int64_t> get_band_block_size();
+    /**
+     * @brief Band coarse grid resolution.
+     * @return `[Cx, Cy, Cz]`.
+     */
+    std::vector<int64_t> get_band_coarse_res();
+    /**
+     * @brief Lower corner of the grid the band flood fill was computed on.
+     * @return `[x, y, z]`.
+     */
+    std::vector<float> get_band_grid_min();
+    /**
+     * @brief Upper corner of the grid the band flood fill was computed on.
+     * @return `[x, y, z]`.
+     */
+    std::vector<float> get_band_grid_max();
+    /**
+     * @brief Resolution of the grid the band flood fill was computed on.
+     * @return `[Rx, Ry, Rz]`.
+     */
+    std::vector<int64_t> get_band_grid_res();
+    /**
+     * @brief Diagnostics of the cached band flood fill build.
+     * @return Counts keyed `num_band_blocks`, `flood_rounds`, `num_released_cavity_voxels`,
+     *     `resolution_rounds`, `num_unresolved_defaulted` and `bvh_stack_overflows`.
+     */
+    std::map<std::string, int64_t> get_band_stats();
 
     /** @brief Returns colliding triangle index pairs $(N, 2)$. */
     torch::Tensor get_self_intersection();

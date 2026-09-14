@@ -37,10 +37,14 @@ namespace bvh
      * @param[in] children Device array of $N - 1$ child index pairs.
      * @param[in] node_test Predicate deciding whether to enter a node.
      * @param[in] leaf_visit Action performed at an admitted leaf.
+     * @param[out] overflowed Optional flag set when the stack is full and a node's children are
+     *     dropped, which makes a miss unreliable. Queries whose correctness depends on never
+     *     missing a triangle pass it and fail loudly; the default nullptr skips the report and
+     *     compiles to the original loop.
      */
     template <class NodeTest, class LeafVisit>
     __device__ __forceinline__ void traverse(const int num_objects, const int2 *__restrict__ children,
-                                             NodeTest node_test, LeafVisit leaf_visit)
+                                             NodeTest node_test, LeafVisit leaf_visit, bool *overflowed = nullptr)
     {
         int stack[BVH_STACK_SIZE];
         int stack_ptr = 0;
@@ -65,6 +69,10 @@ namespace bvh
                     stack[++stack_ptr] = c.x;
                 if (c.y >= 0)
                     stack[++stack_ptr] = c.y;
+            }
+            else if (overflowed != nullptr)
+            {
+                *overflowed = true;
             }
         }
     }

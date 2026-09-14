@@ -113,10 +113,11 @@ MeshBVH::query_point(const torch::Tensor &query_points, const torch::Tensor &ver
                      std::optional<std::vector<int64_t>> cf_block_size,
                      std::optional<std::vector<int64_t>> cf_coarse_res, bool return_occ)
 {
-    if (sign_mode != 0 && sign_mode != 1 && sign_mode != 2 && sign_mode != 3 && sign_mode != 4 && sign_mode != 5)
+    if (sign_mode < 0 || sign_mode > 6)
     {
         throw std::runtime_error("sign_mode must be 0 (ray casting), 1 (fast winding number), 2 (pseudonormals), 3 "
-                                 "(flood fill), 4 (hybrid WN + pseudonormal), or 5 (coarse-to-fine flood fill)");
+                                 "(flood fill), 4 (hybrid WN + pseudonormal), 5 (coarse-to-fine flood fill), or 6 "
+                                 "(band flood fill)");
     }
 
     if ((sign_mode == 1 || sign_mode == 4) && !this->has_winding_data)
@@ -214,13 +215,16 @@ MeshBVH::query_point(const torch::Tensor &query_points, const torch::Tensor &ver
                                 (ry > 1) ? (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1) : 1.0f,
                                 (rz > 1) ? (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1) : 1.0f);
     }
-    else if (sign_mode == 5)
+    else if (sign_mode == 5 || sign_mode == 6)
     {
         if (!cf_coarse_mask.has_value() || !cf_coarse_mask->defined() || !flood_grid_min.has_value() ||
             !flood_grid_max.has_value() || !flood_grid_res.has_value())
         {
-            throw std::runtime_error("For sign_mode == 5 (coarse-to-fine flood fill), CF flood fill data must be "
-                                     "provided or built beforehand.");
+            throw std::runtime_error(sign_mode == 5
+                                         ? "For sign_mode == 5 (coarse-to-fine flood fill), CF flood fill data must be "
+                                           "provided or built beforehand."
+                                         : "For sign_mode == 6 (band flood fill), band flood fill data must be "
+                                           "provided or built beforehand.");
         }
         p_cf_coarse_mask = cf_coarse_mask->data_ptr<int8_t>();
         if (cf_boundary_lookup.has_value() && cf_boundary_lookup->defined())
@@ -235,6 +239,8 @@ MeshBVH::query_point(const torch::Tensor &query_points, const torch::Tensor &ver
         int64_t rx = flood_grid_res->at(0);
         int64_t ry = flood_grid_res->at(1);
         int64_t rz = flood_grid_res->at(2);
+        // The shared lookup range-checks against the fine grid, so modes 5 and 6 need its dims too.
+        f_dims = make_int3(static_cast<int>(rx), static_cast<int>(ry), static_cast<int>(rz));
         f_spacing = make_float3((rx > 1) ? (flood_grid_max->at(0) - flood_grid_min->at(0)) / (rx - 1) : 1.0f,
                                 (ry > 1) ? (flood_grid_max->at(1) - flood_grid_min->at(1)) / (ry - 1) : 1.0f,
                                 (rz > 1) ? (flood_grid_max->at(2) - flood_grid_min->at(2)) / (rz - 1) : 1.0f);
@@ -502,7 +508,7 @@ void bind_ds_mesh_bvh(py::module_ &m)
                  triangles (torch.Tensor): (M, 3) int32 mesh triangles on CUDA.
                  return_sdf (bool, optional): Return signed distance instead of unsigned. Defaults to False.
                  return_prj_pts (bool, optional): Return closest surface projections. Defaults to True.
-                 sign_mode (int, optional): Sign evaluation method (0: ray parity, 1: Fast Winding Number, 2: angle-weighted pseudonormals, 3: flood-fill mask, 4: hybrid, 5: coarse-to-fine flood fill). Defaults to 0.
+                 sign_mode (int, optional): Sign evaluation method (0: ray parity, 1: Fast Winding Number, 2: angle-weighted pseudonormals, 3: flood-fill mask, 4: hybrid, 5: coarse-to-fine flood fill, 6: band flood fill that seals small holes). Defaults to 0.
                  return_occ (bool, optional): If True, additionally returns binary occupancy defined as
                      `distances < 0`. Only active when `return_sdf=True`; with an unsigned distance the
                      occupancy slot is returned as None, since unsigned distances carry no inside/outside

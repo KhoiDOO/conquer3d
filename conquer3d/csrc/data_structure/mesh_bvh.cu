@@ -582,49 +582,64 @@ namespace mesh_bvh
                                                       pseudonormal_vertices, pseudonormal_edges, pseudonormal_faces);
                 }
             }
-            else if (sign_mode == 5)
+            else if (sign_mode == 5 || sign_mode == 6)
             {
-                int gi = roundf((p.x - flood_min.x) / flood_spacing.x);
-                int gj = roundf((p.y - flood_min.y) / flood_spacing.y);
-                int gk = roundf((p.z - flood_min.z) / flood_spacing.z);
+                // Modes 5 (coarse-fine) and 6 (band) share one format: coarse block labels, a
+                // block lookup, and per-block fine vertex labels, so they share one lookup.
+                const float fgi = roundf((p.x - flood_min.x) / flood_spacing.x);
+                const float fgj = roundf((p.y - flood_min.y) / flood_spacing.y);
+                const float fgk = roundf((p.z - flood_min.z) / flood_spacing.z);
 
-                int ci = gi / cf_block_size.x;
-                int cj = gj / cf_block_size.y;
-                int ck = gk / cf_block_size.z;
-
-                if (ci >= 0 && ci < cf_coarse_dims.x && cj >= 0 && cj < cf_coarse_dims.y && ck >= 0 &&
-                    ck < cf_coarse_dims.z && cf_coarse_mask != nullptr)
+                // Range-check the lattice coordinate in float, before any integer arithmetic: roundf
+                // gives -1 just below the grid, where -1 / B truncates to block 0 but -1 % B stays -1
+                // and would read before the block's storage. Points outside the grid are exterior, as
+                // in mode 3, and a NaN fails every comparison and lands there too.
+                if (cf_coarse_mask != nullptr && fgi >= 0.0f && fgi < (float)flood_dims.x && fgj >= 0.0f &&
+                    fgj < (float)flood_dims.y && fgk >= 0.0f && fgk < (float)flood_dims.z)
                 {
-                    int c_idx = ci * (cf_coarse_dims.y * cf_coarse_dims.z) + cj * cf_coarse_dims.z + ck;
-                    int c_val = cf_coarse_mask[c_idx];
-                    if (c_val == 2)
+                    const int gi = (int)fgi;
+                    const int gj = (int)fgj;
+                    const int gk = (int)fgk;
+
+                    const int ci = gi / cf_block_size.x;
+                    const int cj = gj / cf_block_size.y;
+                    const int ck = gk / cf_block_size.z;
+
+                    if (ci < cf_coarse_dims.x && cj < cf_coarse_dims.y && ck < cf_coarse_dims.z)
                     {
-                        // Guaranteed Exterior Water -> positive sign
-                    }
-                    else if (c_val == -1 || c_val == -2)
-                    {
-                        // Guaranteed Interior -> strictly negative sign
-                        dist = -dist;
-                    }
-                    else if (c_val == 1 && cf_boundary_lookup != nullptr && cf_fine_masks != nullptr)
-                    {
-                        int b_idx = cf_boundary_lookup[c_idx];
-                        if (b_idx >= 0)
+                        const int64_t c_idx = ((int64_t)ci * cf_coarse_dims.y + cj) * cf_coarse_dims.z + ck;
+                        const int c_val = cf_coarse_mask[c_idx];
+                        if (c_val == 2)
                         {
-                            int fi = gi % cf_block_size.x;
-                            int fj = gj % cf_block_size.y;
-                            int fk = gk % cf_block_size.z;
-                            int fine_idx = b_idx * (cf_block_size.x * cf_block_size.y * cf_block_size.z) +
-                                           fi * (cf_block_size.y * cf_block_size.z) + fj * cf_block_size.z + fk;
-                            int fine_val = cf_fine_masks[fine_idx];
-                            if (fine_val != 2)
+                            // Guaranteed Exterior Water -> positive sign
+                        }
+                        else if (c_val == -1 || c_val == -2)
+                        {
+                            // Guaranteed Interior -> strictly negative sign
+                            dist = -dist;
+                        }
+                        else if (c_val == 1 && cf_boundary_lookup != nullptr && cf_fine_masks != nullptr)
+                        {
+                            const int b_idx = cf_boundary_lookup[c_idx];
+                            if (b_idx >= 0)
+                            {
+                                const int fi = gi % cf_block_size.x;
+                                const int fj = gj % cf_block_size.y;
+                                const int fk = gk % cf_block_size.z;
+                                // int64: b_idx times the block volume passes 2^31 on large grids.
+                                const int64_t block_volume =
+                                    (int64_t)cf_block_size.x * cf_block_size.y * cf_block_size.z;
+                                const int64_t fine_idx = (int64_t)b_idx * block_volume +
+                                                         ((int64_t)fi * cf_block_size.y + fj) * cf_block_size.z + fk;
+                                if (cf_fine_masks[fine_idx] != 2)
+                                {
+                                    dist = -dist;
+                                }
+                            }
+                            else
                             {
                                 dist = -dist;
                             }
-                        }
-                        else
-                        {
-                            dist = -dist;
                         }
                     }
                 }

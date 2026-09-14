@@ -2,6 +2,7 @@
 #include "../../data_structure/triangle_mesh.h"
 #include "../../ops/flood_fill.h"
 #include "../../ops/flood_fill_cf.h"
+#include "../../ops/flood_fill_band.h"
 #include "../../check.h"
 #include <c10/cuda/CUDAFunctions.h>
 #include <c10/cuda/CUDAGuard.h>
@@ -354,6 +355,7 @@ void TriangleMesh::remove_isolated_vertices()
     this->triangle_normals = torch::Tensor();
     this->surface_area = torch::Tensor();
     this->bvh.reset();
+    this->invalidate_flood_fill_caches();
     this->opt_edge_manifold = std::nullopt;
     this->opt_edge_manifold_w_boundary = std::nullopt;
     this->opt_vertex_manifold = std::nullopt;
@@ -583,6 +585,188 @@ std::vector<int64_t> TriangleMesh::get_cf_coarse_res()
     return this->cf_coarse_res.value();
 }
 
+void TriangleMesh::invalidate_flood_fill_caches()
+{
+    this->flood_fill_mask = std::nullopt;
+    this->flood_grid_min = std::nullopt;
+    this->flood_grid_max = std::nullopt;
+    this->flood_grid_res = std::nullopt;
+    this->cf_coarse_mask = std::nullopt;
+    this->cf_boundary_lookup = std::nullopt;
+    this->cf_fine_masks = std::nullopt;
+    this->cf_block_size = std::nullopt;
+    this->cf_coarse_res = std::nullopt;
+    this->band_coarse_mask = std::nullopt;
+    this->band_block_lookup = std::nullopt;
+    this->band_fine_masks = std::nullopt;
+    this->band_block_size = std::nullopt;
+    this->band_coarse_res = std::nullopt;
+    this->band_grid_min = std::nullopt;
+    this->band_grid_max = std::nullopt;
+    this->band_grid_res = std::nullopt;
+    this->band_stats = std::nullopt;
+}
+
+void TriangleMesh::build_flood_fill_band_data(std::optional<std::vector<float>> grid_min,
+                                              std::optional<std::vector<float>> grid_max,
+                                              std::optional<std::vector<int64_t>> res, int dilation_radius,
+                                              int64_t cavity_max_voxels)
+{
+    TORCH_CHECK(dilation_radius >= 0, "dilation_radius must be non-negative.");
+    // An empty mesh has no hierarchy to build; the fill labels its whole grid exterior without one.
+    const bool empty = (this->num_triangles == 0);
+    if (!empty)
+    {
+        this->build_bvh();
+    }
+    std::vector<int64_t> res_vals = res.has_value() ? res.value() : std::vector<int64_t>{128, 128, 128};
+    TORCH_CHECK(res_vals.size() == 3, "res must have 3 elements.");
+
+    std::vector<float> min_vals;
+    std::vector<float> max_vals;
+    if (!grid_min.has_value() || !grid_max.has_value())
+    {
+        // Pad relative to the mesh size so the band clears the boundary at any scale. The band needs
+        // r + 2 spacings; r + 3 absorbs float rounding of the bounds.
+        auto v_min = torch::full({3}, -1.0f, torch::dtype(torch::kFloat32));
+        auto v_max = torch::full({3}, 1.0f, torch::dtype(torch::kFloat32));
+        if (this->vertices.size(0) > 0)
+        {
+            v_min = std::get<0>(torch::min(this->vertices, 0)).cpu();
+            v_max = std::get<0>(torch::max(this->vertices, 0)).cpu();
+        }
+        const float extent = std::max((v_max - v_min).max().item<float>(), 1e-6f);
+        const int64_t margin = (int64_t)dilation_radius + 3;
+        std::vector<float> lo(3), hi(3);
+        for (int a = 0; a < 3; ++a)
+        {
+            const int64_t usable = res_vals[a] - 1 - 2 * margin;
+            TORCH_CHECK(usable > 0, "res must exceed ", 2 * margin + 1, " per axis for dilation_radius ",
+                        dilation_radius, " to leave room for the default padding, got ", res_vals[a], ".");
+            const float pad = static_cast<float>(margin) * extent / static_cast<float>(usable);
+            lo[a] = v_min[a].item<float>() - pad;
+            hi[a] = v_max[a].item<float>() + pad;
+        }
+        min_vals = grid_min.has_value() ? grid_min.value() : lo;
+        max_vals = grid_max.has_value() ? grid_max.value() : hi;
+    }
+    else
+    {
+        min_vals = grid_min.value();
+        max_vals = grid_max.value();
+    }
+
+    torch::Tensor node_mins, node_maxs, children, leaf_ids;
+    if (empty)
+    {
+        node_mins = torch::empty({0, 3}, this->vertices.options());
+        node_maxs = torch::empty({0, 3}, this->vertices.options());
+        children = torch::empty({0, 2}, this->triangles.options());
+        leaf_ids = torch::empty({0}, this->triangles.options());
+    }
+    else
+    {
+        node_mins = this->bvh.value().aabb_mins;
+        node_maxs = this->bvh.value().aabb_maxs;
+        children = this->bvh.value().bvh_children;
+        leaf_ids = this->bvh.value().object_ids;
+    }
+    auto band_res =
+        ops::compute_flood_fill_band(this->vertices, this->triangles, node_mins, node_maxs, children, leaf_ids,
+                                     min_vals, max_vals, res_vals, dilation_radius, cavity_max_voxels);
+
+    this->band_coarse_mask = band_res.coarse_mask;
+    this->band_block_lookup = band_res.band_block_lookup;
+    this->band_fine_masks = band_res.fine_masks;
+    this->band_block_size = band_res.block_size;
+    this->band_coarse_res = band_res.coarse_res;
+    this->band_grid_min = min_vals;
+    this->band_grid_max = max_vals;
+    this->band_grid_res = res_vals;
+    this->band_stats = band_res.stats;
+}
+
+torch::Tensor TriangleMesh::get_band_coarse_mask()
+{
+    if (!this->band_coarse_mask.has_value())
+    {
+        this->build_flood_fill_band_data();
+    }
+    return this->band_coarse_mask.value();
+}
+
+torch::Tensor TriangleMesh::get_band_block_lookup()
+{
+    if (!this->band_block_lookup.has_value())
+    {
+        this->build_flood_fill_band_data();
+    }
+    return this->band_block_lookup.value();
+}
+
+torch::Tensor TriangleMesh::get_band_fine_masks()
+{
+    if (!this->band_fine_masks.has_value())
+    {
+        this->build_flood_fill_band_data();
+    }
+    return this->band_fine_masks.value();
+}
+
+std::vector<int64_t> TriangleMesh::get_band_block_size()
+{
+    if (!this->band_block_size.has_value())
+    {
+        this->build_flood_fill_band_data();
+    }
+    return this->band_block_size.value();
+}
+
+std::vector<int64_t> TriangleMesh::get_band_coarse_res()
+{
+    if (!this->band_coarse_res.has_value())
+    {
+        this->build_flood_fill_band_data();
+    }
+    return this->band_coarse_res.value();
+}
+
+std::vector<float> TriangleMesh::get_band_grid_min()
+{
+    if (!this->band_grid_min.has_value())
+    {
+        this->build_flood_fill_band_data();
+    }
+    return this->band_grid_min.value();
+}
+
+std::vector<float> TriangleMesh::get_band_grid_max()
+{
+    if (!this->band_grid_max.has_value())
+    {
+        this->build_flood_fill_band_data();
+    }
+    return this->band_grid_max.value();
+}
+
+std::vector<int64_t> TriangleMesh::get_band_grid_res()
+{
+    if (!this->band_grid_res.has_value())
+    {
+        this->build_flood_fill_band_data();
+    }
+    return this->band_grid_res.value();
+}
+
+std::map<std::string, int64_t> TriangleMesh::get_band_stats()
+{
+    if (!this->band_stats.has_value())
+    {
+        this->build_flood_fill_band_data();
+    }
+    return this->band_stats.value();
+}
+
 torch::Tensor TriangleMesh::get_self_intersection()
 {
     this->build_bvh();
@@ -616,6 +800,12 @@ TriangleMesh::query_points(const torch::Tensor &query_pts, bool return_sdf, bool
         {
             this->build_flood_fill_cf_data();
         }
+        else if (sign_mode == 6 && !this->band_coarse_mask.has_value())
+        {
+            this->build_flood_fill_band_data();
+        }
+        // Mode 6 shares mode 5's storage layout, so its caches travel through the same slots.
+        const bool band = (sign_mode == 6);
         return this->bvh.value().query_point(
             query_pts, this->vertices, this->triangles, return_sdf, return_prj_pts, sign_mode,
             this->get_triangle_normals(),
@@ -623,14 +813,31 @@ TriangleMesh::query_points(const torch::Tensor &query_pts, bool return_sdf, bool
                                                : std::nullopt,
             (sign_mode == 2 || sign_mode == 4) ? std::optional<torch::Tensor>(this->get_edge_normals()) : std::nullopt,
             (sign_mode == 3) ? this->flood_fill_mask : std::nullopt,
-            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_min : std::nullopt,
-            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_max : std::nullopt,
-            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_res : std::nullopt,
-            (sign_mode == 5) ? this->cf_coarse_mask : std::nullopt,
-            (sign_mode == 5) ? this->cf_boundary_lookup : std::nullopt,
-            (sign_mode == 5) ? this->cf_fine_masks : std::nullopt,
-            (sign_mode == 5) ? this->cf_block_size : std::nullopt,
-            (sign_mode == 5) ? this->cf_coarse_res : std::nullopt, return_occ);
+            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_min
+            : band                             ? this->band_grid_min
+                                               : std::nullopt,
+            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_max
+            : band                             ? this->band_grid_max
+                                               : std::nullopt,
+            (sign_mode == 3 || sign_mode == 5) ? this->flood_grid_res
+            : band                             ? this->band_grid_res
+                                               : std::nullopt,
+            (sign_mode == 5) ? this->cf_coarse_mask
+            : band           ? this->band_coarse_mask
+                             : std::nullopt,
+            (sign_mode == 5) ? this->cf_boundary_lookup
+            : band           ? this->band_block_lookup
+                             : std::nullopt,
+            (sign_mode == 5) ? this->cf_fine_masks
+            : band           ? this->band_fine_masks
+                             : std::nullopt,
+            (sign_mode == 5) ? this->cf_block_size
+            : band           ? this->band_block_size
+                             : std::nullopt,
+            (sign_mode == 5) ? this->cf_coarse_res
+            : band           ? this->band_coarse_res
+                             : std::nullopt,
+            return_occ);
     }
     else
     {
@@ -953,6 +1160,7 @@ void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
     this->triangle_normals = torch::Tensor();
     this->surface_area = torch::Tensor();
     this->bvh.reset();
+    this->invalidate_flood_fill_caches();
     this->opt_edge_manifold = std::nullopt;
     this->opt_edge_manifold_w_boundary = std::nullopt;
     this->opt_vertex_manifold = std::nullopt;
@@ -993,6 +1201,7 @@ void TriangleMesh::fix_normals()
     this->triangle_normals = torch::Tensor();
     this->vertex_normals = torch::Tensor();
     this->bvh.reset();
+    this->invalidate_flood_fill_caches();
     this->opt_edge_manifold = std::nullopt;
     this->opt_edge_manifold_w_boundary = std::nullopt;
     this->opt_vertex_manifold = std::nullopt;
@@ -1260,6 +1469,53 @@ void bind_ds_triangle_mesh(py::module_ &m)
                                "Coarse macro-block int8 status tensor.")
         .def_property_readonly("cf_fine_masks", &TriangleMesh::get_cf_fine_masks,
                                "Fine boundary macro-block int8 local masks.")
+        .def("build_flood_fill_band_data", &TriangleMesh::build_flood_fill_band_data, py::arg("grid_min") = py::none(),
+             py::arg("grid_max") = py::none(), py::arg("res") = py::none(), py::arg("dilation_radius") = 2,
+             py::arg("cavity_max_voxels") = -1,
+             R"pbdoc(
+             Pre-computes the leak-resistant band flood fill used by sign_mode=6.
+
+             Water floods from the grid boundary and stops at the surface band dilated by
+             `dilation_radius` lattice spacings, so holes up to about `2 * dilation_radius + 3` spacings
+             across are sealed; small cavities the dilation encloses are released and the band is resolved
+             by neighbour agreement. Memory scales with surface area, like sign_mode=5.
+
+             The wall trades thin detail for leak resistance: solid parts thinner than about
+             `2 * dilation_radius + 3` spacings vanish, slots narrower than 3 spacings fill in, and a sealed-off
+             pocket holding more than `cavity_max_voxels` free vertices stays interior.
+
+             Args:
+                 grid_min (List[float], optional): Lower grid corner [x, y, z]. When either bound is omitted,
+                     both default to the mesh bounds padded by (r + 3) * E / (res - 1 - 2 * (r + 3)), with E
+                     the largest extent.
+                 grid_max (List[float], optional): Upper grid corner [x, y, z].
+                 res (List[int], optional): Vertices per axis [rx, ry, rz]. Defaults to [128, 128, 128].
+                 dilation_radius (int, optional): Chebyshev dilation radius in spacings. Defaults to 2.
+                 cavity_max_voxels (int, optional): Largest interior component, in vertices, released for
+                     resolution; -1 selects (2 * dilation_radius + 1)^3 and 0 disables the release.
+                     Defaults to -1.
+
+             Raises:
+                 RuntimeError: If explicit bounds leave less than `dilation_radius + 2` spacings between the
+                     mesh and the grid boundary; the message names the padding required.
+
+             Example:
+                 >>> mesh.build_flood_fill_band_data(res=[512, 512, 512])
+             )pbdoc")
+        .def_property_readonly("band_coarse_mask", &TriangleMesh::get_band_coarse_mask,
+                               "Band flood fill coarse int8 labels (2 exterior, -1 interior, 1 band block).")
+        .def_property_readonly("band_block_lookup", &TriangleMesh::get_band_block_lookup,
+                               "Band flood fill int32 coarse-index to band-slot lookup, -1 outside the band.")
+        .def_property_readonly("band_fine_masks", &TriangleMesh::get_band_fine_masks,
+                               "Band flood fill (N, 8, 8, 8) int8 fine labels (2 exterior, -1 interior).")
+        .def_property_readonly("band_grid_min", &TriangleMesh::get_band_grid_min, "Band flood fill grid lower corner.")
+        .def_property_readonly("band_grid_max", &TriangleMesh::get_band_grid_max, "Band flood fill grid upper corner.")
+        .def_property_readonly("band_grid_res", &TriangleMesh::get_band_grid_res,
+                               "Band flood fill grid vertex resolution.")
+        .def_property_readonly("band_stats", &TriangleMesh::get_band_stats,
+                               "Band flood fill build diagnostics: num_band_blocks, flood_rounds, "
+                               "num_released_cavity_voxels, resolution_rounds, num_unresolved_defaulted, "
+                               "bvh_stack_overflows.")
         .def("get_self_intersection", &TriangleMesh::get_self_intersection,
              R"pbdoc(
              Finds all self-intersecting triangle pairs in the mesh.
@@ -1347,6 +1603,7 @@ void bind_ds_triangle_mesh(py::module_ &m)
                      - 3: Volumetric 3D flood-fill mask (dense).
                      - 4: Hybrid WN + pseudonormals.
                      - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill (< 10 MB VRAM).
+                    - 6: Band flood fill that seals small holes (memory like 5).
                      Defaults to 0.
                  distance_mode (int, optional): Distance algorithm (0: Ericson closest point, 1: projected normal). Defaults to 0.
                  return_occ (bool, optional): If True, additionally returns binary occupancy defined as

@@ -94,6 +94,8 @@ public:
      *                              - 3: Volumetric 3D flood fill mask (dense).
      *                              - 4: Hybrid Winding Number + Pseudonormals.
      *                              - 5: Coarse-to-Fine (CF) Hierarchical Volumetric Flood Fill.
+     *                              - 6: Band flood fill: water stops at a dilated surface band, sealing
+     *                                small holes; stored in the same coarse-fine layout as mode 5.
      * @param[in] triangle_normals Optional (F, 3) triangle face normals.
      * @param[in] vertex_normals Optional (V, 3) vertex pseudonormals.
      * @param[in] edge_normals Optional (3*F, 3) edge pseudonormals.
@@ -101,9 +103,9 @@ public:
      * @param[in] flood_grid_min Optional flood grid min bounds.
      * @param[in] flood_grid_max Optional flood grid max bounds.
      * @param[in] flood_grid_res Optional flood grid resolution.
-     * @param[in] cf_coarse_mask Optional (Cx, Cy, Cz) int8 coarse mask for sign_mode=5.
-     * @param[in] cf_boundary_lookup Optional (Cx, Cy, Cz) int32 boundary lookup table for sign_mode=5.
-     * @param[in] cf_fine_masks Optional (N_boundary, Bx, By, Bz) int8 fine masks for sign_mode=5.
+     * @param[in] cf_coarse_mask Optional (Cx, Cy, Cz) int8 coarse mask for sign_mode 5 or 6.
+     * @param[in] cf_boundary_lookup Optional (Cx, Cy, Cz) int32 boundary lookup table for sign_mode 5 or 6.
+     * @param[in] cf_fine_masks Optional (N_boundary, Bx, By, Bz) int8 fine masks for sign_mode 5 or 6.
      * @param[in] cf_block_size Optional macro-block size [Bx, By, Bz].
      * @param[in] cf_coarse_res Optional coarse grid resolution [Cx, Cy, Cz].
      * @param[in] return_occ If true (and `return_sdf` is true), also returns binary
