@@ -197,7 +197,7 @@ FIGURES = [
     ),
     (
         "fig-curvature", "Curvature", "Analysis",
-        "Mean, principal and Gaussian curvature computed on the GPU from the mesh itself.",
+        "Mean curvature in all three modes, plus Gaussian and both principal curvatures, computed on the GPU from the mesh itself.",
         False,
     ),
     (

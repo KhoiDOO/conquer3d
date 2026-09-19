@@ -402,46 +402,89 @@ def fig_sign_modes(rnd):
 # --------------------------------------------------------------------------- #
 
 
-def fig_curvature(rnd):
-    from conquer3d.ops import dmc
+#: Percentile clipped off each end before colouring. Curvature fields are heavy
+#: tailed -- on Igea the Gaussian curvature spans -37,071 to +135,534 while its
+#: middle 98% sits inside +/-1,000 -- so without this a handful of vertices take
+#: the whole colour range.
+CURV_ROBUST = 6.0
+#: (mode, label, sublabel, colormap, symmetric). Mode 1 returns a vector and is
+#: drawn as a direction instead, so it is not in this table.
+CURV_MEAN_MODES = (
+    (0, "Mean curvature", "mode 0 · signed H", "RdBu_r", True),
+    (2, "Absolute mean", "mode 2 · |H|", "magma", False),
+)
 
-    # Igea is upright in its source frame and richly detailed -- ideal for
-    # showing a curvature field.
+
+def _curvature_panel(rnd, verts, faces, values, cmap, symmetric, shot):
+    """Colour one scalar curvature field on the mesh, and report its range.
+
+    The range is the one the colours actually span, so a caption can say what the
+    extremes mean rather than leaving the reader to guess at the scale.
+    """
+    v = values.detach().cpu().numpy()
+    finite = v[np.isfinite(v)]
+    lo, hi = np.percentile(finite, [CURV_ROBUST, 100 - CURV_ROBUST])
+    if symmetric:
+        m = max(abs(lo), abs(hi))
+        lo, hi = -m, m
+    cols = torch.tensor(compose.colormap(v, cmap, robust=CURV_ROBUST, symmetric=symmetric),
+                        dtype=torch.float32, device=DEV)
+    return render_mesh(rnd, verts, faces, colors=cols, **shot), (lo, hi)
+
+
+def fig_curvature(rnd):
+    """Every curvature the mesh reports, including all three mean-curvature modes."""
+    # Igea is upright in its source frame, richly detailed, and closed: the
+    # Gaussian angle defect assumes a full ring of triangles, so a boundary
+    # vertex would report nonsense.
     tmesh = load_mesh(_asset("Igea"))
     verts = tmesh.vertices
     faces = tmesh.triangles.int()
 
-    panels, labels, subs = [], [], []
-    panels.append(render_mesh(rnd, verts, faces, base=GT_TINT, flat=False,
-                              azimuth=20, elevation=8, rim_strength=0.18))
-    labels.append("Ground truth")
-    subs.append(f"{verts.shape[0]:,} vertices")
+    shot = dict(flat=False, azimuth=20, elevation=8, rim_strength=0.18)
+    panels = [render_mesh(rnd, verts, faces, base=GT_TINT, **shot)]
+    labels = ["Ground truth"]
+    subs = [f"{verts.shape[0]:,} vertices"]
 
-    fields = [
-        ("get_gaussian_curvature", "Gaussian curvature", "turbo", None),
-        ("get_mean_curvature", "Mean curvature", "magma", None),
-        # get_principal_curvatures returns (kappa1, kappa2) per vertex.
-        ("get_principal_curvatures", "Principal curvature κ₁", "viridis", 0),
-    ]
-    for getter, name, cmap, column in fields:
-        try:
-            k = getattr(tmesh, getter)()
-            k = k[:, column] if column is not None else k
-            k = k.detach().cpu().numpy()
-        except Exception as exc:
-            print(f"    {getter} unavailable: {str(exc)[:70]}")
-            continue
-        cols = torch.tensor(compose.colormap(k, cmap, robust=6.0),
-                            dtype=torch.float32, device=DEV)
-        panels.append(render_mesh(rnd, verts, faces, colors=cols, flat=False,
-                                  azimuth=20, elevation=8, rim_strength=0.18))
-        labels.append(name)
-        subs.append(f"{len(k):,} vertices")
+    for mode, label, sub, cmap, symmetric in CURV_MEAN_MODES:
+        panel, (lo, hi) = _curvature_panel(
+            rnd, verts, faces, tmesh.get_mean_curvature(mode), cmap, symmetric, shot)
+        panels.append(panel)
+        labels.append(label)
+        subs.append(f"{sub}\n{lo:+.0f} … {hi:+.0f}")
+        print(f"    mean mode {mode:<2} {label:18} colour range {lo:+.1f} … {hi:+.1f}")
 
-    accents = [(150, 158, 176), (255, 137, 60), (200, 80, 160),
-               (70, 190, 130)][: len(panels)]
-    compose.save(compose.grid(compose.trim(panels), labels, sublabels=subs, accents=accents),
-                 OUT / "fig-curvature.png")
+    # Mode 1 is the mean curvature normal, a vector per vertex. Its length is the
+    # absolute curvature already shown, so the panel carries its direction, in the
+    # same encoding the normals figures use.
+    hn = tmesh.get_mean_curvature(1)
+    panels.append(render_mesh(rnd, verts, faces, colors=normal_rgb(hn), **shot))
+    labels.append("Curvature normal")
+    subs.append("mode 1 · direction\nΔv = −2H n")
+    print(f"    mean mode 1  curvature normal   shape {tuple(hn.shape)}")
+
+    panel, (lo, hi) = _curvature_panel(
+        rnd, verts, faces, tmesh.get_gaussian_curvature(), "PuOr_r", True, shot)
+    panels.append(panel)
+    labels.append("Gaussian curvature")
+    subs.append(f"angle defect K\n{lo:+.0f} … {hi:+.0f}")
+    print(f"    gaussian     K                  colour range {lo:+.1f} … {hi:+.1f}")
+
+    kappa = tmesh.get_principal_curvatures()
+    for column, label in ((0, "Principal κ₁"), (1, "Principal κ₂")):
+        panel, (lo, hi) = _curvature_panel(
+            rnd, verts, faces, kappa[:, column], "viridis", False, shot)
+        panels.append(panel)
+        labels.append(label)
+        subs.append(f"κ = H ± √(H²−K)\n{lo:+.0f} … {hi:+.0f}")
+        print(f"    principal    {label:18} colour range {lo:+.1f} … {hi:+.1f}")
+
+    accents = [(150, 158, 176), (251, 113, 133), (251, 191, 36), (34, 211, 238),
+               (167, 139, 250), (118, 185, 0), (118, 185, 0)]
+    compose.save(
+        compose.grid(compose.trim(panels), labels, sublabels=subs, cols=4, accents=accents),
+        OUT / "fig-curvature.png",
+    )
 
 
 # --------------------------------------------------------------------------- #
