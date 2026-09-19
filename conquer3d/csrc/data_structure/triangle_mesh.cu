@@ -1154,6 +1154,265 @@ namespace triangle_mesh
     }
 
     /**
+     * @brief Cotangent weight of one edge, summed over its incident triangles.
+     * @details The single definition of $w_{ij} = \cot\alpha_{ij} + \cot\beta_{ij}$ behind every
+     * weight-normalised consumer: the smoothing step and `compute_laplacian` mode 2. Working per edge
+     * rather than per triangle is what makes @p clamped expressible at all, since the clip applies to
+     * the summed weight while its two halves live in different triangles.
+     * @param[in] u First edge endpoint.
+     * @param[in] v Second edge endpoint.
+     * @param[in] begin First index of this edge's incident triangles.
+     * @param[in] end One past the last index of this edge's incident triangles.
+     * @param[in] edge_triangles Device array of triangle indices, grouped by edge.
+     * @param[in] triangles Device array of triangle vertex indices.
+     * @param[in] vertices Device array of mesh vertex coordinates.
+     * @param[in] clamped Whether to bound each cotangent by clamping its cosine to $\pm 0.99$ and clip
+     *     the summed weight at zero, as the reference implementation of Botsch et al. does. Smoothing
+     *     wants this: a negative weight breaks the convex combination, and the error compounds over
+     *     iterations. A one-shot reading of the operator generally does not.
+     * @return The edge weight; zero when every incident triangle is degenerate.
+     * @note A boundary edge has one incident triangle, so it contributes a single cotangent.
+     */
+    __device__ __forceinline__ float edge_cotangent_weight(const int u, const int v, const int begin, const int end,
+                                                           const int *__restrict__ edge_triangles,
+                                                           const int3 *__restrict__ triangles,
+                                                           const float3 *__restrict__ vertices, const bool clamped)
+    {
+        const float3 pu = vertices[u];
+        const float3 pv = vertices[v];
+
+        float w = 0.0f;
+        for (int t = begin; t < end; ++t)
+        {
+            const int3 tri = triangles[edge_triangles[t]];
+            int opposite = tri.x;
+            if (opposite == u || opposite == v)
+                opposite = tri.y;
+            if (opposite == u || opposite == v)
+                opposite = tri.z;
+            if (opposite == u || opposite == v)
+                continue; // Degenerate triangle: no third corner to take an angle at.
+
+            const float3 po = vertices[opposite];
+            const float3 d0 = maths::normalize(pu - po);
+            const float3 d1 = maths::normalize(pv - po);
+            float cos_theta = maths::dot(d0, d1);
+            if (clamped)
+            {
+                cos_theta = fminf(fmaxf(cos_theta, -0.99f), 0.99f);
+            }
+            // cot = cos / sin, with the sine recovered from the cosine. The floor keeps a degenerate
+            // corner finite instead of letting it dominate the sum.
+            w += cos_theta / sqrtf(fmaxf(1.0f - cos_theta * cos_theta, 1e-12f));
+        }
+        return clamped ? fmaxf(w, 0.0f) : w;
+    }
+
+    /**
+     * @brief Fills the per-edge weights of a weight-normalised Laplacian.
+     * @details One thread per unique edge. Uniform weights are 1 per edge, so their sum at a vertex is
+     * its degree; cotangent weights come from ::edge_cotangent_weight.
+     * @param[in] num_unique_edges Number of unique edges.
+     * @param[in] unique_edges Device array of $2E$ vertex indices.
+     * @param[in] edge_offsets Device array of CSR offsets into @p edge_triangles.
+     * @param[in] edge_counts Device array of incident triangle counts per edge.
+     * @param[in] edge_triangles Device array of triangle indices, grouped by edge.
+     * @param[in] triangles Device array of triangle vertex indices.
+     * @param[in] vertices Device array of mesh vertex coordinates.
+     * @param[in] mode 0 for uniform weights, 1 for cotangent weights.
+     * @param[in] clamped Whether cotangent weights are bounded and clipped; ignored when uniform.
+     * @param[out] edge_weights Device array receiving one weight per edge.
+     */
+    __global__ void compute_edge_weights_kernel(const uint32_t num_unique_edges, const int *__restrict__ unique_edges,
+                                                const int *__restrict__ edge_offsets,
+                                                const int *__restrict__ edge_counts,
+                                                const int *__restrict__ edge_triangles,
+                                                const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
+                                                const int mode, const bool clamped, float *__restrict__ edge_weights)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_unique_edges)
+            return;
+
+        if (mode == 0)
+        {
+            edge_weights[idx] = 1.0f;
+            return;
+        }
+
+        const int u = unique_edges[2 * idx];
+        const int v = unique_edges[2 * idx + 1];
+        const int begin = edge_offsets[idx];
+        edge_weights[idx] =
+            edge_cotangent_weight(u, v, begin, begin + edge_counts[idx], edge_triangles, triangles, vertices, clamped);
+    }
+
+    /**
+     * @brief Accumulates a weight-normalised Laplacian from per-edge weights.
+     * @details One thread per unique edge, adding $w_{ij}(x_j - x_i)$ to both endpoints together with
+     * the weight itself. Dividing the first by the second yields a convex combination of neighbour
+     * offsets -- units of length, so a fixed step along it behaves the same at any mesh scale, unlike
+     * the area-normalised operator that curvature uses.
+     * @param[in] num_unique_edges Number of unique edges.
+     * @param[in] unique_edges Device array of $2E$ vertex indices.
+     * @param[in] vertices Device array of mesh vertex coordinates.
+     * @param[in] edge_weights Device array of one weight per edge.
+     * @param[out] accum Device array of accumulated offsets; must be zeroed first.
+     * @param[out] weight_sum Device array of accumulated weights; must be zeroed first.
+     * @warning Vertices are shared between edges, so accumulation uses `atomicAdd`; the reduction
+     * order, and hence the last bits of the result, varies between runs.
+     */
+    __global__ void accumulate_edge_weighted_kernel(const uint32_t num_unique_edges,
+                                                    const int *__restrict__ unique_edges,
+                                                    const float3 *__restrict__ vertices,
+                                                    const float *__restrict__ edge_weights, float3 *__restrict__ accum,
+                                                    float *__restrict__ weight_sum)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_unique_edges)
+            return;
+
+        const int u = unique_edges[2 * idx];
+        const int v = unique_edges[2 * idx + 1];
+        const float w = edge_weights[idx];
+        const float3 pu = vertices[u];
+        const float3 pv = vertices[v];
+
+        atomicAdd(&accum[u], w * (pv - pu));
+        atomicAdd(&accum[v], w * (pu - pv));
+        atomicAdd(&weight_sum[u], w);
+        atomicAdd(&weight_sum[v], w);
+    }
+
+    /**
+     * @brief Applies one accumulated smoothing step to the vertex positions.
+     * @details One thread per vertex, moving it by @p damping times the weighted average of its
+     * neighbour offsets. Boundary vertices are pinned, as in the course code: an open mesh would
+     * otherwise contract at its rim every iteration.
+     * @param[in] num_vertices Number of vertices.
+     * @param[in] accum Device array of accumulated neighbour offsets.
+     * @param[in] weight_sum Device array of accumulated weights.
+     * @param[in] is_boundary Device array marking vertices to pin; may be nullptr to move all.
+     * @param[in] damping Step factor applied to the averaged offset.
+     * @param[in,out] vertices Device array of mesh vertex coordinates, updated in place.
+     * @note A vertex whose weights sum to zero -- isolated, or ringed by clipped weights -- keeps
+     * its position rather than dividing by zero.
+     */
+    __global__ void smooth_apply_kernel(const uint32_t num_vertices, const float3 *__restrict__ accum,
+                                        const float *__restrict__ weight_sum, const bool *__restrict__ is_boundary,
+                                        const float damping, float3 *__restrict__ vertices)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_vertices)
+            return;
+        if (is_boundary != nullptr && is_boundary[idx])
+            return;
+
+        const float w = weight_sum[idx];
+        if (w > 1e-8f)
+        {
+            vertices[idx] = vertices[idx] + (damping / w) * accum[idx];
+        }
+    }
+
+    /**
+     * @brief Builds a weight-normalised Laplacian from the mesh edges.
+     * @details Fills the per-edge weights, then accumulates them into the numerator
+     * $\sum_j w_{ij}(x_j - x_i)$ and the denominator $\sum_j w_{ij}$. Both the smoothing step and
+     * `compute_laplacian` mode 2 come through here, so one definition of the weights serves both and
+     * they can differ only where they mean to, in @p clamped.
+     * @param[in] num_vertices Number of vertices.
+     * @param[in] num_unique_edges Number of unique edges.
+     * @param[in] unique_edges Device array of $2E$ vertex indices.
+     * @param[in] edge_offsets Device array of CSR offsets into @p edge_triangles.
+     * @param[in] edge_counts Device array of incident triangle counts per edge.
+     * @param[in] edge_triangles Device array of triangle indices, grouped by edge.
+     * @param[in] triangles Device array of triangle vertex indices.
+     * @param[in] vertices Device array of mesh vertex coordinates.
+     * @param[in] mode 0 for uniform weights, 1 for cotangent weights.
+     * @param[in] clamped Whether cotangent weights are bounded and clipped.
+     * @param[out] edge_weights Device scratch of one weight per edge.
+     * @param[out] accum Device array receiving the numerator; zeroed here.
+     * @param[out] weight_sum Device array receiving the denominator; zeroed here.
+     */
+    __host__ void
+    assemble_edge_weighted_laplacian(const uint32_t num_vertices, const uint32_t num_unique_edges,
+                                     const int *__restrict__ unique_edges, const int *__restrict__ edge_offsets,
+                                     const int *__restrict__ edge_counts, const int *__restrict__ edge_triangles,
+                                     const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
+                                     const int mode, const bool clamped, float *__restrict__ edge_weights,
+                                     float3 *__restrict__ accum, float *__restrict__ weight_sum)
+    {
+        if (num_vertices == 0 || num_unique_edges == 0)
+            return;
+
+        const int threads = NTHREADS;
+        const int blocks_edge = (num_unique_edges + threads - 1) / threads;
+        auto stream = at::cuda::getCurrentCUDAStream();
+
+        cudaMemsetAsync(accum, 0, sizeof(float3) * (size_t)num_vertices, stream);
+        cudaMemsetAsync(weight_sum, 0, sizeof(float) * (size_t)num_vertices, stream);
+
+        compute_edge_weights_kernel<<<blocks_edge, threads, 0, stream>>>(num_unique_edges, unique_edges, edge_offsets,
+                                                                         edge_counts, edge_triangles, triangles,
+                                                                         vertices, mode, clamped, edge_weights);
+        accumulate_edge_weighted_kernel<<<blocks_edge, threads, 0, stream>>>(num_unique_edges, unique_edges, vertices,
+                                                                             edge_weights, accum, weight_sum);
+    }
+
+    /**
+     * @brief Runs explicit Laplacian smoothing over the vertex positions.
+     * @details Each iteration is one explicit Euler step of the diffusion equation
+     * $\partial x/\partial t = \lambda \Delta x$, assembled through
+     * ::assemble_edge_weighted_laplacian with clamped weights. Assembly and application are separate
+     * launches, so every vertex moves from the same starting configuration within a step. The weights
+     * are rebuilt each iteration because they depend on the positions being moved; the course code
+     * instead holds them fixed across a batch, which is cheaper but drifts from the true flow as the
+     * surface changes.
+     * @param[in] num_vertices Number of vertices.
+     * @param[in] num_unique_edges Number of unique edges.
+     * @param[in] unique_edges Device array of $2E$ vertex indices.
+     * @param[in] edge_offsets Device array of CSR offsets into @p edge_triangles.
+     * @param[in] edge_counts Device array of incident triangle counts per edge.
+     * @param[in] edge_triangles Device array of triangle indices, grouped by edge.
+     * @param[in] triangles Device array of triangle vertex indices.
+     * @param[in] is_boundary Device array marking vertices to pin; may be nullptr.
+     * @param[in] iterations Number of explicit steps.
+     * @param[in] damping Step factor applied to each averaged offset.
+     * @param[in] mode 0 for uniform weights, 1 for cotangent weights.
+     * @param[out] edge_weights Device scratch of one weight per edge.
+     * @param[out] accum Device scratch of one offset per vertex.
+     * @param[out] weight_sum Device scratch of one weight total per vertex.
+     * @param[in,out] vertices Device array of mesh vertex coordinates, updated in place.
+     * @note Uniform weights also relax the triangulation tangentially, while cotangent weights
+     * preserve triangle shapes.
+     */
+    __host__ void smooth_laplacian(const uint32_t num_vertices, const uint32_t num_unique_edges,
+                                   const int *__restrict__ unique_edges, const int *__restrict__ edge_offsets,
+                                   const int *__restrict__ edge_counts, const int *__restrict__ edge_triangles,
+                                   const int3 *__restrict__ triangles, const bool *__restrict__ is_boundary,
+                                   const int iterations, const float damping, const int mode,
+                                   float *__restrict__ edge_weights, float3 *__restrict__ accum,
+                                   float *__restrict__ weight_sum, float3 *__restrict__ vertices)
+    {
+        if (num_vertices == 0 || num_unique_edges == 0 || iterations <= 0)
+            return;
+
+        const int threads = NTHREADS;
+        const int blocks_vert = (num_vertices + threads - 1) / threads;
+        auto stream = at::cuda::getCurrentCUDAStream();
+
+        for (int iter = 0; iter < iterations; ++iter)
+        {
+            assemble_edge_weighted_laplacian(num_vertices, num_unique_edges, unique_edges, edge_offsets, edge_counts,
+                                             edge_triangles, triangles, vertices, mode, true, edge_weights, accum,
+                                             weight_sum);
+            smooth_apply_kernel<<<blocks_vert, threads, 0, stream>>>(num_vertices, accum, weight_sum, is_boundary,
+                                                                     damping, vertices);
+        }
+    }
+
+    /**
      * @brief Accumulates the mixed Voronoi area of each vertex.
      * @details One thread per triangle, distributing area to its corners by the Meyer et al.
      * (2003) mixed rule: the circumcentric Voronoi region for a well-shaped triangle, and a
@@ -1263,6 +1522,9 @@ namespace triangle_mesh
      * @param[in] triangles Device array of triangle vertex indices.
      * @param[in] vertices Device array of mesh vertex coordinates.
      * @param[out] vertex_lb_cot Device array accumulating Laplacian vectors.
+     * @param[out] weight_sum Optional device array accumulating $\sum_j w_{ij}$ per vertex, the row
+     *     sum of the cotangent matrix; nullptr skips it. Filled in the same traversal because the
+     *     cotangents are the expensive part and a second pass would recompute them.
      * @warning Cotangent weights become unbounded as a triangle degenerates and are negative
      * for obtuse angles, so a poor-quality mesh can produce a non-positive-definite operator.
      * @warning Vertices are shared between triangles, so accumulation uses `atomicAdd`; the
@@ -1270,7 +1532,8 @@ namespace triangle_mesh
      */
     __global__ void compute_cotangent_laplacian_kernel(const uint32_t num_triangles, const int3 *__restrict__ triangles,
                                                        const float3 *__restrict__ vertices,
-                                                       float3 *__restrict__ vertex_lb_cot)
+                                                       float3 *__restrict__ vertex_lb_cot,
+                                                       float *__restrict__ weight_sum)
     {
         uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < num_triangles)
@@ -1301,6 +1564,16 @@ namespace triangle_mesh
             float3 w2 = cot2 * (p1 - p0);
             atomicAdd(&vertex_lb_cot[v0], w2);
             atomicAdd(&vertex_lb_cot[v1], -w2);
+
+            if (weight_sum != nullptr)
+            {
+                // Each cotangent weights the edge opposite its corner, so it lands on both ends of
+                // that edge. Summed over incident triangles this gives cot(alpha) + cot(beta) per
+                // edge, and per vertex the row sum the weight-normalised operators divide by.
+                atomicAdd(&weight_sum[v0], cot1 + cot2);
+                atomicAdd(&weight_sum[v1], cot0 + cot2);
+                atomicAdd(&weight_sum[v2], cot0 + cot1);
+            }
         }
     }
 
@@ -1333,15 +1606,32 @@ namespace triangle_mesh
 
     /**
      * @brief Computes the discrete Laplace-Beltrami operator at every vertex.
-     * @details Accumulates cotangent weights per triangle, then normalises by mixed Voronoi area.
-     * Unlike the uniform Laplacian these weights encode the surface's actual geometry, so the
-     * operator converges under refinement.
+     * @details Accumulates cotangent weights per triangle and, when asked, normalises by mixed
+     * Voronoi area. Unlike the uniform Laplacian these weights encode the surface's actual geometry,
+     * so the operator converges under refinement.
+     * @details Which normalisation to ask for depends on the consumer. Dividing by $2A_i$ yields the
+     * pointwise operator $\Delta_{LB} x = -2H\hat{n}$ that curvature needs, in units of 1/length.
+     * Leaving it out yields the integrated form $\sum_j w_{ij}(x_j - x_i)$, which is one row of the
+     * cotangent matrix applied to the positions -- what a weight-normalised smoothing step or a
+     * sparse solve starts from.
+     * @param[in] num_vertices Number of vertices.
+     * @param[in] num_triangles Number of triangles.
+     * @param[in] triangles Device array of triangle vertex indices.
+     * @param[in] vertices Device array of mesh vertex coordinates.
+     * @param[in] voronoi_areas Device array of mixed Voronoi areas; read only when
+     *     @p area_normalized is set, and may be nullptr otherwise.
+     * @param[out] vertex_lb_cot Device array receiving the operator; must be zeroed first.
+     * @param[out] weight_sum Optional device array receiving $\sum_j w_{ij}$ per vertex; nullptr
+     *     skips it. Must be zeroed first when supplied.
+     * @param[in] area_normalized Whether to divide by twice the Voronoi area.
      * @warning Cotangent weights are unbounded for degenerate triangles and negative for obtuse
      * angles, so a poor-quality mesh can yield a non-positive-definite operator.
      */
     __host__ void compute_cotangent_laplacian(const uint32_t num_vertices, const uint32_t num_triangles,
                                               const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
-                                              float *__restrict__ voronoi_areas, float3 *__restrict__ vertex_lb_cot)
+                                              const float *__restrict__ voronoi_areas,
+                                              float3 *__restrict__ vertex_lb_cot, float *__restrict__ weight_sum,
+                                              bool area_normalized)
     {
         if (num_triangles == 0 || num_vertices == 0)
             return;
@@ -1349,10 +1639,16 @@ namespace triangle_mesh
         int threads = NTHREADS;
         int blocks = (num_triangles + threads - 1) / threads;
 
-        compute_cotangent_laplacian_kernel<<<blocks, threads>>>(num_triangles, triangles, vertices, vertex_lb_cot);
+        compute_cotangent_laplacian_kernel<<<blocks, threads>>>(num_triangles, triangles, vertices, vertex_lb_cot,
+                                                                weight_sum);
 
-        int blocks_vert = (num_vertices + threads - 1) / threads;
-        normalize_cotangent_laplacian_kernel<<<blocks_vert, threads>>>(num_vertices, voronoi_areas, vertex_lb_cot);
+        if (area_normalized)
+        {
+            TORCH_CHECK(voronoi_areas != nullptr,
+                        "compute_cotangent_laplacian: voronoi_areas is required when area_normalized is set.");
+            int blocks_vert = (num_vertices + threads - 1) / threads;
+            normalize_cotangent_laplacian_kernel<<<blocks_vert, threads>>>(num_vertices, voronoi_areas, vertex_lb_cot);
+        }
     }
 
     /**
@@ -1395,7 +1691,8 @@ namespace triangle_mesh
      * @param[out] gaussian_curvature Device array of per-vertex curvature values.
      * @note Boundary vertices have no full angular neighbourhood, so the $2\pi$ deficit is
      * meaningless there; treat their values as invalid.
-     * @warning Near-zero Voronoi areas amplify the deficit without bound.
+     * @note A vertex with no incident area -- an isolated one, or a fully degenerate neighbourhood --
+     * yields 0 rather than a division by zero, matching the guard the cotangent normalisation uses.
      */
     __global__ void finalize_gaussian_curvature_kernel(const uint32_t num_vertices,
                                                        const float *__restrict__ voronoi_areas,
@@ -1407,8 +1704,10 @@ namespace triangle_mesh
         {
             float area = voronoi_areas[idx];
             float angle_sum = vertex_angle_sum[idx];
-            // 2.0f * M_PI = 6.28318530718f
-            gaussian_curvature[idx] = (6.28318530718f - angle_sum) / area;
+            // 2.0f * M_PI = 6.28318530718f. The area guard matches
+            // normalize_cotangent_laplacian_kernel, so a vertex with no area reports 0 from both
+            // operators instead of an infinity that would spread through the principal curvatures.
+            gaussian_curvature[idx] = (area > 1e-8f) ? (6.28318530718f - angle_sum) / area : 0.0f;
         }
     }
 

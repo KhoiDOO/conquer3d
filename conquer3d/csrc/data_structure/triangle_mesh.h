@@ -171,24 +171,50 @@ public:
 
     /** @brief Computes discrete Gaussian curvature $K = (2\pi - \sum \theta_j)/A_i$ on GPU. */
     void compute_gaussian_curvature();
-    /** @brief Returns (N,) float32 tensor of Gaussian curvatures. */
+    /**
+     * @brief Returns (N,) float32 tensor of Gaussian curvatures.
+     * @note The $2\pi$ angle deficit assumes a closed ring of triangles, so values on boundary
+     * vertices are not meaningful. Vertices with no incident area report 0.
+     */
     torch::Tensor get_gaussian_curvature();
 
     /**
-     * @brief Computes Mean Curvature $H = \frac{1}{2}\|\Delta_{LB} x\|$.
-     * @param[in] signed_curvature If true, preserves normal sign orientation.
-     * @return (N,) float32 tensor of mean curvatures.
+     * @brief Computes Mean Curvature from the cotangent Laplace-Beltrami operator.
+     * @details The operator evaluates the mean curvature normal $\Delta_{LB} x = -2H\hat{n}$, which points
+     * opposite the vertex normal on a convex surface. Mode 0 projects it back onto the normal, and the
+     * leading minus is what makes a sphere with outward normals report $H = +1/R$. Mode 2 is the
+     * "absolute discrete mean curvature" $\tfrac{1}{2}\|\Delta_{LB} x\|$ of Botsch et al., *Polygon Mesh
+     * Processing*, Equation (3.13); it discards the sign and, because the discrete operator carries a
+     * tangential component, is slightly larger than $|H|$ from mode 0.
+     * @param[in] mode Quantity to return: 0 signed curvature $H$, 1 curvature normal
+     *     $\Delta_{LB} x = -2H\hat{n}$, 2 absolute curvature $\tfrac{1}{2}\|\Delta_{LB} x\|$.
+     * @return (N,) float32 curvatures for modes 0 and 2, or (N, 3) float32 curvature normals for mode 1.
+     * @throws std::runtime_error If @p mode is not 0, 1 or 2.
      */
-    torch::Tensor get_mean_curvature(bool signed_curvature = false);
+    torch::Tensor get_mean_curvature(int8_t mode = 0);
 
     /**
      * @brief Computes Principal Curvatures $k_1, k_2 = H \pm \sqrt{\max(0, H^2 - K)}$.
-     * @param[in] signed_curvature If true, preserves normal sign.
+     * @details Follows Botsch et al., *Polygon Mesh Processing*: $H$ is the absolute mean curvature of
+     * Equation (3.13) and $K$ the Gaussian curvature of Equation (3.14). That $H$ carries no sign, so an
+     * elliptic region curving away from the normals reports a positive pair where the true one is
+     * negative; get_mean_curvature() with mode 0 keeps the sign.
      * @return (N, 2) float32 tensor of principal curvature pairs $(k_1, k_2)$.
      */
-    torch::Tensor get_principal_curvatures(bool signed_curvature = true);
+    torch::Tensor get_principal_curvatures();
 
-    /** @brief Computes Laplace-Beltrami tensor for specified mode (0: uniform, 1: cotangent). */
+    /**
+     * @brief Computes a Laplace-Beltrami vector field with the requested weights and normalisation.
+     * @details The mode fixes two axes at once. Mode 0 is uniform weights over the weight sum, mode 1
+     * cotangent weights over twice the Voronoi area -- the mean curvature normal $-2H\hat{n}$, in units
+     * of 1/length -- and mode 2 cotangent weights over their sum, a convex combination of neighbour
+     * offsets in units of length that a smoothing step can be taken along at any mesh scale.
+     * @param[in] mode 0 uniform, 1 cotangent area-normalised, 2 cotangent weight-normalised.
+     * @return (N, 3) float32 Laplacian vectors.
+     * @throws std::runtime_error If @p mode is not 0, 1 or 2.
+     * @note Modes 0 and 1 are cached on the mesh; mode 2 is recomputed per call because its weights
+     * follow vertex positions the caller may be moving.
+     */
     torch::Tensor compute_laplacian(int mode);
 
     /** @brief Discovers vertices not referenced by any triangle face. */
@@ -439,6 +465,22 @@ public:
     /** @brief Reorients triangle normal winding order consistently across adjacent manifold faces. */
     void fix_normals();
 
+    /**
+     * @brief Laplacian smoothing of the vertex positions, in place.
+     * @details Explicit Euler steps of $\partial x/\partial t = \lambda \Delta x$, following Botsch
+     * et al., *Polygon Mesh Processing*, Chapter 4. The Laplacian is normalised by its weight sum,
+     * so @p damping is a fraction of the way to the weighted neighbour average and is stable at any
+     * mesh scale. Boundary vertices are pinned so open meshes keep their rims.
+     * @param[in] iterations Number of explicit steps.
+     * @param[in] damping Step factor, typically in $[0, 1]$.
+     * @param[in] mode 0 uniform weights, which also relax the triangulation, or 1 cotangent weights,
+     *     which preserve triangle shapes.
+     * @throws std::runtime_error If @p mode is neither 0 nor 1.
+     * @warning Moving the vertices invalidates every geometric cache -- normals, areas, curvature,
+     * the BVH and the flood fills -- which are rebuilt on next use. Topology is untouched.
+     */
+    void smooth(int iterations = 10, float damping = 0.5f, int mode = 1);
+
     /** @brief Computes Euler characteristic $\chi = V - E + F$. */
     int32_t get_euler_characteristic();
     /** @brief Computes topological genus $g = 1 - \chi / 2$. */
@@ -533,13 +575,30 @@ namespace triangle_mesh
 
     __host__ void compute_cotangent_laplacian(const uint32_t num_vertices, const uint32_t num_triangles,
                                               const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
-                                              float *__restrict__ voronoi_areas, float3 *__restrict__ vertex_lb_cot);
+                                              const float *__restrict__ voronoi_areas,
+                                              float3 *__restrict__ vertex_lb_cot,
+                                              float *__restrict__ weight_sum = nullptr, bool area_normalized = true);
 
     __host__ void compute_gaussian_curvature(const uint32_t num_vertices, const uint32_t num_triangles,
                                              const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
                                              const float *__restrict__ voronoi_areas,
                                              float *__restrict__ vertex_angle_sum,
                                              float *__restrict__ gaussian_curvature);
+    __host__ void
+    assemble_edge_weighted_laplacian(const uint32_t num_vertices, const uint32_t num_unique_edges,
+                                     const int *__restrict__ unique_edges, const int *__restrict__ edge_offsets,
+                                     const int *__restrict__ edge_counts, const int *__restrict__ edge_triangles,
+                                     const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
+                                     const int mode, const bool clamped, float *__restrict__ edge_weights,
+                                     float3 *__restrict__ accum, float *__restrict__ weight_sum);
+
+    __host__ void smooth_laplacian(const uint32_t num_vertices, const uint32_t num_unique_edges,
+                                   const int *__restrict__ unique_edges, const int *__restrict__ edge_offsets,
+                                   const int *__restrict__ edge_counts, const int *__restrict__ edge_triangles,
+                                   const int3 *__restrict__ triangles, const bool *__restrict__ is_boundary,
+                                   const int iterations, const float damping, const int mode,
+                                   float *__restrict__ edge_weights, float3 *__restrict__ accum,
+                                   float *__restrict__ weight_sum, float3 *__restrict__ vertices);
 } // namespace triangle_mesh
 
 #endif // TRIANGLE_MESH_H

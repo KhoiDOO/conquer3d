@@ -181,37 +181,93 @@ torch::Tensor TriangleMesh::compute_laplacian(int mode)
     {
         return this->get_vertex_lb_uniform();
     }
-    else if (mode == 1)
+    if (mode == 1)
     {
         return this->get_vertex_lb_cotangent();
     }
-    else
+    if (mode == 2)
     {
-        throw std::runtime_error("Unsupported laplacian mode. Use 0 for Uniform, 1 for Cotangent.");
+        // The same cotangent weights as mode 1, divided by their sum instead of by area. That makes
+        // the result a convex combination of neighbour offsets, so it carries units of length and a
+        // fixed step along it behaves the same at any mesh scale -- what a smoothing flow consumes,
+        // where the area-normalised form of mode 1 would blow up on fine triangles.
+        // Recomputed on every call rather than cached: the weights depend on the vertex positions,
+        // and a cached copy would go stale the moment a caller moved one.
+        const int64_t num_vertices = this->vertices.size(0);
+        auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+        auto lb = torch::zeros({num_vertices, 3}, options_f32);
+        auto weight_sum = torch::zeros({num_vertices}, options_f32);
+
+        if (this->num_triangles > 0)
+        {
+            if (!this->edges.defined())
+            {
+                this->compute_edges_to_triangle_map();
+            }
+            const int64_t num_edges = this->edges.size(0);
+            if (num_edges > 0)
+            {
+                // The same per-edge weight definition smooth() uses, asked for unclamped: this is a
+                // reading of the operator rather than an iterated flow, so a negative weight is a
+                // fact about the triangulation rather than something that compounds.
+                auto edge_weights = torch::empty({num_edges}, options_f32);
+                triangle_mesh::assemble_edge_weighted_laplacian(
+                    static_cast<uint32_t>(num_vertices), static_cast<uint32_t>(num_edges), this->edges.data_ptr<int>(),
+                    this->edge_to_triangle_offsets.data_ptr<int>(), this->edge_to_triangle_counts.data_ptr<int>(),
+                    this->edge_to_triangle_indices.data_ptr<int>(),
+                    reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
+                    reinterpret_cast<const float3 *>(this->vertices.data_ptr<float>()), 1, false,
+                    edge_weights.data_ptr<float>(), reinterpret_cast<float3 *>(lb.data_ptr<float>()),
+                    weight_sum.data_ptr<float>());
+            }
+        }
+
+        // Unclamped weights can sum negative, which is still a valid weighted average, so the guard
+        // is on magnitude and the division keeps the sign. A vertex with no weight stays at zero.
+        auto magnitude = weight_sum.abs();
+        auto valid = (magnitude > 1e-8f).to(torch::kFloat32).unsqueeze(1);
+        return lb / torch::where(magnitude > 1e-8f, weight_sum, torch::ones_like(weight_sum)).unsqueeze(1) * valid;
     }
+    throw std::runtime_error("Unsupported laplacian mode. Use 0 for uniform, 1 for cotangent normalised by area, "
+                             "or 2 for cotangent normalised by the weight sum.");
 }
 
-torch::Tensor TriangleMesh::get_mean_curvature(bool signed_curvature)
+torch::Tensor TriangleMesh::get_mean_curvature(int8_t mode)
 {
-    // mode 1 is cotangent laplacian
+    // Laplacian mode 1 is the cotangent form, which evaluates the mean curvature normal itself.
     torch::Tensor lb_cotangent = this->compute_laplacian(1);
 
-    if (!signed_curvature)
+    if (mode == 1)
     {
-        // Absolute Mean Curvature: || 2 * H * n || / 2.0 = |H|
+        // Mean Curvature Normal: Delta_LB x = -2 * H * n, one (3,) vector per vertex.
+        return lb_cotangent;
+    }
+    if (mode == 2)
+    {
+        // Absolute Mean Curvature: || -2 * H * n || / 2.0 = |H|, one scalar per vertex.
+        // Equation (3.13) of Polygon Mesh Processing. The norm keeps the tangential part of the
+        // discrete operator, so this sits slightly above |H| from mode 0 on irregular meshes.
         return torch::norm(lb_cotangent, 2, 1) / 2.0f;
     }
-    else
+    if (mode != 0)
     {
-        // Signed Mean Curvature: dot(2 * H * n, n) / 2.0 = H
-        torch::Tensor v_normals = this->get_vertex_normals();
-        return torch::sum(lb_cotangent * v_normals, 1) / 2.0f;
+        throw std::runtime_error("Unsupported mean curvature mode. Use 0 for signed curvature, 1 for the "
+                                 "curvature normal, or 2 for absolute curvature.");
     }
+
+    // Signed Mean Curvature: dot(-2 * H * n, n) / -2.0 = H, one scalar per vertex.
+    // Without the minus a sphere with outward normals reports -1/R, because the curvature
+    // normal points inward while the vertex normal points outward.
+    torch::Tensor v_normals = this->get_vertex_normals();
+    return -torch::sum(lb_cotangent * v_normals, 1) / 2.0f;
 }
 
-torch::Tensor TriangleMesh::get_principal_curvatures(bool signed_curvature)
+torch::Tensor TriangleMesh::get_principal_curvatures()
 {
-    torch::Tensor H = this->get_mean_curvature(signed_curvature);
+    // Mode 2, the absolute mean curvature of Equation (3.13), is what the book's principal curvature
+    // formula (stated right after Equation (3.14)) takes as H. It carries no sign, so an elliptic
+    // region that curves away reports positive k1 and k2; get_mean_curvature(0) keeps the sign.
+    torch::Tensor H = this->get_mean_curvature(2);
     torch::Tensor K = this->get_gaussian_curvature();
 
     // In discrete settings, floating point inaccuracies can rarely cause H^2 < K.
@@ -371,6 +427,7 @@ void TriangleMesh::remove_isolated_vertices()
     this->vertex_lb_uniform = torch::Tensor();
     this->vertex_lb_cotangent = torch::Tensor();
     this->voronoi_areas = torch::Tensor();
+    this->gaussian_curvature = torch::Tensor();
 }
 
 void TriangleMesh::compute_triangle_areas()
@@ -1178,6 +1235,68 @@ void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
     this->vertex_lb_uniform = torch::Tensor();
     this->vertex_lb_cotangent = torch::Tensor();
     this->voronoi_areas = torch::Tensor();
+    this->gaussian_curvature = torch::Tensor();
+}
+
+void TriangleMesh::smooth(int iterations, float damping, int mode)
+{
+    if (mode != 0 && mode != 1)
+    {
+        throw std::runtime_error("Unsupported smoothing mode. Use 0 for uniform weights or 1 for cotangent weights.");
+    }
+    if (this->num_triangles == 0 || iterations <= 0)
+    {
+        return;
+    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
+
+    if (!this->edges.defined())
+    {
+        this->compute_edges_to_triangle_map();
+    }
+    const int64_t num_vertices = this->vertices.size(0);
+    const int64_t num_edges = this->edges.size(0);
+    if (num_edges == 0)
+    {
+        return;
+    }
+
+    // An edge with a single incident triangle bounds a hole, so both its endpoints are pinned.
+    // Without this an open mesh contracts at its rim on every iteration.
+    auto is_boundary = torch::zeros({num_vertices}, torch::dtype(torch::kBool).device(this->vertices.device()));
+    auto boundary_edges = this->edges.index({this->edge_to_triangle_counts == 1});
+    if (boundary_edges.size(0) > 0)
+    {
+        is_boundary.index_fill_(0, boundary_edges.reshape({-1}).to(torch::kInt64), true);
+    }
+
+    auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+    auto edge_weights = torch::empty({num_edges}, options_f32);
+    auto accum = torch::empty({num_vertices, 3}, options_f32);
+    auto weight_sum = torch::empty({num_vertices}, options_f32);
+
+    triangle_mesh::smooth_laplacian(
+        static_cast<uint32_t>(num_vertices), static_cast<uint32_t>(num_edges), this->edges.data_ptr<int>(),
+        this->edge_to_triangle_offsets.data_ptr<int>(), this->edge_to_triangle_counts.data_ptr<int>(),
+        this->edge_to_triangle_indices.data_ptr<int>(), reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
+        is_boundary.data_ptr<bool>(), iterations, damping, mode, edge_weights.data_ptr<float>(),
+        reinterpret_cast<float3 *>(accum.data_ptr<float>()), weight_sum.data_ptr<float>(),
+        reinterpret_cast<float3 *>(this->vertices.data_ptr<float>()));
+
+    // The positions moved, so every geometric cache is stale. Topology did not change, so the
+    // edge and vertex-to-triangle maps, the degrees and the manifoldness flags all stay valid.
+    this->triangle_areas = torch::Tensor();
+    this->triangle_normals = torch::Tensor();
+    this->vertex_normals = torch::Tensor();
+    this->edge_normals = torch::Tensor();
+    this->surface_area = torch::Tensor();
+    this->vertex_lb_uniform = torch::Tensor();
+    this->vertex_lb_cotangent = torch::Tensor();
+    this->voronoi_areas = torch::Tensor();
+    this->gaussian_curvature = torch::Tensor();
+    this->bvh.reset();
+    this->opt_self_intersected = std::nullopt;
+    this->invalidate_flood_fill_caches();
 }
 
 void TriangleMesh::fix_normals()
@@ -1747,50 +1866,100 @@ void bind_ds_triangle_mesh(py::module_ &m)
              R"pbdoc(
              Computes discrete Gaussian curvature via Gauss-Bonnet angle defect $K_i = \frac{2\pi - \sum \theta_j}{A_{Voronoi}}$.
 
+             The $2\pi$ deficit assumes a full ring of triangles around the vertex, so values on boundary
+             vertices are meaningless and typically large; filter them out with the mesh's boundary
+             information. Vertices with no incident area, such as isolated ones, report 0.
+
              Returns:
                  torch.Tensor: (N,) float32 discrete Gaussian curvature.
 
              Example:
                  >>> gauss_curv = mesh.get_gaussian_curvature()
              )pbdoc")
-        .def("get_mean_curvature", &TriangleMesh::get_mean_curvature, py::arg("signed_curvature") = false,
+        .def("get_mean_curvature", &TriangleMesh::get_mean_curvature, py::arg("mode") = 0,
              R"pbdoc(
-             Computes discrete Mean curvature using cotangent Laplace-Beltrami operator $H_i = \frac{1}{2} \|\Delta_{LB} v_i\|$.
+             Computes discrete Mean curvature from the cotangent Laplace-Beltrami operator.
+
+             The operator evaluates the mean curvature normal $\Delta_{LB} v = -2 H \hat{n}$, which points
+             opposite the vertex normal on a convex surface, so a sphere of radius $R$ with outward normals
+             reports $H = +1/R$ in mode 0.
 
              Args:
-                 signed_curvature (bool, optional): Project against vertex normal for sign. Defaults to False.
+                 mode (int, optional): Quantity to return. Defaults to 0.
+
+                     - 0: signed mean curvature $H_i = -\frac{1}{2} \Delta_{LB} v_i \cdot \hat{n}_i$, shape (N,).
+                     - 1: mean curvature normal $\Delta_{LB} v = -2 H \hat{n}$, shape (N, 3).
+                     - 2: absolute mean curvature $\frac{1}{2} \|\Delta_{LB} v\|$, shape (N,), Equation (3.13)
+                       of Botsch et al., Polygon Mesh Processing. It drops the sign and keeps the
+                       tangential part of the discrete operator, so it sits slightly above `|H|` from mode 0.
 
              Returns:
-                 torch.Tensor: (N,) float32 discrete Mean curvature.
+                 torch.Tensor: (N,) float32 curvature for modes 0 and 2, or (N, 3) float32 curvature
+                 normal for mode 1.
+
+             Raises:
+                 RuntimeError: If `mode` is not 0, 1 or 2.
 
              Example:
-                 >>> mean_curv = mesh.get_mean_curvature(signed_curvature=True)
+                 >>> mean_curv = mesh.get_mean_curvature()
+                 >>> curv_normal = mesh.get_mean_curvature(mode=1)
+                 >>> abs_curv = mesh.get_mean_curvature(mode=2)
              )pbdoc")
-        .def("get_principal_curvatures", &TriangleMesh::get_principal_curvatures, py::arg("signed_curvature") = true,
+        .def("get_principal_curvatures", &TriangleMesh::get_principal_curvatures,
              R"pbdoc(
-             Computes principal curvatures $(k_1, k_2) = H \pm \sqrt{\max(0, H^2 - K)}$.
+             Computes principal curvatures $(k_1, k_2) = H \pm \sqrt{\max(0, H^2 - K)}$, following Botsch
+             et al., Polygon Mesh Processing: $H$ is the absolute mean curvature of Equation (3.13)
+             (`get_mean_curvature(mode=2)`) and $K$ the Gaussian curvature of Equation (3.14).
 
-             Args:
-                 signed_curvature (bool, optional): Retain sign for mean curvature $H$. Defaults to True.
+             Because that $H$ carries no sign, an elliptic region curving away from the normals reports
+             positive $k_1$ and $k_2$ where the true pair is negative; magnitudes are unaffected, and
+             hyperbolic points still come out with opposite signs. Use `get_mean_curvature(mode=0)` when
+             the sign matters.
 
              Returns:
-                 Tuple[torch.Tensor, torch.Tensor]: (k1, k2) principal curvatures of shape (N,) float32.
+                 torch.Tensor: (N, 2) float32 tensor whose columns hold $k_1 \ge k_2$.
 
              Example:
-                 >>> k1, k2 = mesh.get_principal_curvatures()
+                 >>> k1, k2 = mesh.get_principal_curvatures().unbind(1)
              )pbdoc")
         .def("compute_laplacian", &TriangleMesh::compute_laplacian, py::arg("mode") = 0,
              R"pbdoc(
-             Computes Laplace-Beltrami vector field on mesh vertices.
+             Computes a Laplace-Beltrami vector field on the mesh vertices.
+
+             The mode picks two independent choices at once, the edge weights and the normalisation:
+
+             =====  ==========  =================  ==================================================
+             mode   weights     normalisation      result
+             =====  ==========  =================  ==================================================
+             0      uniform     sum of weights     umbrella average, units of length
+             1      cotangent   twice the area     mean curvature normal $-2H\hat{n}$, units of 1/length
+             2      cotangent   sum of weights     weighted neighbour average, units of length
+             =====  ==========  =================  ==================================================
+
+             Mode 1 is the operator curvature is built on. Modes 0 and 2 are convex combinations of the
+             neighbour offsets, so adding a fraction of them to a position is a stable smoothing step at
+             any mesh scale; mode 2 follows the surface geometry where mode 0 also relaxes the
+             triangulation.
 
              Args:
-                 mode (int, optional): Laplacian mode (0: Uniform umbrella, 1: Cotangent weights). Defaults to 0.
+                 mode (int, optional): Weighting and normalisation, per the table. Defaults to 0.
 
              Returns:
                  torch.Tensor: (N, 3) float32 Laplacian vectors.
 
+             Raises:
+                 RuntimeError: If `mode` is not 0, 1 or 2.
+
+             Note:
+                 Modes 0 and 1 are cached on the mesh; mode 2 is recomputed on each call, since its
+                 weights depend on vertex positions that a caller may be moving between calls. Mode 2
+                 and `smooth()` share one per-edge weight definition and differ only in clamping: mode 2
+                 reads the weights raw, while `smooth()` bounds and clips them as the reference
+                 implementation does, so the two diverge on meshes with obtuse angles.
+
              Example:
-                 >>> lap = mesh.compute_laplacian(mode=1)
+                 >>> curvature_normal = mesh.compute_laplacian(mode=1)
+                 >>> smoothing_step = mesh.compute_laplacian(mode=2)
              )pbdoc")
         .def_property_readonly("vertex_lb_cotangent", &TriangleMesh::get_vertex_lb_cotangent,
                                "Cotangent Laplace-Beltrami vectors (N, 3) float32.")
@@ -1814,6 +1983,36 @@ void bind_ds_triangle_mesh(py::module_ &m)
 
              Example:
                  >>> mesh.fix_normals()
+             )pbdoc")
+        .def("smooth", &TriangleMesh::smooth, py::arg("iterations") = 10, py::arg("damping") = 0.5f,
+             py::arg("mode") = 1,
+             R"pbdoc(
+             Laplacian smoothing of the vertex positions, in place (Botsch et al., Polygon Mesh
+             Processing, Chapter 4).
+
+             Each iteration is one explicit Euler step of the diffusion equation, moving every free
+             vertex a fraction of the way to the weighted average of its neighbours:
+             $x_i \leftarrow x_i + \texttt{damping} \cdot \frac{\sum_j w_{ij}(x_j - x_i)}{\sum_j w_{ij}}$.
+             Normalising by the weight sum, rather than by vertex area, keeps a fixed `damping` stable
+             at any mesh scale. Boundary vertices are pinned.
+
+             Args:
+                 iterations (int, optional): Number of explicit steps. Defaults to 10.
+                 damping (float, optional): Step factor, typically in [0, 1]. Defaults to 0.5.
+                 mode (int, optional): Weighting. 0 uses uniform weights, which smooth the geometry and
+                     also relax the triangulation tangentially; 1 uses cotangent weights, which follow the
+                     surface geometry and preserve triangle shapes. Defaults to 1.
+
+             Raises:
+                 RuntimeError: If `mode` is not 0 or 1.
+
+             Note:
+                 Moving the vertices invalidates the geometric caches (normals, areas, curvature, BVH,
+                 flood fills); they are rebuilt on next use. Topology is untouched. Cotangent weights are
+                 rebuilt every iteration, since they depend on the positions being moved.
+
+             Example:
+                 >>> mesh.smooth(iterations=10, damping=0.5, mode=1)
              )pbdoc")
         .def("sample_points", &TriangleMesh::sample_points, py::arg("num_points"), py::arg("uniform") = false,
              py::arg("return_normals") = false, py::arg("return_colors") = false, py::arg("use_triangle_normal") = true,
