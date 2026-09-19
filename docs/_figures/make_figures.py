@@ -1792,6 +1792,81 @@ def fig_sqfit(rnd):
     )
 
 
+AZ_SMOOTH = 205
+
+#: Laplacian smoothing shown at these iteration counts, with the other two
+#: arguments held fixed so the series varies in one thing only.
+SMOOTH_STEPS = (10, 50, 100)
+SMOOTH_DAMPING = 0.5
+#: Cotangent weights: they follow the surface geometry and keep triangle shapes,
+#: where uniform weights also relax the triangulation tangentially.
+SMOOTH_MODE = 1
+
+
+def fig_smoothing(rnd):
+    """Laplacian smoothing at three iteration counts, and the curvature it removes."""
+    from conquer3d.data_structure import TriangleMesh
+
+    tmesh = load_mesh(_asset("StanfordBunny"))
+    base_v = tmesh.vertices.clone()
+    faces = tmesh.triangles.int().clone()
+
+    # smooth() rewrites the vertex positions in place, so each level starts from
+    # its own copy of the original rather than from the previous level.
+    levels = [(0, tmesh)]
+    for steps in SMOOTH_STEPS:
+        mesh = TriangleMesh(base_v.clone().contiguous(), faces.clone().contiguous())
+        mesh.smooth(iterations=steps, damping=SMOOTH_DAMPING, mode=SMOOTH_MODE)
+        levels.append((steps, mesh))
+
+    # One colour range for every curvature panel, taken from the unsmoothed mesh.
+    # Per-panel percentiles would renormalise each panel to its own extremes, and
+    # a row showing curvature being removed would look unchanged.
+    h0 = levels[0][1].get_mean_curvature(0).detach().cpu().numpy()
+    lim = float(np.percentile(np.abs(h0[np.isfinite(h0)]), 100 - CURV_ROBUST))
+
+    def surface_area(verts, tris):
+        """Total triangle area, as a plain cross product over the faces.
+
+        Laplacian smoothing shrinks a surface, and mean curvature has units of
+        1/length, so a smaller smoother mesh can report a *larger* |H|. Reporting
+        the area alongside is what makes that readable rather than surprising.
+        """
+        a, b, c = verts[tris[:, 0].long()], verts[tris[:, 1].long()], verts[tris[:, 2].long()]
+        return float(torch.linalg.cross(b - a, c - a).norm(dim=-1).sum() * 0.5)
+
+    area0 = surface_area(base_v, faces)
+    shot = dict(flat=False, azimuth=AZ_SMOOTH, elevation=12, rim_strength=0.16)
+    surfaces, fields, top_labels, top_subs, bot_labels = [], [], [], [], []
+    for steps, mesh in levels:
+        verts = mesh.vertices
+        surfaces.append(render_mesh(rnd, verts, faces, base=GT_TINT, **shot))
+        curvature = mesh.get_mean_curvature(0)
+        cols = torch.tensor(
+            compose.colormap(curvature.detach().cpu().numpy(), "RdBu_r",
+                             robust=CURV_ROBUST, vmin=-lim, vmax=lim),
+            dtype=torch.float32, device=DEV)
+        fields.append(render_mesh(rnd, verts, faces, colors=cols, **shot))
+
+        shift = float((verts - base_v).norm(dim=-1).max())
+        mad = float(curvature.abs().mean())
+        area = surface_area(verts, faces)
+        top_labels.append("Original" if steps == 0 else f"{steps} iterations")
+        top_subs.append(f"max shift {shift:.4f}\narea {100 * (area / area0 - 1):+.1f}%")
+        bot_labels.append(f"mean |H| {mad:.2f}")
+        print(f"    {top_labels[-1]:14} mean |H| {mad:7.3f}   max vertex shift {shift:.5f}   "
+              f"area {100 * (area / area0 - 1):+.2f}%")
+
+    # Trimmed as one set, so both rows keep the same crop and the columns line up.
+    trimmed = compose.trim(surfaces + fields)
+    half = len(surfaces)
+    accents = [(150, 158, 176), (34, 211, 238), (167, 139, 250), (118, 185, 0)]
+    top = compose.grid(trimmed[:half], top_labels, sublabels=top_subs, accents=accents)
+    bot = compose.grid(trimmed[half:], bot_labels,
+                       sublabels=[f"signed H, ±{lim:.0f}"] * half, accents=accents)
+    compose.save(compose.stack([top, bot], pad=16), OUT / "fig-smoothing.png")
+
+
 def _asset(name):
     import conquer3d.data.assets as assets
 
@@ -1817,6 +1892,7 @@ FIGURES = [
     ("diffrender", fig_diffrender, True),
     ("superquadrics", fig_superquadrics, True),
     ("sqfit", fig_sqfit, True),
+    ("smoothing", fig_smoothing, True),
 ]
 
 
