@@ -197,7 +197,7 @@ FIGURES = [
     ),
     (
         "fig-curvature", "Curvature", "Analysis",
-        "Mean, principal and Gaussian curvature computed on the GPU from the mesh itself.",
+        "Mean curvature in all three modes, plus Gaussian and both principal curvatures, computed on the GPU from the mesh itself.",
         False,
     ),
     (
@@ -208,6 +208,12 @@ FIGURES = [
     (
         "fig-sdf-slices", "Signed distance field", "Fields",
         "Slices through the field a mesh generates, with the zero level set drawn on top.",
+        False,
+    ),
+    (
+        "fig-smoothing", "Laplacian smoothing", "Smoothing",
+        "The same mesh smoothed for 10, 50 and 100 iterations, with the mean "
+        "curvature of each result on one shared scale beneath it.",
         False,
     ),
     (
@@ -251,7 +257,8 @@ FIGURES = [
 #: Which Showcase gallery each figure belongs to. Membership only: within a
 #: gallery, figures keep FIGURES order with the lead comparisons first.
 FIGURE_SECTIONS = {
-    "mesh": ("fig-meshbvh", "fig-curvature", "fig-quality", "fig-fix-normals"),
+    "mesh": ("fig-meshbvh", "fig-curvature", "fig-smoothing", "fig-quality",
+             "fig-fix-normals"),
     "isosurface": ("fig-pipeline", "fig-algorithms", "fig-hermite", "fig-resolution",
                    "fig-normals", "fig-normal-modes", "fig-sign-modes", "fig-sdf-slices",
                    "fig-diffrender"),

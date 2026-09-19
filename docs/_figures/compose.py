@@ -330,18 +330,35 @@ def save(image: Image.Image, path: Path, max_width: int = 2000) -> None:
     print(f"    wrote {path.name}  {image.width}x{image.height}  {kb:.0f} KB")
 
 
-def colormap(values: np.ndarray, name: str = "viridis", robust: float = 2.0) -> np.ndarray:
+def colormap(values: np.ndarray, name: str = "viridis", robust: float = 2.0,
+             symmetric: bool = False, vmin: Optional[float] = None,
+             vmax: Optional[float] = None) -> np.ndarray:
     """Map a scalar field to RGB in [0, 1], clipping outliers.
 
     Curvature and quality fields have heavy tails -- a couple of degenerate
     triangles would otherwise flatten the entire colour range, so percentile
     clipping is applied before normalising.
+
+    ``symmetric`` puts zero at the middle of the range, which a signed field on a
+    diverging colormap needs: with the range taken from the data, a lopsided field
+    lands zero off-centre and the colours report the wrong sign.
+
+    ``vmin`` and ``vmax`` pin the range instead of taking it from this field, so a
+    series of panels can share one scale. Without that, each panel is normalised to
+    its own extremes and a series showing a field shrinking looks unchanged.
     """
     import matplotlib.cm as cm
 
     v = np.asarray(values, dtype=np.float64).ravel()
     finite = v[np.isfinite(v)]
     lo, hi = np.percentile(finite, [robust, 100 - robust])
+    if symmetric:
+        m = max(abs(lo), abs(hi)) or 1e-9
+        lo, hi = -m, m
+    if vmin is not None:
+        lo = vmin
+    if vmax is not None:
+        hi = vmax
     if hi - lo < 1e-12:
         lo, hi = finite.min(), finite.max() + 1e-9
     t = np.clip((v - lo) / (hi - lo), 0.0, 1.0)
