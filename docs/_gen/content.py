@@ -214,7 +214,16 @@ FIGURES = [
     (
         "fig-smoothing", "Laplacian smoothing", "Smoothing",
         "The same mesh smoothed for 10, 50 and 100 iterations, with the mean "
-        "curvature of each result on one shared scale beneath it.",
+        "curvature of each result on one shared scale beneath it. The last panel "
+        "repeats 100 iterations with a patch held fixed, which keeps the detail "
+        "the others lose.",
+        False,
+    ),
+    (
+        "fig-fairing", "Higher-order fairing", "Fairing",
+        "The bend of a tube faired at orders 1, 2 and 3 with the straight ends held "
+        "fixed, after Botsch et al., Polygon Mesh Processing, Figure 4.8. The order "
+        "of the flow sets how smoothly the faired region meets what is held.",
         False,
     ),
     (
@@ -258,7 +267,8 @@ FIGURES = [
 #: Which Showcase gallery each figure belongs to. Membership only: within a
 #: gallery, figures keep FIGURES order with the lead comparisons first.
 FIGURE_SECTIONS = {
-    "mesh": ("fig-meshbvh", "fig-curvature", "fig-smoothing", "fig-quality",
+    "mesh": ("fig-meshbvh", "fig-curvature", "fig-smoothing", "fig-fairing",
+               "fig-quality",
              "fig-fix-normals"),
     "isosurface": ("fig-pipeline", "fig-algorithms", "fig-hermite", "fig-resolution",
                    "fig-normals", "fig-normal-modes", "fig-sign-modes", "fig-sdf-slices",
