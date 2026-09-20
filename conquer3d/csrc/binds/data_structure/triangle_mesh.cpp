@@ -1238,12 +1238,125 @@ void TriangleMesh::remove_triangles_by_mask(const torch::Tensor &keep_mask)
     this->gaussian_curvature = torch::Tensor();
 }
 
-void TriangleMesh::smooth(int iterations, float damping, int mode)
+namespace
+{
+    /// Rejects a caller's locked mask that does not match the mesh it is meant to pin.
+    void check_locked_mask(const std::optional<torch::Tensor> &locked, int64_t num_vertices,
+                           const torch::Device &device)
+    {
+        if (!locked.has_value() || !locked->defined())
+        {
+            return;
+        }
+        TORCH_CHECK(locked->device().is_cuda(), "locked must be a CUDA tensor");
+        TORCH_CHECK(locked->is_contiguous(), "locked must be contiguous");
+        TORCH_CHECK(locked->scalar_type() == torch::kBool, "locked must be a boolean tensor");
+        TORCH_CHECK(locked->dim() == 1 && locked->size(0) == num_vertices, "locked must have shape (num_vertices,)");
+        TORCH_CHECK(locked->device() == device, "locked must be on the same device as the mesh vertices");
+    }
+} // namespace
+
+void TriangleMesh::invalidate_geometry_caches()
+{
+    // The positions moved, so every geometric cache is stale. Topology did not change, so the
+    // edge and vertex-to-triangle maps, the degrees and the manifoldness flags all stay valid.
+    this->triangle_areas = torch::Tensor();
+    this->triangle_normals = torch::Tensor();
+    this->vertex_normals = torch::Tensor();
+    this->edge_normals = torch::Tensor();
+    this->surface_area = torch::Tensor();
+    this->vertex_lb_uniform = torch::Tensor();
+    this->vertex_lb_cotangent = torch::Tensor();
+    this->voronoi_areas = torch::Tensor();
+    this->gaussian_curvature = torch::Tensor();
+    this->bvh.reset();
+    this->opt_self_intersected = std::nullopt;
+    this->invalidate_flood_fill_caches();
+}
+
+torch::Tensor TriangleMesh::build_locked_mask(int rings, const std::optional<torch::Tensor> &locked)
+{
+    const int64_t num_vertices = this->vertices.size(0);
+    auto mask = torch::zeros({num_vertices}, torch::dtype(torch::kBool).device(this->vertices.device()));
+
+    // An edge with a single incident triangle bounds a hole, so both its endpoints are pinned.
+    // Without this an open mesh contracts at its rim on every iteration.
+    auto boundary_edges = this->edges.index({this->edge_to_triangle_counts == 1});
+    if (boundary_edges.size(0) > 0)
+    {
+        mask.index_fill_(0, boundary_edges.reshape({-1}).to(torch::kInt64), true);
+    }
+
+    // The caller's selection joins the seed before it grows, so it dilates on equal terms with
+    // the rim.
+    if (locked.has_value() && locked->defined())
+    {
+        mask.bitwise_or_(*locked);
+    }
+
+    // Each further ring pins every vertex sharing an edge with one already pinned. The round reads
+    // its whole frontier into `touched` before writing, so growing in place is safe. An empty seed
+    // yields an empty frontier and breaks on the first round.
+    if (rings > 1)
+    {
+        auto edge_index = this->edges.to(torch::kInt64);
+        for (int r = 1; r < rings; ++r)
+        {
+            auto touched = mask.index({edge_index}).any(1);
+            auto grown = this->edges.index({touched});
+            if (grown.size(0) == 0)
+            {
+                break;
+            }
+            mask.index_fill_(0, grown.reshape({-1}).to(torch::kInt64), true);
+        }
+    }
+    return mask;
+}
+
+namespace
+{
+    /// Scratch normals for a projected step, or a pair of nulls when the flow is unprojected.
+    struct NormalScratch
+    {
+        /// Per-triangle normals, left empty when the step does not project.
+        torch::Tensor tri;
+        /// Per-vertex normals, left empty when the step does not project.
+        torch::Tensor vert;
+        /// Device pointer into ::tri, null when the step does not project.
+        float3 *tri_ptr = nullptr;
+        /// Device pointer into ::vert, null when the step does not project.
+        float3 *vert_ptr = nullptr;
+
+        /**
+         * @brief Allocates both buffers, or neither when the step does not project.
+         * @param[in] wanted Whether the step projects and so needs normals at all.
+         * @param[in] num_triangles Triangle count, sizing the per-triangle buffer.
+         * @param[in] num_vertices Vertex count, sizing the per-vertex buffer.
+         * @param[in] opts Options the buffers are allocated with, carrying device and dtype.
+         */
+        NormalScratch(bool wanted, int64_t num_triangles, int64_t num_vertices, const torch::TensorOptions &opts)
+        {
+            if (!wanted)
+            {
+                return;
+            }
+            tri = torch::empty({num_triangles, 3}, opts);
+            vert = torch::empty({num_vertices, 3}, opts);
+            tri_ptr = reinterpret_cast<float3 *>(tri.data_ptr<float>());
+            vert_ptr = reinterpret_cast<float3 *>(vert.data_ptr<float>());
+        }
+    };
+} // namespace
+
+void TriangleMesh::smooth(int iterations, float damping, int mode, std::optional<torch::Tensor> locked,
+                          bool normal_only)
 {
     if (mode != 0 && mode != 1)
     {
         throw std::runtime_error("Unsupported smoothing mode. Use 0 for uniform weights or 1 for cotangent weights.");
     }
+    check_locked_mask(locked, this->vertices.size(0), this->vertices.device());
     if (this->num_triangles == 0 || iterations <= 0)
     {
         return;
@@ -1261,42 +1374,88 @@ void TriangleMesh::smooth(int iterations, float damping, int mode)
         return;
     }
 
-    // An edge with a single incident triangle bounds a hole, so both its endpoints are pinned.
-    // Without this an open mesh contracts at its rim on every iteration.
-    auto is_boundary = torch::zeros({num_vertices}, torch::dtype(torch::kBool).device(this->vertices.device()));
-    auto boundary_edges = this->edges.index({this->edge_to_triangle_counts == 1});
-    if (boundary_edges.size(0) > 0)
+    auto is_locked = this->build_locked_mask(1, locked);
+
+    auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
+    auto edge_weights = torch::empty({num_edges}, options_f32);
+    auto accum = torch::empty({num_vertices, 3}, options_f32);
+    auto weight_sum = torch::empty({num_vertices}, options_f32);
+    NormalScratch normals(normal_only, this->num_triangles, num_vertices, options_f32);
+
+    // Smoothing is the order-1 case of the same flow, so it goes through the same function rather
+    // than a second copy of the loop; the two cannot drift apart. Order 1 needs no field scratch.
+    triangle_mesh::laplacian_flow(
+        static_cast<uint32_t>(num_vertices), this->num_triangles, static_cast<uint32_t>(num_edges),
+        this->edges.data_ptr<int>(), this->edge_to_triangle_offsets.data_ptr<int>(),
+        this->edge_to_triangle_counts.data_ptr<int>(), this->edge_to_triangle_indices.data_ptr<int>(),
+        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()), is_locked.data_ptr<bool>(), 1, iterations,
+        damping, mode, normal_only, edge_weights.data_ptr<float>(), reinterpret_cast<float3 *>(accum.data_ptr<float>()),
+        weight_sum.data_ptr<float>(), nullptr, normals.tri_ptr, normals.vert_ptr,
+        reinterpret_cast<float3 *>(this->vertices.data_ptr<float>()));
+
+    this->invalidate_geometry_caches();
+}
+
+void TriangleMesh::fair(int k, int iterations, float damping, int mode, std::optional<torch::Tensor> locked,
+                        bool normal_only)
+{
+    if (mode != 0 && mode != 1)
     {
-        is_boundary.index_fill_(0, boundary_edges.reshape({-1}).to(torch::kInt64), true);
+        throw std::runtime_error("Unsupported fairing mode. Use 0 for uniform weights or 1 for cotangent weights.");
     }
+    if (k < 1)
+    {
+        throw std::runtime_error("Unsupported fairing order. Use 1 for the membrane flow, 2 for the thin plate, "
+                                 "or 3 for the minimum variation surface.");
+    }
+    check_locked_mask(locked, this->vertices.size(0), this->vertices.device());
+    if (this->num_triangles == 0 || iterations <= 0)
+    {
+        return;
+    }
+    at::cuda::CUDAGuard device_guard(this->vertices.device());
+
+    if (!this->edges.defined())
+    {
+        this->compute_edges_to_triangle_map();
+    }
+    const int64_t num_vertices = this->vertices.size(0);
+    const int64_t num_edges = this->edges.size(0);
+    if (num_edges == 0)
+    {
+        return;
+    }
+
+    // Order k pins k rings, which is the discrete way of prescribing positions and normals at the
+    // rim: one ring holds position alone, two hold the tangent plane as well.
+    auto is_locked = this->build_locked_mask(k, locked);
 
     auto options_f32 = torch::TensorOptions().dtype(torch::kFloat32).device(this->vertices.device());
     auto edge_weights = torch::empty({num_edges}, options_f32);
     auto accum = torch::empty({num_vertices, 3}, options_f32);
     auto weight_sum = torch::empty({num_vertices}, options_f32);
 
-    triangle_mesh::smooth_laplacian(
-        static_cast<uint32_t>(num_vertices), static_cast<uint32_t>(num_edges), this->edges.data_ptr<int>(),
-        this->edge_to_triangle_offsets.data_ptr<int>(), this->edge_to_triangle_counts.data_ptr<int>(),
-        this->edge_to_triangle_indices.data_ptr<int>(), reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()),
-        is_boundary.data_ptr<bool>(), iterations, damping, mode, edge_weights.data_ptr<float>(),
-        reinterpret_cast<float3 *>(accum.data_ptr<float>()), weight_sum.data_ptr<float>(),
+    // Only a repeated application needs somewhere to hold the intermediate field.
+    torch::Tensor field;
+    float3 *field_ptr = nullptr;
+    if (k > 1)
+    {
+        field = torch::empty({num_vertices, 3}, options_f32);
+        field_ptr = reinterpret_cast<float3 *>(field.data_ptr<float>());
+    }
+
+    NormalScratch normals(normal_only, this->num_triangles, num_vertices, options_f32);
+
+    triangle_mesh::laplacian_flow(
+        static_cast<uint32_t>(num_vertices), this->num_triangles, static_cast<uint32_t>(num_edges),
+        this->edges.data_ptr<int>(), this->edge_to_triangle_offsets.data_ptr<int>(),
+        this->edge_to_triangle_counts.data_ptr<int>(), this->edge_to_triangle_indices.data_ptr<int>(),
+        reinterpret_cast<const int3 *>(this->triangles.data_ptr<int>()), is_locked.data_ptr<bool>(), k, iterations,
+        damping, mode, normal_only, edge_weights.data_ptr<float>(), reinterpret_cast<float3 *>(accum.data_ptr<float>()),
+        weight_sum.data_ptr<float>(), field_ptr, normals.tri_ptr, normals.vert_ptr,
         reinterpret_cast<float3 *>(this->vertices.data_ptr<float>()));
 
-    // The positions moved, so every geometric cache is stale. Topology did not change, so the
-    // edge and vertex-to-triangle maps, the degrees and the manifoldness flags all stay valid.
-    this->triangle_areas = torch::Tensor();
-    this->triangle_normals = torch::Tensor();
-    this->vertex_normals = torch::Tensor();
-    this->edge_normals = torch::Tensor();
-    this->surface_area = torch::Tensor();
-    this->vertex_lb_uniform = torch::Tensor();
-    this->vertex_lb_cotangent = torch::Tensor();
-    this->voronoi_areas = torch::Tensor();
-    this->gaussian_curvature = torch::Tensor();
-    this->bvh.reset();
-    this->opt_self_intersected = std::nullopt;
-    this->invalidate_flood_fill_caches();
+    this->invalidate_geometry_caches();
 }
 
 void TriangleMesh::fix_normals()
@@ -1986,7 +2145,7 @@ void bind_ds_triangle_mesh(py::module_ &m)
                  >>> mesh.fix_normals()
              )pbdoc")
         .def("smooth", &TriangleMesh::smooth, py::arg("iterations") = 10, py::arg("damping") = 0.5f,
-             py::arg("mode") = 1,
+             py::arg("mode") = 1, py::arg("locked") = std::nullopt, py::arg("normal_only") = false,
              R"pbdoc(
              Laplacian smoothing of the vertex positions, in place (Botsch et al., Polygon Mesh
              Processing, Chapter 4).
@@ -2003,9 +2162,16 @@ void bind_ds_triangle_mesh(py::module_ &m)
                  mode (int, optional): Weighting. 0 uses uniform weights, which smooth the geometry and
                      also relax the triangulation tangentially; 1 uses cotangent weights, which follow the
                      surface geometry and preserve triangle shapes. Defaults to 1.
+                 locked (torch.Tensor, optional): (N,) bool mask, True where a vertex is held fixed.
+                     Unioned with the boundary pin rather than replacing it, so an open mesh keeps its
+                     rim whether or not a mask is given. Defaults to None, which pins the rim alone.
+                 normal_only (bool, optional): If True, move each vertex only along its normal, so
+                     the shape changes while the triangulation stays put. Defaults to False.
 
              Raises:
                  RuntimeError: If `mode` is not 0 or 1.
+                 RuntimeError: If `locked` is not a contiguous CUDA bool tensor of shape (N,) on the
+                     same device as the mesh.
 
              Note:
                  Moving the vertices invalidates the geometric caches (normals, areas, curvature, BVH,
@@ -2014,6 +2180,52 @@ void bind_ds_triangle_mesh(py::module_ &m)
 
              Example:
                  >>> mesh.smooth(iterations=10, damping=0.5, mode=1)
+                 >>> mesh.smooth(locked=keep_these)    # smooth everything except a pinned region
+             )pbdoc")
+        .def("fair", &TriangleMesh::fair, py::arg("k") = 2, py::arg("iterations") = 500, py::arg("damping") = 0.1f,
+             py::arg("mode") = 1, py::arg("locked") = std::nullopt, py::arg("normal_only") = false,
+             R"pbdoc(
+             Higher-order Laplacian fairing of the vertex positions, in place (Botsch et al., Polygon
+             Mesh Processing, Section 4.3).
+
+             Replaces the free region with the surface satisfying $\Delta^k x = 0$, reached by
+             explicit Euler steps of $\partial x/\partial t = (-1)^{k+1} \lambda \Delta^k x$:
+
+             =====  ====================  ==============  ===========================================
+             k      Euler-Lagrange PDE    rim continuity  surface
+             =====  ====================  ==============  ===========================================
+             1      $\Delta x = 0$        $C^0$           membrane, minimising area
+             2      $\Delta^2 x = 0$      $C^1$           thin plate, minimising curvature
+             3      $\Delta^3 x = 0$      $C^2$           minimum variation, minimising its change
+             =====  ====================  ==============  ===========================================
+
+             Order `k` holds `k` rings of boundary vertices fixed, which is what gives the $C^{k-1}$
+             continuity at the border. `fair(k=1, ...)` is `smooth(...)`.
+
+             Args:
+                 k (int, optional): Order of the flow, at least 1. Defaults to 2.
+                 iterations (int, optional): Number of explicit steps. Defaults to 500.
+                 damping (float, optional): Step factor, stable up to $2^{1-k}$. Defaults to 0.1.
+                 mode (int, optional): Weighting. 0 uses uniform weights, 1 cotangent weights.
+                     Defaults to 1.
+                 locked (torch.Tensor, optional): (N,) bool mask, True where a vertex is held fixed.
+                     Unioned with the boundary rim and grown with it, so the set actually pinned is
+                     wider than the mask given by `k - 1` rings. Defaults to None.
+                 normal_only (bool, optional): If True, move each vertex only along its normal, so
+                     the shape changes while the triangulation stays put. Defaults to False.
+
+             Raises:
+                 RuntimeError: If `k` is below 1, or `mode` is not 0 or 1.
+                 RuntimeError: If `locked` is not a contiguous CUDA bool tensor of shape (N,) on the
+                     same device as the mesh.
+
+             Note:
+                 Moving the vertices invalidates the geometric caches (normals, areas, curvature,
+                 BVH, flood fills); they are rebuilt on next use. Topology is untouched.
+
+             Example:
+                 >>> mesh.fair(k=2, iterations=500, damping=0.1)
+                 >>> mesh.fair(k=3, damping=0.05)      # minimum variation, C2 at the rim
              )pbdoc")
         .def("sample_points", &TriangleMesh::sample_points, py::arg("num_points"), py::arg("uniform") = false,
              py::arg("return_normals") = false, py::arg("return_colors") = false, py::arg("use_triangle_normal") = true,

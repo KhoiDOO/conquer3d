@@ -82,6 +82,25 @@ protected:
      */
     void invalidate_flood_fill_caches();
 
+    /**
+     * @brief Drops every cache that depends on where the vertices are, keeping those that do not.
+     * @details Called by the mutators that move vertices without changing connectivity. The
+     * connectivity caches -- edge and vertex maps, degrees, manifoldness -- are kept.
+     */
+    void invalidate_geometry_caches();
+
+    /**
+     * @brief Builds the pinned-vertex set for a flow: the boundary rim and the caller's own mask,
+     * grown together.
+     * @details The seed is the edges with a single incident triangle, unioned with @p locked, then
+     * dilated @p rings - 1 times across the edge list; @p rings of 1 dilates nothing.
+     * @param[in] rings Rings to pin outward from the seed; must be at least 1.
+     * @param[in] locked Optional caller mask of vertices to pin, unioned into the seed before the
+     *     dilation so it grows on the same terms as the rim.
+     * @return `(N,)` bool tensor, true where a vertex is pinned.
+     */
+    torch::Tensor build_locked_mask(int rings, const std::optional<torch::Tensor> &locked);
+
     std::optional<bool> opt_edge_manifold;            ///< Cached edge-manifoldness result, ignoring boundaries.
     std::optional<bool> opt_edge_manifold_w_boundary; ///< Cached edge-manifoldness result, allowing boundaries.
     std::optional<bool> opt_vertex_manifold;          ///< Cached vertex-manifoldness result.
@@ -476,11 +495,35 @@ public:
      * @param[in] damping Step factor, typically in $[0, 1]$.
      * @param[in] mode 0 uniform weights, which also relax the triangulation, or 1 cotangent weights,
      *     which preserve triangle shapes.
+     * @param[in] locked Optional `(N,)` bool mask of vertices to hold fixed, unioned with the
+     *     boundary pin rather than replacing it.
+     * @param[in] normal_only Whether to move vertices only along their normals.
      * @throws std::runtime_error If @p mode is neither 0 nor 1.
      * @warning Moving the vertices invalidates every geometric cache -- normals, areas, curvature,
      * the BVH and the flood fills -- which are rebuilt on next use. Topology is untouched.
      */
-    void smooth(int iterations = 10, float damping = 0.5f, int mode = 1);
+    void smooth(int iterations = 10, float damping = 0.5f, int mode = 1,
+                std::optional<torch::Tensor> locked = std::nullopt, bool normal_only = false);
+
+    /**
+     * @brief Higher-order Laplacian fairing of the vertex positions, in place.
+     * @details Replaces the free region with the surface satisfying $\Delta^k x = 0$, reached by
+     * explicit Euler steps of $\partial x/\partial t = (-1)^{k+1} \lambda \Delta^k x$, following
+     * Botsch et al., *Polygon Mesh Processing*, Section 4.3. Order $k$ gives the membrane, thin
+     * plate and minimum variation surfaces at $k = 1, 2, 3$, holding $k$ rings of boundary vertices
+     * fixed for $C^{k-1}$ continuity at the border.
+     * @param[in] k Order of the flow, at least 1. Order 1 is exactly what smooth() does.
+     * @param[in] iterations Number of explicit steps.
+     * @param[in] damping Step factor; stable up to $2^{1-k}$.
+     * @param[in] mode 0 uniform weights or 1 cotangent weights.
+     * @param[in] locked Optional `(N,)` bool mask of vertices to hold fixed, unioned with the rim
+     *     and grown with it, so the set pinned is wider than the mask given by $k - 1$ rings.
+     * @param[in] normal_only Whether to move vertices only along their normals.
+     * @throws std::runtime_error If @p k is below 1, or @p mode is neither 0 nor 1.
+     * @warning Moving the vertices invalidates every geometric cache, exactly as smooth() does.
+     */
+    void fair(int k = 2, int iterations = 500, float damping = 0.1f, int mode = 1,
+              std::optional<torch::Tensor> locked = std::nullopt, bool normal_only = false);
 
     /** @brief Computes Euler characteristic $\chi = V - E + F$. */
     int32_t get_euler_characteristic();
@@ -585,21 +628,34 @@ namespace triangle_mesh
                                              const float *__restrict__ voronoi_areas,
                                              float *__restrict__ vertex_angle_sum,
                                              float *__restrict__ gaussian_curvature);
-    __host__ void
-    assemble_edge_weighted_laplacian(const uint32_t num_vertices, const uint32_t num_unique_edges,
-                                     const int *__restrict__ unique_edges, const int *__restrict__ edge_offsets,
-                                     const int *__restrict__ edge_counts, const int *__restrict__ edge_triangles,
-                                     const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
-                                     const int mode, const bool clamped, float *__restrict__ edge_weights,
-                                     float3 *__restrict__ accum, float *__restrict__ weight_sum);
+    __host__ void compute_edge_weights(const uint32_t num_unique_edges, const int *__restrict__ unique_edges,
+                                       const int *__restrict__ edge_offsets, const int *__restrict__ edge_counts,
+                                       const int *__restrict__ edge_triangles, const int3 *__restrict__ triangles,
+                                       const float3 *__restrict__ vertices, const int mode, const bool clamped,
+                                       float *__restrict__ edge_weights);
 
-    __host__ void smooth_laplacian(const uint32_t num_vertices, const uint32_t num_unique_edges,
-                                   const int *__restrict__ unique_edges, const int *__restrict__ edge_offsets,
-                                   const int *__restrict__ edge_counts, const int *__restrict__ edge_triangles,
-                                   const int3 *__restrict__ triangles, const bool *__restrict__ is_boundary,
-                                   const int iterations, const float damping, const int mode,
-                                   float *__restrict__ edge_weights, float3 *__restrict__ accum,
-                                   float *__restrict__ weight_sum, float3 *__restrict__ vertices);
+    __host__ void accumulate_edge_weighted(const uint32_t num_vertices, const uint32_t num_unique_edges,
+                                           const int *__restrict__ unique_edges, const float3 *__restrict__ field,
+                                           const float *__restrict__ edge_weights, float3 *__restrict__ accum,
+                                           float *__restrict__ weight_sum);
+
+    __host__ void assemble_edge_weighted_laplacian(
+        const uint32_t num_vertices, const uint32_t num_unique_edges, const int *__restrict__ unique_edges,
+        const int *__restrict__ edge_offsets, const int *__restrict__ edge_counts,
+        const int *__restrict__ edge_triangles, const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
+        const int mode, const bool clamped, float *__restrict__ edge_weights, float3 *__restrict__ accum,
+        float *__restrict__ weight_sum, const float3 *__restrict__ field = nullptr);
+
+    __host__ void laplacian_flow(const uint32_t num_vertices, const uint32_t num_triangles,
+                                 const uint32_t num_unique_edges, const int *__restrict__ unique_edges,
+                                 const int *__restrict__ edge_offsets, const int *__restrict__ edge_counts,
+                                 const int *__restrict__ edge_triangles, const int3 *__restrict__ triangles,
+                                 const bool *__restrict__ is_locked, const int order, const int iterations,
+                                 const float damping, const int mode, const bool normal_only,
+                                 float *__restrict__ edge_weights, float3 *__restrict__ accum,
+                                 float *__restrict__ weight_sum, float3 *__restrict__ field,
+                                 float3 *__restrict__ triangle_normals, float3 *__restrict__ vertex_normals,
+                                 float3 *__restrict__ vertices);
 } // namespace triangle_mesh
 
 #endif // TRIANGLE_MESH_H

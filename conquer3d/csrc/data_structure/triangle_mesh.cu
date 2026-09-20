@@ -1249,22 +1249,23 @@ namespace triangle_mesh
 
     /**
      * @brief Accumulates a weight-normalised Laplacian from per-edge weights.
-     * @details One thread per unique edge, adding $w_{ij}(x_j - x_i)$ to both endpoints together with
+     * @details One thread per unique edge, adding $w_{ij}(f_j - f_i)$ to both endpoints together with
      * the weight itself. Dividing the first by the second yields a convex combination of neighbour
      * offsets -- units of length, so a fixed step along it behaves the same at any mesh scale, unlike
      * the area-normalised operator that curvature uses.
      * @param[in] num_unique_edges Number of unique edges.
      * @param[in] unique_edges Device array of $2E$ vertex indices.
-     * @param[in] vertices Device array of mesh vertex coordinates.
+     * @param[in] field Device array of one vector per vertex, differenced across each edge.
      * @param[in] edge_weights Device array of one weight per edge.
      * @param[out] accum Device array of accumulated offsets; must be zeroed first.
-     * @param[out] weight_sum Device array of accumulated weights; must be zeroed first.
+     * @param[out] weight_sum Device array of accumulated weights; must be zeroed first. May be
+     *     nullptr to skip the sum.
      * @warning Vertices are shared between edges, so accumulation uses `atomicAdd`; the reduction
      * order, and hence the last bits of the result, varies between runs.
      */
     __global__ void accumulate_edge_weighted_kernel(const uint32_t num_unique_edges,
                                                     const int *__restrict__ unique_edges,
-                                                    const float3 *__restrict__ vertices,
+                                                    const float3 *__restrict__ field,
                                                     const float *__restrict__ edge_weights, float3 *__restrict__ accum,
                                                     float *__restrict__ weight_sum)
     {
@@ -1275,32 +1276,41 @@ namespace triangle_mesh
         const int u = unique_edges[2 * idx];
         const int v = unique_edges[2 * idx + 1];
         const float w = edge_weights[idx];
-        const float3 pu = vertices[u];
-        const float3 pv = vertices[v];
+        const float3 fu = field[u];
+        const float3 fv = field[v];
 
-        atomicAdd(&accum[u], w * (pv - pu));
-        atomicAdd(&accum[v], w * (pu - pv));
-        atomicAdd(&weight_sum[u], w);
-        atomicAdd(&weight_sum[v], w);
+        atomicAdd(&accum[u], w * (fv - fu));
+        atomicAdd(&accum[v], w * (fu - fv));
+        if (weight_sum != nullptr)
+        {
+            atomicAdd(&weight_sum[u], w);
+            atomicAdd(&weight_sum[v], w);
+        }
     }
 
     /**
      * @brief Applies one accumulated smoothing step to the vertex positions.
      * @details One thread per vertex, moving it by @p damping times the weighted average of its
-     * neighbour offsets. Boundary vertices are pinned, as in the course code: an open mesh would
-     * otherwise contract at its rim every iteration.
+     * neighbour offsets. Pinned vertices are left alone, which at minimum means the boundary, as in
+     * the course code: an open mesh would otherwise contract at its rim every iteration.
      * @param[in] num_vertices Number of vertices.
      * @param[in] accum Device array of accumulated neighbour offsets.
      * @param[in] weight_sum Device array of accumulated weights.
-     * @param[in] is_boundary Device array marking vertices to pin; may be nullptr to move all.
-     * @param[in] damping Step factor applied to the averaged offset.
+     * @param[in] is_boundary Device array marking vertices to pin; may be nullptr to move all. A
+     *     higher-order flow passes its whole locked set here, of which the rim is one part.
+     * @param[in] damping Step factor applied to the averaged offset. An even-order flow passes it
+     *     negative, since the sign of the operator's even powers is reversed.
+     * @param[in] normals Optional device array of unit vertex normals. When supplied the step is
+     *     projected onto the normal, so vertices move only perpendicular to the surface; nullptr
+     *     applies the whole step.
      * @param[in,out] vertices Device array of mesh vertex coordinates, updated in place.
      * @note A vertex whose weights sum to zero -- isolated, or ringed by clipped weights -- keeps
      * its position rather than dividing by zero.
      */
     __global__ void smooth_apply_kernel(const uint32_t num_vertices, const float3 *__restrict__ accum,
                                         const float *__restrict__ weight_sum, const bool *__restrict__ is_boundary,
-                                        const float damping, float3 *__restrict__ vertices)
+                                        const float damping, const float3 *__restrict__ normals,
+                                        float3 *__restrict__ vertices)
     {
         uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx >= num_vertices)
@@ -1311,8 +1321,103 @@ namespace triangle_mesh
         const float w = weight_sum[idx];
         if (w > 1e-8f)
         {
-            vertices[idx] = vertices[idx] + (damping / w) * accum[idx];
+            float3 step = (damping / w) * accum[idx];
+            if (normals != nullptr)
+            {
+                // Keep only the component along the normal. A vertex whose normal came out
+                // degenerate has a zero here and simply does not move, which is the same thing
+                // the weight guard above does for a vertex with no usable neighbours.
+                const float3 n = normals[idx];
+                step = maths::dot(step, n) * n;
+            }
+            vertices[idx] = vertices[idx] + step;
         }
+    }
+
+    /**
+     * @brief Divides an accumulated Laplacian by its per-vertex weight total.
+     * @details One thread per vertex, turning the numerator $\sum_j w_{ij}(f_j - f_i)$ and the
+     * denominator $\sum_j w_{ij}$ into the weighted neighbour offset.
+     * @param[in] num_vertices Number of vertices.
+     * @param[in] accum Device array of accumulated offsets.
+     * @param[in] weight_sum Device array of accumulated weights.
+     * @param[out] out Device array receiving the normalised field; may alias neither input.
+     * @note A vertex whose weights sum to zero receives zero.
+     */
+    __global__ void normalise_field_kernel(const uint32_t num_vertices, const float3 *__restrict__ accum,
+                                           const float *__restrict__ weight_sum, float3 *__restrict__ out)
+    {
+        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx >= num_vertices)
+            return;
+
+        const float w = weight_sum[idx];
+        out[idx] = (w > 1e-8f) ? (1.0f / w) * accum[idx] : make_float3(0.0f, 0.0f, 0.0f);
+    }
+
+    /**
+     * @brief Fills the per-edge weights from the mesh geometry.
+     * @param[in] num_unique_edges Number of unique edges.
+     * @param[in] unique_edges Device array of $2E$ vertex indices.
+     * @param[in] edge_offsets Device array of CSR offsets into @p edge_triangles.
+     * @param[in] edge_counts Device array of incident triangle counts per edge.
+     * @param[in] edge_triangles Device array of triangle indices, grouped by edge.
+     * @param[in] triangles Device array of triangle vertex indices.
+     * @param[in] vertices Device array of mesh vertex coordinates.
+     * @param[in] mode 0 for uniform weights, 1 for cotangent weights.
+     * @param[in] clamped Whether cotangent weights are bounded and clipped.
+     * @param[out] edge_weights Device array receiving one weight per edge.
+     */
+    __host__ void compute_edge_weights(const uint32_t num_unique_edges, const int *__restrict__ unique_edges,
+                                       const int *__restrict__ edge_offsets, const int *__restrict__ edge_counts,
+                                       const int *__restrict__ edge_triangles, const int3 *__restrict__ triangles,
+                                       const float3 *__restrict__ vertices, const int mode, const bool clamped,
+                                       float *__restrict__ edge_weights)
+    {
+        if (num_unique_edges == 0)
+            return;
+
+        const int threads = NTHREADS;
+        const int blocks_edge = (num_unique_edges + threads - 1) / threads;
+        auto stream = at::cuda::getCurrentCUDAStream();
+
+        compute_edge_weights_kernel<<<blocks_edge, threads, 0, stream>>>(num_unique_edges, unique_edges, edge_offsets,
+                                                                         edge_counts, edge_triangles, triangles,
+                                                                         vertices, mode, clamped, edge_weights);
+    }
+
+    /**
+     * @brief Accumulates one application of the weighted Laplacian over a field.
+     * @details Zeroes @p accum, and @p weight_sum when it is asked for, before accumulating.
+     * @param[in] num_vertices Number of vertices.
+     * @param[in] num_unique_edges Number of unique edges.
+     * @param[in] unique_edges Device array of $2E$ vertex indices.
+     * @param[in] field Device array of one vector per vertex, differenced across each edge.
+     * @param[in] edge_weights Device array of one weight per edge.
+     * @param[out] accum Device array receiving the numerator; zeroed here.
+     * @param[out] weight_sum Device array receiving the denominator; zeroed here. Pass nullptr on
+     *     every application after the first in a chain, since the weights have not changed.
+     */
+    __host__ void accumulate_edge_weighted(const uint32_t num_vertices, const uint32_t num_unique_edges,
+                                           const int *__restrict__ unique_edges, const float3 *__restrict__ field,
+                                           const float *__restrict__ edge_weights, float3 *__restrict__ accum,
+                                           float *__restrict__ weight_sum)
+    {
+        if (num_vertices == 0 || num_unique_edges == 0)
+            return;
+
+        const int threads = NTHREADS;
+        const int blocks_edge = (num_unique_edges + threads - 1) / threads;
+        auto stream = at::cuda::getCurrentCUDAStream();
+
+        cudaMemsetAsync(accum, 0, sizeof(float3) * (size_t)num_vertices, stream);
+        if (weight_sum != nullptr)
+        {
+            cudaMemsetAsync(weight_sum, 0, sizeof(float) * (size_t)num_vertices, stream);
+        }
+
+        accumulate_edge_weighted_kernel<<<blocks_edge, threads, 0, stream>>>(num_unique_edges, unique_edges, field,
+                                                                             edge_weights, accum, weight_sum);
     }
 
     /**
@@ -1334,81 +1439,118 @@ namespace triangle_mesh
      * @param[out] edge_weights Device scratch of one weight per edge.
      * @param[out] accum Device array receiving the numerator; zeroed here.
      * @param[out] weight_sum Device array receiving the denominator; zeroed here.
+     * @param[in] field Device array to difference instead of @p vertices, or nullptr to difference
+     *     the positions themselves. The weights always come from @p vertices either way.
      */
-    __host__ void
-    assemble_edge_weighted_laplacian(const uint32_t num_vertices, const uint32_t num_unique_edges,
-                                     const int *__restrict__ unique_edges, const int *__restrict__ edge_offsets,
-                                     const int *__restrict__ edge_counts, const int *__restrict__ edge_triangles,
-                                     const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
-                                     const int mode, const bool clamped, float *__restrict__ edge_weights,
-                                     float3 *__restrict__ accum, float *__restrict__ weight_sum)
+    __host__ void assemble_edge_weighted_laplacian(
+        const uint32_t num_vertices, const uint32_t num_unique_edges, const int *__restrict__ unique_edges,
+        const int *__restrict__ edge_offsets, const int *__restrict__ edge_counts,
+        const int *__restrict__ edge_triangles, const int3 *__restrict__ triangles, const float3 *__restrict__ vertices,
+        const int mode, const bool clamped, float *__restrict__ edge_weights, float3 *__restrict__ accum,
+        float *__restrict__ weight_sum, const float3 *__restrict__ field)
     {
         if (num_vertices == 0 || num_unique_edges == 0)
             return;
 
-        const int threads = NTHREADS;
-        const int blocks_edge = (num_unique_edges + threads - 1) / threads;
-        auto stream = at::cuda::getCurrentCUDAStream();
-
-        cudaMemsetAsync(accum, 0, sizeof(float3) * (size_t)num_vertices, stream);
-        cudaMemsetAsync(weight_sum, 0, sizeof(float) * (size_t)num_vertices, stream);
-
-        compute_edge_weights_kernel<<<blocks_edge, threads, 0, stream>>>(num_unique_edges, unique_edges, edge_offsets,
-                                                                         edge_counts, edge_triangles, triangles,
-                                                                         vertices, mode, clamped, edge_weights);
-        accumulate_edge_weighted_kernel<<<blocks_edge, threads, 0, stream>>>(num_unique_edges, unique_edges, vertices,
-                                                                             edge_weights, accum, weight_sum);
+        compute_edge_weights(num_unique_edges, unique_edges, edge_offsets, edge_counts, edge_triangles, triangles,
+                             vertices, mode, clamped, edge_weights);
+        accumulate_edge_weighted(num_vertices, num_unique_edges, unique_edges, (field != nullptr) ? field : vertices,
+                                 edge_weights, accum, weight_sum);
     }
 
     /**
-     * @brief Runs explicit Laplacian smoothing over the vertex positions.
-     * @details Each iteration is one explicit Euler step of the diffusion equation
-     * $\partial x/\partial t = \lambda \Delta x$, assembled through
-     * ::assemble_edge_weighted_laplacian with clamped weights. Assembly and application are separate
-     * launches, so every vertex moves from the same starting configuration within a step. The weights
-     * are rebuilt each iteration because they depend on the positions being moved; the course code
-     * instead holds them fixed across a batch, which is cheaper but drifts from the true flow as the
-     * surface changes.
+     * @brief Runs an explicit Laplacian flow of arbitrary order over the vertex positions.
+     * @details Each iteration is one explicit Euler step of $\partial x/\partial t =
+     * (-1)^{k+1} \lambda \Delta^k x$. The steady state of the order-$k$ flow is the surface
+     * satisfying $\Delta^k x = 0$: the membrane at $k = 1$, the thin plate at $k = 2$ and the
+     * minimum variation surface at $k = 3$.
      * @param[in] num_vertices Number of vertices.
+     * @param[in] num_triangles Number of triangles; read only when @p normal_only is set.
      * @param[in] num_unique_edges Number of unique edges.
      * @param[in] unique_edges Device array of $2E$ vertex indices.
      * @param[in] edge_offsets Device array of CSR offsets into @p edge_triangles.
      * @param[in] edge_counts Device array of incident triangle counts per edge.
      * @param[in] edge_triangles Device array of triangle indices, grouped by edge.
      * @param[in] triangles Device array of triangle vertex indices.
-     * @param[in] is_boundary Device array marking vertices to pin; may be nullptr.
+     * @param[in] is_locked Device array marking vertices to pin; may be nullptr to move all.
+     * @param[in] order Times the operator is applied per step; 1 recovers plain smoothing.
      * @param[in] iterations Number of explicit steps.
      * @param[in] damping Step factor applied to each averaged offset.
      * @param[in] mode 0 for uniform weights, 1 for cotangent weights.
+     * @param[in] normal_only Whether to project each step onto the vertex normal.
      * @param[out] edge_weights Device scratch of one weight per edge.
      * @param[out] accum Device scratch of one offset per vertex.
      * @param[out] weight_sum Device scratch of one weight total per vertex.
+     * @param[out] field Device scratch of one vector per vertex; required when @p order exceeds 1,
+     *     and must not alias @p accum.
+     * @param[out] triangle_normals Device scratch of one normal per triangle; required when
+     *     @p normal_only is set.
+     * @param[out] vertex_normals Device scratch of one normal per vertex; required when
+     *     @p normal_only is set.
      * @param[in,out] vertices Device array of mesh vertex coordinates, updated in place.
-     * @note Uniform weights also relax the triangulation tangentially, while cotangent weights
-     * preserve triangle shapes.
+     * @warning The step is stable for `damping` up to $2^{1-k}$; above that it may diverge.
      */
-    __host__ void smooth_laplacian(const uint32_t num_vertices, const uint32_t num_unique_edges,
-                                   const int *__restrict__ unique_edges, const int *__restrict__ edge_offsets,
-                                   const int *__restrict__ edge_counts, const int *__restrict__ edge_triangles,
-                                   const int3 *__restrict__ triangles, const bool *__restrict__ is_boundary,
-                                   const int iterations, const float damping, const int mode,
-                                   float *__restrict__ edge_weights, float3 *__restrict__ accum,
-                                   float *__restrict__ weight_sum, float3 *__restrict__ vertices)
+    __host__ void laplacian_flow(const uint32_t num_vertices, const uint32_t num_triangles,
+                                 const uint32_t num_unique_edges, const int *__restrict__ unique_edges,
+                                 const int *__restrict__ edge_offsets, const int *__restrict__ edge_counts,
+                                 const int *__restrict__ edge_triangles, const int3 *__restrict__ triangles,
+                                 const bool *__restrict__ is_locked, const int order, const int iterations,
+                                 const float damping, const int mode, const bool normal_only,
+                                 float *__restrict__ edge_weights, float3 *__restrict__ accum,
+                                 float *__restrict__ weight_sum, float3 *__restrict__ field,
+                                 float3 *__restrict__ triangle_normals, float3 *__restrict__ vertex_normals,
+                                 float3 *__restrict__ vertices)
     {
-        if (num_vertices == 0 || num_unique_edges == 0 || iterations <= 0)
+        if (num_vertices == 0 || num_unique_edges == 0 || iterations <= 0 || order < 1)
             return;
+
+        TORCH_CHECK(order == 1 || field != nullptr,
+                    "laplacian_flow: a field scratch buffer is required when order is greater than 1.");
+        TORCH_CHECK(!normal_only || (triangle_normals != nullptr && vertex_normals != nullptr),
+                    "laplacian_flow: normal scratch buffers are required when normal_only is set.");
 
         const int threads = NTHREADS;
         const int blocks_vert = (num_vertices + threads - 1) / threads;
         auto stream = at::cuda::getCurrentCUDAStream();
 
+        const float signed_damping = (order & 1) ? damping : -damping;
+
         for (int iter = 0; iter < iterations; ++iter)
         {
-            assemble_edge_weighted_laplacian(num_vertices, num_unique_edges, unique_edges, edge_offsets, edge_counts,
-                                             edge_triangles, triangles, vertices, mode, true, edge_weights, accum,
-                                             weight_sum);
-            smooth_apply_kernel<<<blocks_vert, threads, 0, stream>>>(num_vertices, accum, weight_sum, is_boundary,
-                                                                     damping, vertices);
+            compute_edge_weights(num_unique_edges, unique_edges, edge_offsets, edge_counts, edge_triangles, triangles,
+                                 vertices, mode, true, edge_weights);
+
+            // First application differences the positions and fills the weight totals.
+            accumulate_edge_weighted(num_vertices, num_unique_edges, unique_edges, vertices, edge_weights, accum,
+                                     weight_sum);
+
+            for (int m = 1; m < order; ++m)
+            {
+                normalise_field_kernel<<<blocks_vert, threads, 0, stream>>>(num_vertices, accum, weight_sum, field);
+                // weight_sum is passed as nullptr rather than re-accumulated: the weights have not
+                // changed, so it already holds the right totals. Accumulating into it again without
+                // zeroing would double it every round and quietly halve the flow each time.
+                accumulate_edge_weighted(num_vertices, num_unique_edges, unique_edges, field, edge_weights, accum,
+                                         nullptr);
+            }
+
+            // Normals follow the geometry, so they are rebuilt with it. Area weighting rather than
+            // the class default of uniform: this normal is used as a projection axis, and an
+            // area-weighted estimate is the steadier one on an irregular neighbourhood.
+            const float3 *step_normals = nullptr;
+            if (normal_only)
+            {
+                compute_triangle_normals(num_triangles, vertices, triangles, triangle_normals);
+                cudaMemsetAsync(vertex_normals, 0, sizeof(float3) * (size_t)num_vertices, stream);
+                compute_vertex_normals(num_vertices, num_triangles, vertices, triangles, triangle_normals,
+                                       vertex_normals, 1);
+                step_normals = vertex_normals;
+            }
+
+            // The apply kernel divides by the weight totals, so it supplies the final
+            // normalisation of the last application as well as taking the step.
+            smooth_apply_kernel<<<blocks_vert, threads, 0, stream>>>(num_vertices, accum, weight_sum, is_locked,
+                                                                     signed_damping, step_normals, vertices);
         }
     }
 
