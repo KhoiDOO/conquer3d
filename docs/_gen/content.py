@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import render
+import snippets
 from render import code_block, esc, md_inline
 
 
@@ -308,6 +309,75 @@ def _check_sections() -> None:
 _check_sections()
 
 
+#: How wide a snippet line may be. The lightbox code pane is a side panel, not an
+#: editor: at its 512px desktop width roughly this many characters fit, and a
+#: longer line scrolls sideways instead of being read.
+_SNIPPET_COLS = 62
+
+
+def _check_snippets() -> None:
+    """Fail the build when a figure has no example code, or code has no figure.
+
+    The snippet only ever appears inside the lightbox, so a missing one is
+    invisible until someone clicks -- exactly the kind of gap that survives a
+    release. An orphan is the other half: a figure renamed in FIGURES leaves its
+    snippet behind, still correct-looking, reaching nobody.
+    """
+    known = {f[0] for f in FIGURES}
+    have = set(snippets.FIGURE_CODE)
+    if known != have:
+        raise ValueError(
+            "FIGURE_CODE disagrees with FIGURES: "
+            f"missing {sorted(known - have) or 'none'}; "
+            f"orphaned {sorted(have - known) or 'none'}")
+    for name, text in snippets.FIGURE_CODE.items():
+        if not text.strip():
+            raise ValueError(f"snippet {name!r} is empty")
+        try:
+            compile(text, f"<{name}>", "exec")
+        except SyntaxError as exc:
+            raise ValueError(f"snippet {name!r} is not valid Python: {exc}") from exc
+        wide = [n for n, line in enumerate(text.rstrip().splitlines(), 1)
+                if len(line) > _SNIPPET_COLS]
+        if wide:
+            raise ValueError(
+                f"snippet {name!r} is wider than {_SNIPPET_COLS} columns at "
+                f"line(s) {wide}. The lightbox pane holds about that much, and "
+                "anything longer scrolls sideways rather than being read.")
+
+
+_check_snippets()
+
+
+#: Public names bound by assignment at module scope -- the short aliases
+#: (``dmc = dual_marching_cubes``) and the exponent bounds -- which the AST reader
+#: in pyapi does not see, because it records ``def`` and ``class`` only. Without
+#: this the import check would reject the shortest, most idiomatic form of a call.
+_SNIPPET_ALIASES = {"dmc", "dc", "mca", "MAX_EXPONENT", "MIN_EXPONENT"}
+
+
+def check_snippet_imports(known) -> List[str]:
+    """Names a snippet imports from conquer3d that the API model does not have.
+
+    Catches the one drift that matters: a function renamed in the library while
+    the sketch beside its figure goes on showing the old name. Only imports are
+    checked -- every other identifier in a snippet is a local the reader supplies.
+    """
+    import ast
+
+    problems: List[str] = []
+    for name, text in sorted(snippets.FIGURE_CODE.items()):
+        for node in ast.walk(ast.parse(text)):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if not (node.module or "").startswith("conquer3d"):
+                continue
+            for alias in node.names:
+                if alias.name not in known and alias.name not in _SNIPPET_ALIASES:
+                    problems.append(f"{name}: {node.module}.{alias.name}")
+    return problems
+
+
 #: Every figure opens full size in the lightbox (site.js binds .fig-media). The
 #: cue for that has to be visible before any interaction -- a hover-only hint
 #: gives no sign at rest and never appears on a touch screen -- so it is a real,
@@ -320,17 +390,35 @@ _EXPAND_BADGE = (
 )
 
 
+def _code_template(name: str) -> str:
+    """The figure's example code, parked inert until the lightbox asks for it.
+
+    A ``<template>`` rather than a ``data-`` attribute: the payload is already
+    highlighted markup, and an attribute would mean escaping it a second time and
+    reviving it with innerHTML -- the only place on this static site where a
+    string would become markup at runtime. Template content is parsed once, at
+    build time, generates no box, and is cloned on demand.
+    """
+    code = snippets.FIGURE_CODE.get(name)
+    if not code:
+        return ""
+    return f'<template class="fig-code">{code_block(code.strip(), "python")}</template>'
+
+
 def _figure_card(entry) -> str:
     name, title, kicker, prose, _lead = entry
     return (
         f'<figure class="fig">'
-        f'<div class="fig-media">{_EXPAND_BADGE}'
+        f'<div class="fig-media" tabindex="0" role="button"'
+        f' aria-label="Expand {esc(title)}">{_EXPAND_BADGE}'
         f'<img src="{img_src(name)}" alt="{esc(title)}" loading="lazy" decoding="async">'
         f"</div>"
         f'<figcaption class="fig-body">'
         f'<span class="fig-kicker">{esc(kicker)}</span>'
         f"<h3>{esc(title)}</h3><p>{md_inline(prose)}</p>"
-        f"</figcaption></figure>"
+        f"</figcaption>"
+        f"{_code_template(name)}"
+        f"</figure>"
     )
 
 
@@ -437,7 +525,9 @@ def _load_benchmarks() -> dict:
 
 
 def _fig(name: str, alt: str) -> str:
-    return (f'<figure class="fig" style="margin-top:22px"><div class="fig-media">{_EXPAND_BADGE}'
+    return (f'<figure class="fig" style="margin-top:22px">'
+            f'<div class="fig-media" tabindex="0" role="button"'
+            f' aria-label="Expand {esc(alt)}">{_EXPAND_BADGE}'
             f'<img src="{img_src(name)}" alt="{esc(alt)}" loading="lazy">'
             f"</div></figure>")
 

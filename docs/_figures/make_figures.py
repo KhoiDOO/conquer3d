@@ -471,12 +471,15 @@ def fig_curvature(rnd):
     print(f"    gaussian     K                  colour range {lo:+.1f} … {hi:+.1f}")
 
     kappa = tmesh.get_principal_curvatures()
-    for column, label in ((0, "Principal κ₁"), (1, "Principal κ₂")):
+    # Each principal curvature takes one branch of the square root, not both: the
+    # larger takes the plus, the smaller the minus.
+    for column, label, formula in ((0, "Principal κ₁", "κ₁ = H + √(H²−K)"),
+                                   (1, "Principal κ₂", "κ₂ = H − √(H²−K)")):
         panel, (lo, hi) = _curvature_panel(
             rnd, verts, faces, kappa[:, column], "viridis", False, shot)
         panels.append(panel)
         labels.append(label)
-        subs.append(f"κ = H ± √(H²−K)\n{lo:+.0f} … {hi:+.0f}")
+        subs.append(f"{formula}\n{lo:+.0f} … {hi:+.0f}")
         print(f"    principal    {label:18} colour range {lo:+.1f} … {hi:+.1f}")
 
     accents = [(150, 158, 176), (251, 113, 133), (251, 191, 36), (34, 211, 238),

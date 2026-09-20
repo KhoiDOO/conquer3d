@@ -366,10 +366,18 @@ def shell(
   <a href="{base}about.html">References</a>
 </div></footer>
 
-<div class="lightbox" id="lightbox">
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Figure detail">
   <button class="lightbox-close" aria-label="Close">✕</button>
-  <img src="" alt="">
-  <div class="lightbox-cap"></div>
+  <div class="lightbox-stage">
+    <div class="lightbox-figure">
+      <img src="" alt="">
+      <div class="lightbox-cap"></div>
+    </div>
+    <div class="lightbox-code">
+      <div class="lightbox-code-head"><span>Example</span><button class="lightbox-copy" type="button">Copy</button></div>
+      <div class="lightbox-code-body"></div>
+    </div>
+  </div>
 </div>
 
 <div class="search-modal" id="search-modal">

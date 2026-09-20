@@ -1907,9 +1907,10 @@ void bind_ds_triangle_mesh(py::module_ &m)
              )pbdoc")
         .def("get_principal_curvatures", &TriangleMesh::get_principal_curvatures,
              R"pbdoc(
-             Computes principal curvatures $(k_1, k_2) = H \pm \sqrt{\max(0, H^2 - K)}$, following Botsch
-             et al., Polygon Mesh Processing: $H$ is the absolute mean curvature of Equation (3.13)
-             (`get_mean_curvature(mode=2)`) and $K$ the Gaussian curvature of Equation (3.14).
+             Computes principal curvatures $k_1 = H + \sqrt{\max(0, H^2 - K)}$ and
+             $k_2 = H - \sqrt{\max(0, H^2 - K)}$, following Botsch et al., Polygon Mesh Processing:
+             $H$ is the absolute mean curvature of Equation (3.13) (`get_mean_curvature(mode=2)`) and
+             $K$ the Gaussian curvature of Equation (3.14).
 
              Because that $H$ carries no sign, an elliptic region curving away from the normals reports
              positive $k_1$ and $k_2$ where the true pair is negative; magnitudes are unaffected, and

@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
-<link rel="stylesheet" href="assets/css/site.css?v=a1782cc3fa">
+<link rel="stylesheet" href="assets/css/site.css?v=1515cc786a">
 <script>
   // Applied before first paint so the theme never flashes.
   (function(){
@@ -51,7 +51,51 @@
 </div>
 </div>
 <section class="section wrap" style="padding-top:8px;border-bottom:none">
-  <div class="fig-gallery"><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-meshbvh.webp?v=016bb6ca39" alt="Ray queries" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Queries</span><h3>Ray queries</h3><p>Which triangles and which voxels a ray hits, found through the BVH.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-curvature.webp?v=1dc8bf71a1" alt="Curvature" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Analysis</span><h3>Curvature</h3><p>Mean curvature in all three modes, plus Gaussian and both principal curvatures, computed on the GPU from the mesh itself.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-smoothing.webp?v=eb525a46d8" alt="Laplacian smoothing" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Smoothing</span><h3>Laplacian smoothing</h3><p>The same mesh smoothed for 10, 50 and 100 iterations, with the mean curvature of each result on one shared scale beneath it.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-quality.webp?v=82a813a005" alt="Mesh quality" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Quality</span><h3>Mesh quality</h3><p>Every quality metric a mesh reports, drawn on the mesh with its mean value.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-fix-normals.webp?v=6e0440a1f3" alt="Orientation repair" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Repair</span><h3>Orientation repair</h3><p>Half the triangle windings reversed at random, then recovered exactly by <code>fix_normals</code>.</p></figcaption></figure></div>
+  <div class="fig-gallery"><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Ray queries"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-meshbvh.webp?v=016bb6ca39" alt="Ray queries" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Queries</span><h3>Ray queries</h3><p>Which triangles and which voxels a ray hits, found through the BVH.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d._C <span class="tok-kw">import</span> MeshBVH
+
+<span class="tok-com"># The BVH indexes triangle boxes, so build it from those.</span>
+tv = verts[faces.<span class="tok-fn">long</span>()]
+bvh = <span class="tok-fn">MeshBVH</span>(tv.<span class="tok-fn">min</span>(<span class="tok-num">1</span>).values.<span class="tok-fn">contiguous</span>(),
+              tv.<span class="tok-fn">max</span>(<span class="tok-num">1</span>).values.<span class="tok-fn">contiguous</span>())
+
+_, hit_tris, hit_points, hit_dist = bvh.<span class="tok-fn">get_ray_intersection</span>(
+    ray_origins, ray_dirs, verts, faces, <span class="tok-kw">True</span>)</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Curvature"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-curvature.webp?v=e3be6b0c4e" alt="Curvature" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Analysis</span><h3>Curvature</h3><p>Mean curvature in all three modes, plus Gaussian and both principal curvatures, computed on the GPU from the mesh itself.</p></figcaption><template class="fig-code"><pre><code><span class="tok-com"># Mean curvature in each of its three modes.</span>
+<span class="tok-kw">for</span> mode <span class="tok-kw">in</span> (<span class="tok-num">0</span>, <span class="tok-num">1</span>, <span class="tok-num">2</span>):
+    H = mesh.<span class="tok-fn">get_mean_curvature</span>(mode)
+
+K = mesh.<span class="tok-fn">get_gaussian_curvature</span>()
+k1, k2 = mesh.<span class="tok-fn">get_principal_curvatures</span>()</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Laplacian smoothing"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-smoothing.webp?v=855a0aca4f" alt="Laplacian smoothing" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Smoothing</span><h3>Laplacian smoothing</h3><p>The same mesh smoothed for 10, 50 and 100 iterations, with the mean curvature of each result on one shared scale beneath it.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.data_structure <span class="tok-kw">import</span> TriangleMesh
+
+base_v = mesh.vertices.<span class="tok-fn">clone</span>()
+faces = mesh.triangles.<span class="tok-fn">int</span>().<span class="tok-fn">clone</span>()
+
+<span class="tok-kw">for</span> iterations <span class="tok-kw">in</span> (<span class="tok-num">10</span>, <span class="tok-num">50</span>, <span class="tok-num">100</span>):
+    <span class="tok-com"># smooth() is in place, so each level starts fresh.</span>
+    level = <span class="tok-fn">TriangleMesh</span>(base_v.<span class="tok-fn">clone</span>().<span class="tok-fn">contiguous</span>(),
+                         faces.<span class="tok-fn">clone</span>().<span class="tok-fn">contiguous</span>())
+    level.<span class="tok-fn">smooth</span>(iterations=iterations, damping=<span class="tok-num">0.5</span>,
+                 mode=<span class="tok-num">1</span>)          <span class="tok-com"># 1 = cotangent weights</span>
+
+    H = level.<span class="tok-fn">get_mean_curvature</span>(<span class="tok-num">0</span>)</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Mesh quality"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-quality.webp?v=82a813a005" alt="Mesh quality" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Quality</span><h3>Mesh quality</h3><p>Every quality metric a mesh reports, drawn on the mesh with its mean value.</p></figcaption><template class="fig-code"><pre><code><span class="tok-com"># The maps the metrics are computed from.</span>
+mesh.<span class="tok-fn">compute_triangle_areas</span>()
+mesh.<span class="tok-fn">compute_vertices_to_triangle_map</span>()
+mesh.<span class="tok-fn">compute_edges_to_triangle_map</span>()
+
+aspect = mesh.<span class="tok-fn">get_aspect_ratio</span>(<span class="tok-num">0</span>)
+radii = mesh.<span class="tok-fn">get_radii_ratio</span>()
+radius_edge = mesh.<span class="tok-fn">get_radius_edge_ratio</span>()
+regularity = mesh.<span class="tok-fn">get_triangle_regularity</span>()
+deviation = mesh.<span class="tok-fn">get_angle_deviation</span>()
+
+q_min, q_mean = mesh.<span class="tok-fn">get_quality</span>()</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Orientation repair"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-fix-normals.webp?v=6e0440a1f3" alt="Orientation repair" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Repair</span><h3>Orientation repair</h3><p>Half the triangle windings reversed at random, then recovered exactly by <code>fix_normals</code>.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.data_structure <span class="tok-kw">import</span> TriangleMesh
+
+<span class="tok-com"># Half the windings reversed at random.</span>
+broken = faces.<span class="tok-fn">clone</span>()
+flip = torch.<span class="tok-fn">rand</span>(broken.shape[<span class="tok-num">0</span>], device=DEV) &lt; <span class="tok-num">0.5</span>
+broken[flip] = broken[flip][:, [<span class="tok-num">0</span>, <span class="tok-num">2</span>, <span class="tok-num">1</span>]]
+
+damaged = <span class="tok-fn">TriangleMesh</span>(verts, broken.<span class="tok-fn">int</span>().<span class="tok-fn">contiguous</span>())
+damaged.<span class="tok-fn">fix_normals</span>()      <span class="tok-com"># recovers the orientation</span></code></pre></template></figure></div>
 </section>
 </main>
 <footer class="footer"><div class="footer-inner">
@@ -63,10 +107,18 @@
   <a href="about.html">References</a>
 </div></footer>
 
-<div class="lightbox" id="lightbox">
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Figure detail">
   <button class="lightbox-close" aria-label="Close">✕</button>
-  <img src="" alt="">
-  <div class="lightbox-cap"></div>
+  <div class="lightbox-stage">
+    <div class="lightbox-figure">
+      <img src="" alt="">
+      <div class="lightbox-cap"></div>
+    </div>
+    <div class="lightbox-code">
+      <div class="lightbox-code-head"><span>Example</span><button class="lightbox-copy" type="button">Copy</button></div>
+      <div class="lightbox-code-body"></div>
+    </div>
+  </div>
 </div>
 
 <div class="search-modal" id="search-modal">
@@ -79,6 +131,6 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
   onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],ignoredTags:['script','noscript','style','textarea','pre','code'],throwOnError:false});"></script>
-<script src="assets/js/site.js?v=b4ab244bd2"></script>
+<script src="assets/js/site.js?v=171b9f271d"></script>
 </body>
 </html>
