@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
-<link rel="stylesheet" href="assets/css/site.css?v=a1782cc3fa">
+<link rel="stylesheet" href="assets/css/site.css?v=1515cc786a">
 <script>
   // Applied before first paint so the theme never flashes.
   (function(){
@@ -51,7 +51,65 @@
 </div>
 </div>
 <section class="section wrap" style="padding-top:8px;border-bottom:none">
-  <div class="fig-gallery"><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-zcurve.webp?v=0da68b2f73" alt="Morton ordering" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Locality</span><h3>Morton ordering</h3><p>Points before and after sorting by Morton code, coloured by their position in memory.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-kdtree.webp?v=1afd927465" alt="Nearest neighbours" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Search</span><h3>Nearest neighbours</h3><p>Five query points in a 24,000-point cloud sampled from the bunny, with one neighbourhood shown close up as k grows.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-superquadrics.webp?v=3958e23373" alt="Superquadric shape family" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Primitives</span><h3>Superquadric shape family</h3><p>Both shape exponents swept across their range, from box through ellipsoid to pinched star.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-sqfit.webp?v=fddf9b7cb7" alt="Superquadric fitting" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Abstraction</span><h3>Superquadric fitting</h3><p>Two thousand superquadrics fitted to a horse by gradient descent, and the union of their fields extracted as one watertight surface.</p></figcaption></figure></div>
+  <div class="fig-gallery"><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Morton ordering"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-zcurve.webp?v=0da68b2f73" alt="Morton ordering" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Locality</span><h3>Morton ordering</h3><p>Points before and after sorting by Morton code, coloured by their position in memory.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.data_structure <span class="tok-kw">import</span> z_curve_sort
+
+points = mesh.<span class="tok-fn">sample_points</span>(100_000)[<span class="tok-num">0</span>].<span class="tok-fn">contiguous</span>()
+
+<span class="tok-com"># Morton order: points close in space end up close in</span>
+<span class="tok-com"># memory, which is what makes later tree builds coherent.</span>
+ordered = <span class="tok-fn">z_curve_sort</span>(points)</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Nearest neighbours"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-kdtree.webp?v=1afd927465" alt="Nearest neighbours" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Search</span><h3>Nearest neighbours</h3><p>Five query points in a 24,000-point cloud sampled from the bunny, with one neighbourhood shown close up as k grows.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d._C <span class="tok-kw">import</span> KDTree
+
+<span class="tok-com"># The tree indexes points, never the triangles.</span>
+points = mesh.<span class="tok-fn">sample_points</span>(24_000)[<span class="tok-num">0</span>].<span class="tok-fn">contiguous</span>()
+tree = <span class="tok-fn">KDTree</span>(points)
+
+<span class="tok-com"># exclude_self drops the query point itself when the</span>
+<span class="tok-com"># queries come from the cloud being searched.</span>
+distances, indices = tree.<span class="tok-fn">query</span>(queries, k=<span class="tok-num">12</span>,
+                                exclude_self=<span class="tok-kw">True</span>)</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Superquadric shape family"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-superquadrics.webp?v=3958e23373" alt="Superquadric shape family" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Primitives</span><h3>Superquadric shape family</h3><p>Both shape exponents swept across their range, from box through ellipsoid to pinched star.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">import</span> torch
+<span class="tok-kw">from</span> conquer3d.primitive <span class="tok-kw">import</span> SuperQuadrics
+<span class="tok-kw">from</span> conquer3d.primitive.sq <span class="tok-kw">import</span> (
+    MAX_EXPONENT, MIN_EXPONENT,
+)
+
+<span class="tok-com"># e -&gt; 0 is a box, e = 1 an ellipsoid, e -&gt; 2 a star.</span>
+steps = <span class="tok-num">8</span>
+axis = torch.<span class="tok-fn">linspace</span>(MIN_EXPONENT, MAX_EXPONENT, steps,
+                      device=<span class="tok-str">&quot;cuda&quot;</span>)
+count = steps * steps
+
+sq = SuperQuadrics.<span class="tok-fn">from_values</span>(
+    scales=torch.<span class="tok-fn">ones</span>(count, <span class="tok-num">3</span>, device=<span class="tok-str">&quot;cuda&quot;</span>),
+    exponents=torch.<span class="tok-fn">stack</span>([axis.<span class="tok-fn">repeat_interleave</span>(steps),
+                           axis.<span class="tok-fn">repeat</span>(steps)], dim=-<span class="tok-num">1</span>),
+    quaternions=torch.<span class="tok-fn">eye</span>(<span class="tok-num">4</span>, device=<span class="tok-str">&quot;cuda&quot;</span>)[<span class="tok-num">0</span>].<span class="tok-fn">repeat</span>(
+        count, <span class="tok-num">1</span>),
+    translations=torch.<span class="tok-fn">zeros</span>(count, <span class="tok-num">3</span>, device=<span class="tok-str">&quot;cuda&quot;</span>),
+    learnable=<span class="tok-kw">False</span>,
+)
+verts, faces = sq.<span class="tok-fn">get_mesh</span>(resolution=<span class="tok-num">64</span>)</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Superquadric fitting"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-sqfit.webp?v=fddf9b7cb7" alt="Superquadric fitting" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Abstraction</span><h3>Superquadric fitting</h3><p>Two thousand superquadrics fitted to a horse by gradient descent, and the union of their fields extracted as one watertight surface.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.data_structure <span class="tok-kw">import</span> create_voxel_grid
+<span class="tok-kw">from</span> conquer3d.ops <span class="tok-kw">import</span> marching_cubes
+<span class="tok-kw">from</span> conquer3d.primitive <span class="tok-kw">import</span> (
+    SuperQuadrics, compute_sq_union,
+)
+
+sq = <span class="tok-fn">SuperQuadrics</span>(num_quadrics=<span class="tok-num">2000</span>, device=<span class="tok-str">&quot;cuda&quot;</span>)
+
+<span class="tok-kw">for</span> step <span class="tok-kw">in</span> <span class="tok-fn">range</span>(<span class="tok-num">600</span>):
+    optimizer.<span class="tok-fn">zero_grad</span>(set_to_none=<span class="tok-kw">True</span>)
+    fields, union = <span class="tok-fn">sq</span>(points, return_union=<span class="tok-kw">True</span>)
+    union.<span class="tok-fn">abs</span>().<span class="tok-fn">mean</span>().<span class="tok-fn">backward</span>()
+    optimizer.<span class="tok-fn">step</span>()
+
+<span class="tok-com"># get_mesh() keeps surface buried inside overlapping</span>
+<span class="tok-com"># primitives. The union boundary is the honest one, so</span>
+<span class="tok-com"># extract it from the union field instead.</span>
+gv, vox, _ = <span class="tok-fn">create_voxel_grid</span>(
+    grid_min=[-<span class="tok-num">0.62</span>] * <span class="tok-num">3</span>, grid_max=[<span class="tok-num">0.62</span>] * <span class="tok-num">3</span>,
+    res=[<span class="tok-num">512</span>] * <span class="tok-num">3</span>, device=<span class="tok-str">&quot;cuda&quot;</span>)
+field = <span class="tok-fn">compute_sq_union</span>(<span class="tok-fn">sq</span>(gv), tau=sq.union_tau,
+                         mask=sq.mask)
+verts, faces = <span class="tok-fn">marching_cubes</span>(gv, vox, field, iso=<span class="tok-num">0.0</span>)[:<span class="tok-num">2</span>]</code></pre></template></figure></div>
 </section>
 </main>
 <footer class="footer"><div class="footer-inner">
@@ -63,10 +121,18 @@
   <a href="about.html">References</a>
 </div></footer>
 
-<div class="lightbox" id="lightbox">
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Figure detail">
   <button class="lightbox-close" aria-label="Close">✕</button>
-  <img src="" alt="">
-  <div class="lightbox-cap"></div>
+  <div class="lightbox-stage">
+    <div class="lightbox-figure">
+      <img src="" alt="">
+      <div class="lightbox-cap"></div>
+    </div>
+    <div class="lightbox-code">
+      <div class="lightbox-code-head"><span>Example</span><button class="lightbox-copy" type="button">Copy</button></div>
+      <div class="lightbox-code-body"></div>
+    </div>
+  </div>
 </div>
 
 <div class="search-modal" id="search-modal">
@@ -79,6 +145,6 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
   onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],ignoredTags:['script','noscript','style','textarea','pre','code'],throwOnError:false});"></script>
-<script src="assets/js/site.js?v=b4ab244bd2"></script>
+<script src="assets/js/site.js?v=171b9f271d"></script>
 </body>
 </html>

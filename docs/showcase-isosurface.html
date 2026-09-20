@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
-<link rel="stylesheet" href="assets/css/site.css?v=a1782cc3fa">
+<link rel="stylesheet" href="assets/css/site.css?v=1515cc786a">
 <script>
   // Applied before first paint so the theme never flashes.
   (function(){
@@ -51,7 +51,136 @@
 </div>
 </div>
 <section class="section wrap" style="padding-top:8px;border-bottom:none">
-  <div class="fig-gallery"><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-pipeline.webp?v=578c53aa73" alt="Extraction pipeline" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Pipeline</span><h3>Extraction pipeline</h3><p>Every stage of one extraction, from input mesh to extracted surface.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-algorithms.webp?v=aa8a6199dc" alt="Isosurface extraction" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Comparison</span><h3>Isosurface extraction</h3><p>One signed distance field meshed by four different extractors.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-hermite.webp?v=e53e14b4f2" alt="Sharp features" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Sharpness</span><h3>Sharp features</h3><p>Exact Hermite data lets the dual methods reconstruct a crease instead of rounding it.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-resolution.webp?v=08edc92823" alt="Grid resolution" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Scaling</span><h3>Grid resolution</h3><p>The same model extracted from 64³ up to 2048³, with the error measured at each step.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-sign-modes.webp?v=65d12ec119" alt="Sign modes" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Robustness</span><h3>Sign modes</h3><p>One slice through each of two meshes, signed by all seven ways of deciding inside.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-normals.webp?v=e1814289ea" alt="Surface normals" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Orientation</span><h3>Surface normals</h3><p>Normals from five extractors, coloured by direction and compared to the source.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-normal-modes.webp?v=96c6ec2607" alt="Normal modes" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Normals</span><h3>Normal modes</h3><p>The three ways of supplying normals to Dual Contouring, and what each one produces.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-sdf-slices.webp?v=456a81707f" alt="Signed distance field" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Fields</span><h3>Signed distance field</h3><p>Slices through the field a mesh generates, with the zero level set drawn on top.</p></figcaption></figure><figure class="fig"><div class="fig-media"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-diffrender.webp?v=7fbb32546c" alt="Differentiable rendering" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Gradients</span><h3>Differentiable rendering</h3><p>A field of noise optimised into the Happy Buddha by multi-view mask and depth loss alone, with <code>diff_marching_cubes</code> carrying the gradient.</p></figcaption></figure></div>
+  <div class="fig-gallery"><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Extraction pipeline"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-pipeline.webp?v=578c53aa73" alt="Extraction pipeline" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Pipeline</span><h3>Extraction pipeline</h3><p>Every stage of one extraction, from input mesh to extracted surface.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.data_structure <span class="tok-kw">import</span> (
+    create_voxel_grid_from_tmesh,
+)
+<span class="tok-kw">from</span> conquer3d.ops <span class="tok-kw">import</span> dmc
+
+lo, hi, res = [-<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>, [<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>, [<span class="tok-num">256</span>] * <span class="tok-num">3</span>
+
+<span class="tok-com"># A narrow band around the surface, not a dense lattice.</span>
+gv, vox, nrm = <span class="tok-fn">create_voxel_grid_from_tmesh</span>(
+    grid_min=lo, grid_max=hi, res=res,
+    tmesh=mesh, pad=<span class="tok-num">1</span>, return_normals=<span class="tok-kw">True</span>,
+)
+
+mesh.<span class="tok-fn">build_flood_fill_data</span>(lo, hi, res)
+sdf = mesh.<span class="tok-fn">query_points</span>(gv, return_sdf=<span class="tok-kw">True</span>, sign_mode=<span class="tok-num">3</span>)[-<span class="tok-num">1</span>]
+
+verts, faces = <span class="tok-fn">dmc</span>(gv, vox, sdf.<span class="tok-fn">contiguous</span>(), iso=<span class="tok-num">0.0</span>)[:<span class="tok-num">2</span>]</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Isosurface extraction"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-algorithms.webp?v=aa8a6199dc" alt="Isosurface extraction" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Comparison</span><h3>Isosurface extraction</h3><p>One signed distance field meshed by four different extractors.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.ops <span class="tok-kw">import</span> (
+    compute_hermite_from_mesh, dc, dmc, marching_cubes, mca,
+)
+
+<span class="tok-com"># Exact edge crossings, so the dual methods can put a vertex</span>
+<span class="tok-com"># on the crease instead of rounding it off.</span>
+ep, en = <span class="tok-fn">compute_hermite_from_mesh</span>(mesh, gv, vox, sdf)
+
+mc = <span class="tok-fn">marching_cubes</span>(gv, vox, sdf, iso=<span class="tok-num">0.0</span>)[:<span class="tok-num">2</span>]
+asym = <span class="tok-fn">mca</span>(gv, vox, sdf, iso=<span class="tok-num">0.0</span>)[:<span class="tok-num">2</span>]
+dual = <span class="tok-fn">dc</span>(gv, vox, sdf, grid_normals=nrm, iso=<span class="tok-num">0.0</span>,
+          edge_points=ep, edge_normals=en)[:<span class="tok-num">2</span>]
+dual_mc = <span class="tok-fn">dmc</span>(gv, vox, sdf, iso=<span class="tok-num">0.0</span>,
+              edge_points=ep, edge_normals=en)[:<span class="tok-num">2</span>]</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Sharp features"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-hermite.webp?v=e53e14b4f2" alt="Sharp features" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Sharpness</span><h3>Sharp features</h3><p>Exact Hermite data lets the dual methods reconstruct a crease instead of rounding it.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.ops <span class="tok-kw">import</span> compute_hermite_from_mesh, dc
+
+mesh.<span class="tok-fn">compute_triangle_normals</span>()
+
+<span class="tok-com"># Where each grid edge crosses the surface and the normal</span>
+<span class="tok-com"># there, read off the mesh rather than off the field.</span>
+ep, en = <span class="tok-fn">compute_hermite_from_mesh</span>(mesh, gv, vox, sdf)
+
+rounded = <span class="tok-fn">dc</span>(gv, vox, sdf, grid_normals=nrm, iso=<span class="tok-num">0.0</span>)[:<span class="tok-num">2</span>]
+sharp = <span class="tok-fn">dc</span>(gv, vox, sdf, grid_normals=nrm, iso=<span class="tok-num">0.0</span>,
+           edge_points=ep, edge_normals=en)[:<span class="tok-num">2</span>]</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Grid resolution"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-resolution.webp?v=08edc92823" alt="Grid resolution" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Scaling</span><h3>Grid resolution</h3><p>The same model extracted from 64³ up to 2048³, with the error measured at each step.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.data_structure <span class="tok-kw">import</span> (
+    create_voxel_grid_from_tmesh,
+)
+<span class="tok-kw">from</span> conquer3d.ops <span class="tok-kw">import</span> chamfer_distance, dmc
+
+reference = mesh.<span class="tok-fn">sample_points</span>(200_000)[<span class="tok-num">0</span>].<span class="tok-fn">contiguous</span>()
+
+<span class="tok-kw">for</span> res <span class="tok-kw">in</span> (<span class="tok-num">64</span>, <span class="tok-num">128</span>, <span class="tok-num">256</span>, <span class="tok-num">512</span>, <span class="tok-num">1024</span>, <span class="tok-num">2048</span>):
+    gv, vox, _ = <span class="tok-fn">create_voxel_grid_from_tmesh</span>(
+        grid_min=[-<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>, grid_max=[<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>,
+        res=[res] * <span class="tok-num">3</span>, tmesh=mesh, pad=<span class="tok-num">1</span>,
+    )
+    sdf = mesh.<span class="tok-fn">query_points</span>(gv, return_sdf=<span class="tok-kw">True</span>,
+                            sign_mode=<span class="tok-num">3</span>)[-<span class="tok-num">1</span>]
+    verts, faces = <span class="tok-fn">dmc</span>(gv, vox, sdf.<span class="tok-fn">contiguous</span>(),
+                       iso=<span class="tok-num">0.0</span>)[:<span class="tok-num">2</span>]
+    error = <span class="tok-fn">chamfer_distance</span>(samples, reference,
+                             squared=<span class="tok-kw">False</span>)</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Sign modes"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-sign-modes.webp?v=65d12ec119" alt="Sign modes" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Robustness</span><h3>Sign modes</h3><p>One slice through each of two meshes, signed by all seven ways of deciding inside.</p></figcaption><template class="fig-code"><pre><code><span class="tok-com"># 0 ray parity      1 winding number    2 pseudonormal</span>
+<span class="tok-com"># 3 flood fill      4 hybrid consensus  5 coarse-fine</span>
+<span class="tok-com"># 6 band fill</span>
+lo, hi, res = [-<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>, [<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>, [<span class="tok-num">512</span>] * <span class="tok-num">3</span>
+
+<span class="tok-com"># Each lattice mode needs its own structure built first.</span>
+mesh.<span class="tok-fn">build_flood_fill_data</span>(lo, hi, res)       <span class="tok-com"># mode 3</span>
+mesh.<span class="tok-fn">build_flood_fill_cf_data</span>(lo, hi, res)    <span class="tok-com"># mode 5</span>
+mesh.<span class="tok-fn">build_flood_fill_band_data</span>(              <span class="tok-com"># mode 6</span>
+    lo, hi, res, dilation_radius=<span class="tok-num">2</span>, cavity_max_voxels=<span class="tok-num">125</span>)
+
+<span class="tok-kw">for</span> mode <span class="tok-kw">in</span> <span class="tok-fn">range</span>(<span class="tok-num">7</span>):
+    sdf = mesh.<span class="tok-fn">query_points</span>(points, return_sdf=<span class="tok-kw">True</span>,
+                            sign_mode=mode)[-<span class="tok-num">1</span>]</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Surface normals"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-normals.webp?v=e1814289ea" alt="Surface normals" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Orientation</span><h3>Surface normals</h3><p>Normals from five extractors, coloured by direction and compared to the source.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.ops <span class="tok-kw">import</span> (
+    dc, dmc, marching_cubes, marching_tetrahedra_grid, mca,
+)
+
+mesh.<span class="tok-fn">fix_normals</span>()            <span class="tok-com"># consistent winding first</span>
+mesh.<span class="tok-fn">compute_triangle_normals</span>()
+
+extracted = {
+    <span class="tok-str">&quot;Marching Cubes&quot;</span>: <span class="tok-fn">marching_cubes</span>(gv, vox, sdf, iso=<span class="tok-num">0.0</span>),
+    <span class="tok-str">&quot;MC Asymptotic&quot;</span>: <span class="tok-fn">mca</span>(gv, vox, sdf, iso=<span class="tok-num">0.0</span>),
+    <span class="tok-str">&quot;Dual Contouring&quot;</span>: <span class="tok-fn">dc</span>(gv, vox, sdf, grid_normals=nrm,
+                          iso=<span class="tok-num">0.0</span>),
+    <span class="tok-str">&quot;Dual Marching Cubes&quot;</span>: <span class="tok-fn">dmc</span>(gv, vox, sdf, iso=<span class="tok-num">0.0</span>),
+}</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Normal modes"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-normal-modes.webp?v=96c6ec2607" alt="Normal modes" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Normals</span><h3>Normal modes</h3><p>The three ways of supplying normals to Dual Contouring, and what each one produces.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">from</span> conquer3d.data_structure <span class="tok-kw">import</span> (
+    create_voxel_grid_from_tmesh,
+)
+<span class="tok-kw">from</span> conquer3d.ops <span class="tok-kw">import</span> dc
+
+<span class="tok-com"># 0 area-weighted  1 angle-weighted  2 from the field</span>
+<span class="tok-kw">for</span> normal_mode <span class="tok-kw">in</span> (<span class="tok-num">0</span>, <span class="tok-num">1</span>, <span class="tok-num">2</span>):
+    gv, vox, nrm = <span class="tok-fn">create_voxel_grid_from_tmesh</span>(
+        grid_min=[-<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>, grid_max=[<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>,
+        res=[<span class="tok-num">128</span>] * <span class="tok-num">3</span>, tmesh=mesh, pad=<span class="tok-num">1</span>,
+        return_normals=<span class="tok-kw">True</span>, normal_mode=normal_mode,
+    )
+    sdf = mesh.<span class="tok-fn">query_points</span>(gv, return_sdf=<span class="tok-kw">True</span>,
+                            sign_mode=<span class="tok-num">3</span>)[-<span class="tok-num">1</span>]
+    verts, faces = <span class="tok-fn">dc</span>(gv, vox, sdf.<span class="tok-fn">contiguous</span>(),
+                      grid_normals=nrm, iso=<span class="tok-num">0.0</span>)[:<span class="tok-num">2</span>]</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Signed distance field"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-sdf-slices.webp?v=456a81707f" alt="Signed distance field" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Fields</span><h3>Signed distance field</h3><p>Slices through the field a mesh generates, with the zero level set drawn on top.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">import</span> torch
+
+<span class="tok-com"># A plane of query points cut through the model.</span>
+res, z = <span class="tok-num">512</span>, -<span class="tok-num">0.08</span>
+xs = torch.<span class="tok-fn">linspace</span>(-<span class="tok-num">1.0</span>, <span class="tok-num">1.0</span>, res, device=<span class="tok-str">&quot;cuda&quot;</span>)
+xx, yy = torch.<span class="tok-fn">meshgrid</span>(xs, xs, indexing=<span class="tok-str">&quot;xy&quot;</span>)
+points = torch.<span class="tok-fn">stack</span>([
+    xx.<span class="tok-fn">reshape</span>(-<span class="tok-num">1</span>), yy.<span class="tok-fn">reshape</span>(-<span class="tok-num">1</span>),
+    torch.<span class="tok-fn">full</span>((res * res,), z, device=<span class="tok-str">&quot;cuda&quot;</span>),
+], dim=-<span class="tok-num">1</span>).<span class="tok-fn">contiguous</span>()
+
+mesh.<span class="tok-fn">build_flood_fill_data</span>([-<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>, [<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>, [<span class="tok-num">512</span>] * <span class="tok-num">3</span>)
+sdf = mesh.<span class="tok-fn">query_points</span>(points, return_sdf=<span class="tok-kw">True</span>,
+                        sign_mode=<span class="tok-num">3</span>)[-<span class="tok-num">1</span>]</code></pre></template></figure><figure class="fig"><div class="fig-media" tabindex="0" role="button" aria-label="Expand Differentiable rendering"><span class="fig-expand" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</span><img src="assets/img/fig-diffrender.webp?v=7fbb32546c" alt="Differentiable rendering" loading="lazy" decoding="async"></div><figcaption class="fig-body"><span class="fig-kicker">Gradients</span><h3>Differentiable rendering</h3><p>A field of noise optimised into the Happy Buddha by multi-view mask and depth loss alone, with <code>diff_marching_cubes</code> carrying the gradient.</p></figcaption><template class="fig-code"><pre><code><span class="tok-kw">import</span> torch
+<span class="tok-kw">from</span> conquer3d.data_structure <span class="tok-kw">import</span> create_voxel_grid
+<span class="tok-kw">from</span> conquer3d.ops <span class="tok-kw">import</span> diff_marching_cubes
+
+gv, vox, _ = <span class="tok-fn">create_voxel_grid</span>(
+    grid_min=[-<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>, grid_max=[<span class="tok-num">1.0</span>] * <span class="tok-num">3</span>,
+    res=[<span class="tok-num">128</span>] * <span class="tok-num">3</span>, device=<span class="tok-str">&quot;cuda&quot;</span>)
+
+<span class="tok-com"># Start from noise; only the field is optimised.</span>
+sdf = torch.nn.<span class="tok-fn">Parameter</span>(torch.<span class="tok-fn">rand_like</span>(gv[:, <span class="tok-num">0</span>]) - <span class="tok-num">0.1</span>)
+optimizer = torch.optim.<span class="tok-fn">Adam</span>([sdf], lr=<span class="tok-num">1e-2</span>)
+
+<span class="tok-kw">for</span> step <span class="tok-kw">in</span> <span class="tok-fn">range</span>(<span class="tok-num">1000</span>):
+    optimizer.<span class="tok-fn">zero_grad</span>()
+    <span class="tok-com"># Differentiable, so mask and depth losses on the</span>
+    <span class="tok-com"># render reach the field through the extractor.</span>
+    verts, faces = <span class="tok-fn">diff_marching_cubes</span>(gv, vox, sdf,
+                                       iso=<span class="tok-num">0.0</span>)[:<span class="tok-num">2</span>]
+    <span class="tok-fn">render_and_compare</span>(verts, faces).<span class="tok-fn">backward</span>()
+    optimizer.<span class="tok-fn">step</span>()</code></pre></template></figure></div>
 </section>
 </main>
 <footer class="footer"><div class="footer-inner">
@@ -63,10 +192,18 @@
   <a href="about.html">References</a>
 </div></footer>
 
-<div class="lightbox" id="lightbox">
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Figure detail">
   <button class="lightbox-close" aria-label="Close">✕</button>
-  <img src="" alt="">
-  <div class="lightbox-cap"></div>
+  <div class="lightbox-stage">
+    <div class="lightbox-figure">
+      <img src="" alt="">
+      <div class="lightbox-cap"></div>
+    </div>
+    <div class="lightbox-code">
+      <div class="lightbox-code-head"><span>Example</span><button class="lightbox-copy" type="button">Copy</button></div>
+      <div class="lightbox-code-body"></div>
+    </div>
+  </div>
 </div>
 
 <div class="search-modal" id="search-modal">
@@ -79,6 +216,6 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
   onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],ignoredTags:['script','noscript','style','textarea','pre','code'],throwOnError:false});"></script>
-<script src="assets/js/site.js?v=b4ab244bd2"></script>
+<script src="assets/js/site.js?v=171b9f271d"></script>
 </body>
 </html>

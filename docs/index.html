@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
-<link rel="stylesheet" href="assets/css/site.css?v=a1782cc3fa">
+<link rel="stylesheet" href="assets/css/site.css?v=1515cc786a">
 <script>
   // Applied before first paint so the theme never flashes.
   (function(){
@@ -84,7 +84,7 @@ verts.<span class="tok-fn">sum</span>().<span class="tok-fn">backward</span>()  
     <span class="kicker">Showcase</span>
     <h2>Real library output, by topic</h2>
   </div>
-  <div class="grid grid-3"><a class="card section-card" href="showcase-mesh.html"><div class="section-card-media"><img src="assets/img/fig-curvature.webp?v=1dc8bf71a1" alt="" loading="lazy" decoding="async"></div><div class="section-card-body"><span class="fig-kicker">5 figures</span><h3>Mesh</h3><p>Ray queries, curvature, quality metrics and orientation repair on triangle meshes.</p><span class="section-card-go">View gallery →</span></div></a><a class="card section-card" href="showcase-isosurface.html"><div class="section-card-media"><img src="assets/img/fig-algorithms.webp?v=aa8a6199dc" alt="" loading="lazy" decoding="async"></div><div class="section-card-body"><span class="fig-kicker">9 figures</span><h3>Isosurface</h3><p>From a signed distance field to a surface: extraction, sharp features, resolution, normals and differentiable rendering.</p><span class="section-card-go">View gallery →</span></div></a><a class="card section-card" href="showcase-others.html"><div class="section-card-media"><img src="assets/img/fig-superquadrics.webp?v=3958e23373" alt="" loading="lazy" decoding="async"></div><div class="section-card-body"><span class="fig-kicker">4 figures</span><h3>Others</h3><p>Spatial ordering, nearest-neighbour search and learnable superquadric primitives.</p><span class="section-card-go">View gallery →</span></div></a></div>
+  <div class="grid grid-3"><a class="card section-card" href="showcase-mesh.html"><div class="section-card-media"><img src="assets/img/fig-curvature.webp?v=e3be6b0c4e" alt="" loading="lazy" decoding="async"></div><div class="section-card-body"><span class="fig-kicker">5 figures</span><h3>Mesh</h3><p>Ray queries, curvature, quality metrics and orientation repair on triangle meshes.</p><span class="section-card-go">View gallery →</span></div></a><a class="card section-card" href="showcase-isosurface.html"><div class="section-card-media"><img src="assets/img/fig-algorithms.webp?v=aa8a6199dc" alt="" loading="lazy" decoding="async"></div><div class="section-card-body"><span class="fig-kicker">9 figures</span><h3>Isosurface</h3><p>From a signed distance field to a surface: extraction, sharp features, resolution, normals and differentiable rendering.</p><span class="section-card-go">View gallery →</span></div></a><a class="card section-card" href="showcase-others.html"><div class="section-card-media"><img src="assets/img/fig-superquadrics.webp?v=3958e23373" alt="" loading="lazy" decoding="async"></div><div class="section-card-body"><span class="fig-kicker">4 figures</span><h3>Others</h3><p>Spatial ordering, nearest-neighbour search and learnable superquadric primitives.</p><span class="section-card-go">View gallery →</span></div></a></div>
 </section>
 
 <section class="section wrap" style="border-bottom:none">
@@ -125,10 +125,18 @@ verts.<span class="tok-fn">sum</span>().<span class="tok-fn">backward</span>()  
   <a href="about.html">References</a>
 </div></footer>
 
-<div class="lightbox" id="lightbox">
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Figure detail">
   <button class="lightbox-close" aria-label="Close">✕</button>
-  <img src="" alt="">
-  <div class="lightbox-cap"></div>
+  <div class="lightbox-stage">
+    <div class="lightbox-figure">
+      <img src="" alt="">
+      <div class="lightbox-cap"></div>
+    </div>
+    <div class="lightbox-code">
+      <div class="lightbox-code-head"><span>Example</span><button class="lightbox-copy" type="button">Copy</button></div>
+      <div class="lightbox-code-body"></div>
+    </div>
+  </div>
 </div>
 
 <div class="search-modal" id="search-modal">
@@ -141,6 +149,6 @@ verts.<span class="tok-fn">sum</span>().<span class="tok-fn">backward</span>()  
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
   onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],ignoredTags:['script','noscript','style','textarea','pre','code'],throwOnError:false});"></script>
-<script src="assets/js/site.js?v=b4ab244bd2"></script>
+<script src="assets/js/site.js?v=171b9f271d"></script>
 </body>
 </html>
