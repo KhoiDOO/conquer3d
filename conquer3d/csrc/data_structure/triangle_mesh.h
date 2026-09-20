@@ -194,7 +194,8 @@ public:
     torch::Tensor get_mean_curvature(int8_t mode = 0);
 
     /**
-     * @brief Computes Principal Curvatures $k_1, k_2 = H \pm \sqrt{\max(0, H^2 - K)}$.
+     * @brief Computes Principal Curvatures $k_1 = H + \sqrt{\max(0, H^2 - K)}$ and
+     * $k_2 = H - \sqrt{\max(0, H^2 - K)}$.
      * @details Follows Botsch et al., *Polygon Mesh Processing*: $H$ is the absolute mean curvature of
      * Equation (3.13) and $K$ the Gaussian curvature of Equation (3.14). That $H$ carries no sign, so an
      * elliptic region curving away from the normals reports a positive pair where the true one is
