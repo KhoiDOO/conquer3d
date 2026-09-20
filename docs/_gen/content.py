@@ -214,7 +214,9 @@ FIGURES = [
     (
         "fig-smoothing", "Laplacian smoothing", "Smoothing",
         "The same mesh smoothed for 10, 50 and 100 iterations, with the mean "
-        "curvature of each result on one shared scale beneath it.",
+        "curvature of each result on one shared scale beneath it. The last panel "
+        "repeats 100 iterations with a patch held fixed, which keeps the detail "
+        "the others lose.",
         False,
     ),
     (

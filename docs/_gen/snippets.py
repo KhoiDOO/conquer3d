@@ -191,7 +191,15 @@ for iterations in (10, 50, 100):
                  mode=1)          # 1 = cotangent weights
 
     H = level.get_mean_curvature(0)
+
+# locked holds vertices fixed, so detail inside the patch
+# survives while everything around it diffuses. It is
+# unioned with the boundary pin, never replaces it.
+patch = (base_v - centre).norm(dim=-1) < 0.45
+level.smooth(iterations=100, damping=0.5, mode=1,
+             locked=patch.contiguous())
 """,
+
 
     "fig-quality": """# The maps the metrics are computed from.
 mesh.compute_triangle_areas()

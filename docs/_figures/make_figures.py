@@ -1804,23 +1804,43 @@ SMOOTH_DAMPING = 0.5
 #: Cotangent weights: they follow the surface geometry and keep triangle shapes,
 #: where uniform weights also relax the triangulation tangentially.
 SMOOTH_MODE = 1
+#: Radius of the region held fixed in the last panel, in normalised mesh units.
+SMOOTH_PIN_RADIUS = 0.45
 
 
 def fig_smoothing(rnd):
-    """Laplacian smoothing at three iteration counts, and the curvature it removes."""
+    """Laplacian smoothing at three iteration counts, and what a pinned patch keeps."""
     from conquer3d.data_structure import TriangleMesh
 
     tmesh = load_mesh(_asset("StanfordBunny"))
     base_v = tmesh.vertices.clone()
     faces = tmesh.triangles.int().clone()
 
-    # smooth() rewrites the vertex positions in place, so each level starts from
-    # its own copy of the original rather than from the previous level.
-    levels = [(0, tmesh)]
-    for steps in SMOOTH_STEPS:
+    # A patch on the camera-facing flank, held fixed in the final panel. `locked` is
+    # True where a vertex does not move, so the patch itself is the True region.
+    # The height penalty keeps the centre on the haunch: the most camera-facing
+    # point alone lands on an ear tip, where smoothing degenerates a thin feature
+    # rather than erasing surface detail, which is what this panel is about.
+    a, e = math.radians(AZ_SMOOTH), math.radians(12.0)
+    eye = torch.tensor([math.cos(e) * math.sin(a), math.sin(e), math.cos(e) * math.cos(a)],
+                       device=DEV)
+    centroid = base_v.mean(0)
+    score = ((base_v - centroid) @ eye) - 3.0 * (base_v[:, 1] - centroid[1]).abs()
+    centre = base_v[score.argmax()]
+    pinned = ((base_v - centre).norm(dim=-1) < SMOOTH_PIN_RADIUS).contiguous()
+
+    def run(steps, locked=None):
+        """One level, always from the original: smooth() rewrites positions in place."""
         mesh = TriangleMesh(base_v.clone().contiguous(), faces.clone().contiguous())
-        mesh.smooth(iterations=steps, damping=SMOOTH_DAMPING, mode=SMOOTH_MODE)
-        levels.append((steps, mesh))
+        if steps:
+            mesh.smooth(iterations=steps, damping=SMOOTH_DAMPING, mode=SMOOTH_MODE,
+                        locked=locked)
+        return mesh
+
+    last = SMOOTH_STEPS[-1]
+    levels = [("Original", run(0), False)]
+    levels += [(f"{n} iterations", run(n), False) for n in SMOOTH_STEPS]
+    levels.append((f"{last}, patch pinned", run(last, pinned), True))
 
     # One colour range for every curvature panel, taken from the unsmoothed mesh.
     # Per-panel percentiles would renormalise each panel to its own extremes, and
@@ -1841,7 +1861,7 @@ def fig_smoothing(rnd):
     area0 = surface_area(base_v, faces)
     shot = dict(flat=False, azimuth=AZ_SMOOTH, elevation=12, rim_strength=0.16)
     surfaces, fields, top_labels, top_subs, bot_labels = [], [], [], [], []
-    for steps, mesh in levels:
+    for label, mesh, is_pinned in levels:
         verts = mesh.vertices
         surfaces.append(render_mesh(rnd, verts, faces, base=GT_TINT, **shot))
         curvature = mesh.get_mean_curvature(0)
@@ -1854,19 +1874,26 @@ def fig_smoothing(rnd):
         shift = float((verts - base_v).norm(dim=-1).max())
         mad = float(curvature.abs().mean())
         area = surface_area(verts, faces)
-        top_labels.append("Original" if steps == 0 else f"{steps} iterations")
-        top_subs.append(f"max shift {shift:.4f}\narea {100 * (area / area0 - 1):+.1f}%")
+        in_patch = float(curvature[pinned].abs().mean())
+        top_labels.append(label)
+        if is_pinned:
+            # The pinned vertices are the claim, so the label counts them and the
+            # curvature row is what shows the detail they kept.
+            top_subs.append(f"{int(pinned.sum()):,} verts fixed\narea {100 * (area / area0 - 1):+.1f}%")
+        else:
+            top_subs.append(f"max shift {shift:.4f}\narea {100 * (area / area0 - 1):+.1f}%")
         bot_labels.append(f"mean |H| {mad:.2f}")
-        print(f"    {top_labels[-1]:14} mean |H| {mad:7.3f}   max vertex shift {shift:.5f}   "
-              f"area {100 * (area / area0 - 1):+.2f}%")
+        print(f"    {label:22} mean |H| {mad:7.3f}   max shift {shift:.5f}   "
+              f"area {100 * (area / area0 - 1):+.2f}%   |H| in patch {in_patch:7.3f}")
 
     # Trimmed as one set, so both rows keep the same crop and the columns line up.
     trimmed = compose.trim(surfaces + fields)
     half = len(surfaces)
-    accents = [(150, 158, 176), (34, 211, 238), (167, 139, 250), (118, 185, 0)]
+    accents = [(150, 158, 176), (34, 211, 238), (167, 139, 250), (118, 185, 0),
+               (244, 162, 97)]
     top = compose.grid(trimmed[:half], top_labels, sublabels=top_subs, accents=accents)
     bot = compose.grid(trimmed[half:], bot_labels,
-                       sublabels=[f"signed H, ±{lim:.0f}"] * half, accents=accents)
+                       sublabels=[f"signed H, \u00b1{lim:.0f}"] * half, accents=accents)
     compose.save(compose.stack([top, bot], pad=16), OUT / "fig-smoothing.png")
 
 
