@@ -220,6 +220,13 @@ FIGURES = [
         False,
     ),
     (
+        "fig-fairing", "Higher-order fairing", "Fairing",
+        "The bend of a tube faired at orders 1, 2 and 3 with the straight ends held "
+        "fixed, after Botsch et al., Polygon Mesh Processing, Figure 4.8. The order "
+        "of the flow sets how smoothly the faired region meets what is held.",
+        False,
+    ),
+    (
         "fig-quality", "Mesh quality", "Quality",
         "Every quality metric a mesh reports, drawn on the mesh with its mean value.",
         False,
@@ -260,7 +267,8 @@ FIGURES = [
 #: Which Showcase gallery each figure belongs to. Membership only: within a
 #: gallery, figures keep FIGURES order with the lead comparisons first.
 FIGURE_SECTIONS = {
-    "mesh": ("fig-meshbvh", "fig-curvature", "fig-smoothing", "fig-quality",
+    "mesh": ("fig-meshbvh", "fig-curvature", "fig-smoothing", "fig-fairing",
+               "fig-quality",
              "fig-fix-normals"),
     "isosurface": ("fig-pipeline", "fig-algorithms", "fig-hermite", "fig-resolution",
                    "fig-normals", "fig-normal-modes", "fig-sign-modes", "fig-sdf-slices",

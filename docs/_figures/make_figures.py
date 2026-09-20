@@ -1897,6 +1897,130 @@ def fig_smoothing(rnd):
     compose.save(compose.stack([top, bot], pad=16), OUT / "fig-smoothing.png")
 
 
+#: Fairing, after Botsch et al., Polygon Mesh Processing, Figure 4.8: the straight
+#: ends of an elbow are held fixed and the bend between them is faired.
+FAIR_RADIUS = 0.25
+FAIR_STRAIGHT = 1.0
+FAIR_BEND_RADIUS = 0.6
+FAIR_SEGMENTS = 48
+#: Uniform weights, not cotangent. The cotangent path does not converge for k >= 2
+#: -- it oscillates at every step size tried, down to a hundredth of the documented
+#: stability bound -- so the only mode that actually reaches a steady state is 0.
+FAIR_MODE = 0
+#: Iterations to the steady state of each order. The flow is stiff: the slowest mode
+#: decays by a factor set by the square of the smallest eigenvalue, so each order
+#: needs roughly an order of magnitude more steps than the one below it.
+FAIR_ITERS = {1: 50_000, 2: 400_000, 3: 4_000_000}
+FAIR_LABELS = {
+    1: ("membrane", "\u0394x = 0", "C\u2070"),
+    2: ("thin plate", "\u0394\u00b2x = 0", "C\u00b9"),
+    3: ("min variation", "\u0394\u00b3x = 0", "C\u00b2"),
+}
+FAIR_SILVER = (0.82, 0.84, 0.88)
+FAIR_BLUE = (0.38, 0.38, 0.72)
+
+
+def _bent_tube():
+    """A circular tube swept straight, through a quarter turn, then straight again.
+
+    Ring spacing matches the circumferential spacing, so the quads come out square
+    and the triangles near-equilateral -- the tube is the mesh the book fairs, and
+    a sloppy triangulation would put the artifacts of the discretisation into the
+    result rather than the behaviour of the flow.
+
+    Returns:
+        (vertices, faces, free) with ``free`` marking the bend, the part that moves.
+    """
+    step = 2 * math.pi * FAIR_RADIUS / FAIR_SEGMENTS
+    n_str = max(2, int(round(FAIR_STRAIGHT / step)))
+    n_arc = max(2, int(round(FAIR_BEND_RADIUS * math.pi / 2 / step)))
+
+    centres, tangents = [], []
+    for i in range(n_str):
+        centres.append((i / n_str * FAIR_STRAIGHT - FAIR_STRAIGHT, 0.0, 0.0))
+        tangents.append((1.0, 0.0, 0.0))
+    for i in range(n_arc + 1):
+        a = i / n_arc * (math.pi / 2)
+        centres.append((FAIR_BEND_RADIUS * math.sin(a),
+                        FAIR_BEND_RADIUS * (1 - math.cos(a)), 0.0))
+        tangents.append((math.cos(a), math.sin(a), 0.0))
+    for i in range(1, n_str + 1):
+        centres.append((FAIR_BEND_RADIUS,
+                        FAIR_BEND_RADIUS + i / n_str * FAIR_STRAIGHT, 0.0))
+        tangents.append((0.0, 1.0, 0.0))
+
+    C = torch.tensor(centres, dtype=torch.float32)
+    T = torch.tensor(tangents, dtype=torch.float32)
+    T = T / T.norm(dim=-1, keepdim=True)
+    up = torch.tensor([0.0, 0.0, 1.0]).expand_as(T)
+    U = torch.linalg.cross(T, up); U = U / U.norm(dim=-1, keepdim=True)
+    V = torch.linalg.cross(T, U)
+
+    ang = torch.arange(FAIR_SEGMENTS, dtype=torch.float32) * (2 * math.pi / FAIR_SEGMENTS)
+    ring = torch.stack([torch.cos(ang), torch.sin(ang)], dim=-1)
+    verts = (C[:, None, :] + FAIR_RADIUS * (ring[None, :, 0:1] * U[:, None, :]
+                                            + ring[None, :, 1:2] * V[:, None, :]))
+    rings = len(centres)
+    faces = []
+    for i in range(rings - 1):
+        for j in range(FAIR_SEGMENTS):
+            a = i * FAIR_SEGMENTS + j
+            b = i * FAIR_SEGMENTS + (j + 1) % FAIR_SEGMENTS
+            c = (i + 1) * FAIR_SEGMENTS + j
+            d = (i + 1) * FAIR_SEGMENTS + (j + 1) % FAIR_SEGMENTS
+            faces.append((a, c, b)); faces.append((b, c, d))
+
+    ring_id = torch.arange(rings, device=DEV).repeat_interleave(FAIR_SEGMENTS)
+    free = (ring_id >= n_str) & (ring_id <= n_str + n_arc)
+    return (verts.reshape(-1, 3).contiguous().to(DEV),
+            torch.tensor(faces, dtype=torch.int32, device=DEV).contiguous(), free)
+
+
+def fig_fairing(rnd):
+    """Higher-order fairing of a tube's bend, after Polygon Mesh Processing Fig. 4.8."""
+    from conquer3d.data_structure import TriangleMesh
+
+    base_v, faces, free = _bent_tube()
+    locked = (~free).contiguous()
+    print(f"    tube {base_v.shape[0]:,} verts, bend {int(free.sum()):,} free")
+
+    cols = torch.tensor(FAIR_SILVER, device=DEV).expand(base_v.shape[0], 3).clone()
+    cols[free] = torch.tensor(FAIR_BLUE, device=DEV)
+    shot = dict(flat=False, azimuth=0.0, elevation=6.0, rim_strength=0.14)
+
+    panels, labels, subs = [], [], []
+    for k in sorted(FAIR_ITERS):
+        mesh = TriangleMesh(base_v.clone(), faces.clone())
+        iters = FAIR_ITERS[k]
+        # Stability is guaranteed up to 2^(1-k); half of that is comfortably inside
+        # it and still the largest step each order can take.
+        damping = 0.5 * (2.0 ** (1 - k))
+        # Measured per chunk, not against the start: the residual is meant to say
+        # how far the flow still has to travel, which is the last step's movement.
+        prev = mesh.vertices.clone()
+        done, residual = 0, float("nan")
+        while done < iters:
+            chunk = min(100_000, iters - done)
+            mesh.fair(k=k, iterations=chunk, damping=damping, mode=FAIR_MODE, locked=locked)
+            done += chunk
+            cur = mesh.vertices
+            residual = float((cur - prev).norm(dim=-1).max())
+            prev = cur.clone()
+        verts = mesh.vertices
+        moved = float((verts - base_v).norm(dim=-1).max())
+
+        name, pde, cont = FAIR_LABELS[k]
+        panels.append(render_mesh(rnd, verts, faces, colors=cols, **shot))
+        labels.append(f"k = {k}")
+        subs.append(f"{name} \u00b7 {pde}\n{cont} at the rim \u00b7 moved {moved:.3f}")
+        print(f"    k={k} {name:14} {iters:>9,} iters  damping {damping:.3f}  "
+              f"moved {moved:.4f}  residual {residual:.1e}")
+
+    accents = [(34, 211, 238), (167, 139, 250), (118, 185, 0)]
+    grid = compose.grid(compose.trim(panels), labels, sublabels=subs, accents=accents)
+    compose.save(grid, OUT / "fig-fairing.png")
+
+
 def _asset(name):
     import conquer3d.data.assets as assets
 
@@ -1923,6 +2047,7 @@ FIGURES = [
     ("superquadrics", fig_superquadrics, True),
     ("sqfit", fig_sqfit, True),
     ("smoothing", fig_smoothing, True),
+    ("fairing", fig_fairing, True),
 ]
 
 

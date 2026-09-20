@@ -200,6 +200,21 @@ level.smooth(iterations=100, damping=0.5, mode=1,
              locked=patch.contiguous())
 """,
 
+    "fig-fairing": """from conquer3d.data_structure import TriangleMesh
+
+# locked is True where a vertex is held fixed: here the two
+# straight ends, leaving the bend between them free to move.
+for k, iterations in ((1, 50_000), (2, 400_000),
+                      (3, 4_000_000)):
+    bend = TriangleMesh(verts.clone(), faces.clone())
+
+    # Order k runs the flow whose steady state is the
+    # membrane (1), thin plate (2) or minimum variation (3)
+    # surface. Stability is guaranteed up to 2 ** (1 - k).
+    bend.fair(k=k, iterations=iterations,
+              damping=0.5 * 2 ** (1 - k),
+              mode=0, locked=locked)
+""",
 
     "fig-quality": """# The maps the metrics are computed from.
 mesh.compute_triangle_areas()
