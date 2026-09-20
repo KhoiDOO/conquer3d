@@ -651,9 +651,20 @@ def main() -> int:
             print(f"    {symbol.tier} {symbol.qualname or symbol.name}"
                   f"  ({symbol.source_file}:{symbol.source_line})")
 
+    # The showcase snippets are written by hand, so this is the only thing
+    # keeping them in step with the API they demonstrate.
+    stale = content.check_snippet_imports(
+        {s.name for g in groups for s in g.all_symbols})
+    if stale:
+        print(f"\n! {len(stale)} showcase snippet import(s) name an unknown symbol:")
+        for item in stale:
+            print(f"    {item}")
+    else:
+        print("   showcase snippets: every import resolves")
+
     # A silently missing Doxygen would drop five whole tiers, so strict mode
     # must treat that as a failure rather than reporting 100% of what remains.
-    if args.strict and (problems or undocumented or native_failed):
+    if args.strict and (problems or undocumented or native_failed or stale):
         return 1
     return 0
 

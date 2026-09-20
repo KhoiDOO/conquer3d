@@ -205,17 +205,83 @@
   if (lb) {
     var lbImg = lb.querySelector("img");
     var lbCap = lb.querySelector(".lightbox-cap");
+    // The frozen API archives carry the lightbox as it was before the code pane
+    // existed, and they load this file, so every reference to the pane is
+    // guarded. They also contain no .fig-media, so none of this ever runs there.
+    var lbCode = lb.querySelector(".lightbox-code-body");
+    var lbCopy = lb.querySelector(".lightbox-copy");
+    var lbClose = lb.querySelector(".lightbox-close");
+    var opener = null;
+
+    // A dead control is worse than none: these are static files, and over
+    // file:// the clipboard API is not available.
+    if (lbCopy && !navigator.clipboard) lbCopy.hidden = true;
+
+    function openLb(el) {
+      var img = el.querySelector("img");
+      if (!img) return;
+      lbImg.src = img.src;
+      lbImg.alt = img.alt;
+      lbCap.textContent = img.alt;
+
+      if (lbCode) {
+        // Cleared before the lookup, so a figure with no snippet never inherits
+        // the previous figure's code -- the benchmark charts have none.
+        lbCode.textContent = "";
+        lb.classList.remove("has-code");
+        var fig = el.closest(".fig");
+        var tpl = fig && fig.querySelector("template.fig-code");
+        if (tpl && tpl.content) {
+          lbCode.appendChild(tpl.content.cloneNode(true));
+          lb.classList.add("has-code");
+        }
+        lbCode.scrollTop = 0;
+      }
+      if (lbCopy) { lbCopy.textContent = "Copy"; lbCopy.classList.remove("copied"); }
+
+      opener = el;
+      document.body.classList.add("lb-open");
+      lb.classList.add("open");
+      if (lbClose) lbClose.focus();
+    }
+
     document.querySelectorAll(".fig-media").forEach(function (el) {
-      el.addEventListener("click", function () {
-        var img = el.querySelector("img");
-        if (!img) return;
-        lbImg.src = img.src;
-        lbImg.alt = img.alt;
-        lbCap.textContent = img.alt;
-        lb.classList.add("open");
+      el.addEventListener("click", function () { openLb(el); });
+      // The media well is a div, so it needs its own key handling to be
+      // reachable at all -- and the example now lives only behind it.
+      el.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        openLb(el);
       });
     });
-    function closeLb() { lb.classList.remove("open"); lbImg.src = ""; }
+
+    function closeLb() {
+      lb.classList.remove("open", "has-code");
+      lbImg.src = "";
+      if (lbCode) lbCode.textContent = "";
+      document.body.classList.remove("lb-open");
+      // Focus moved into the overlay on open; leaving it on a now-hidden button
+      // strands a keyboard reader at the top of the document.
+      if (opener && opener.focus) opener.focus();
+      opener = null;
+    }
+
+    if (lbCopy) {
+      lbCopy.addEventListener("click", function () {
+        var pre = lbCode && lbCode.querySelector("pre");
+        if (!pre || !navigator.clipboard) return;
+        navigator.clipboard.writeText(pre.innerText).then(function () {
+          lbCopy.textContent = "Copied";
+          lbCopy.classList.add("copied");
+          setTimeout(function () {
+            lbCopy.textContent = "Copy";
+            lbCopy.classList.remove("copied");
+          }, 1400);
+        });
+      });
+    }
+
     lb.addEventListener("click", function (e) {
       if (e.target === lb || e.target.classList.contains("lightbox-close")) closeLb();
     });
@@ -225,10 +291,12 @@
   }
 
   /* ------------------------------------------------- copy code buttons --- */
-  document.querySelectorAll("pre").forEach(function (pre) {
-    pre.addEventListener("dblclick", function () {
-      var text = pre.innerText;
-      if (navigator.clipboard) navigator.clipboard.writeText(text);
-    });
+  // Delegated rather than bound per <pre>: the lightbox clones its code block
+  // out of a <template> after this file has run, and a clone carries none of the
+  // listeners its original had. One listener covers every <pre> a page can hold.
+  document.addEventListener("dblclick", function (e) {
+    var pre = e.target && e.target.closest && e.target.closest("pre");
+    if (!pre || !navigator.clipboard) return;
+    navigator.clipboard.writeText(pre.innerText);
   });
 })();
