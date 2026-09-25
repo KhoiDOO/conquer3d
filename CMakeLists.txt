@@ -10,7 +10,7 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # 3. NOW initialize the project
-project(GeoCuTool LANGUAGES CUDA CXX)
+project(Conquer3D LANGUAGES CUDA CXX)
 
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CXX_STANDARD 17)
