@@ -37,6 +37,7 @@ from . import data
 from . import io
 
 from .primitive import Triangle, Ray
+from .data_structure import BVH, GSBVH, KDTree, MeshBVH, PGSBVH, TriangleMesh
 
 __all__ = [
     '_C',
@@ -49,6 +50,12 @@ __all__ = [
     'io',
     'Triangle',
     'Ray',
+    'TriangleMesh',
+    'BVH',
+    'MeshBVH',
+    'GSBVH',
+    'PGSBVH',
+    'KDTree',
     'HAS_EXTENSION',
     'ExtensionUnavailableError',
     'extension_error',
