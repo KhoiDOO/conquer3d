@@ -24,7 +24,10 @@ try:
 except importlib.metadata.PackageNotFoundError:
     __version__ = "unknown"
 
-from . import _C
+# Imported before any subpackage: it decides what `conquer3d._C` resolves to, and the
+# subpackages bind names out of it at their own import time.
+from ._extension import _C, HAS_EXTENSION, ExtensionUnavailableError, extension_error
+
 from . import creation
 from . import data_structure
 from . import primitive
@@ -46,5 +49,8 @@ __all__ = [
     'io',
     'Triangle',
     'Ray',
+    'HAS_EXTENSION',
+    'ExtensionUnavailableError',
+    'extension_error',
     '__version__'
 ]
